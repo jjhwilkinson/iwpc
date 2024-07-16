@@ -48,3 +48,7 @@ Thumbs.db
 *.mov
 *.wmv
 
+
+lightning_logs/
+sample_dataset_test_reweighted/
+*.pkl

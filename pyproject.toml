@@ -1,0 +1,26 @@
+[project]
+name = "iwpc"
+version = "0.1.0"
+authors = [
+  { name="Jeremy J. H. Wilkinson", email="jero.wilkinson@gmail.com" },
+]
+description = "An implementation of the divergence framework as described here https://arxiv.org/abs/2405.06397"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "torch",
+    "lightning",
+    "matplotlib",
+    "pandas",
+    "scikit-learn",
+]
+
+[project.urls]
+Homepage = "https://bitbucket.org/jjhw3/divergences/src/main/"

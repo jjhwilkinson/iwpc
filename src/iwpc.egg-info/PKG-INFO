@@ -1,3 +1,23 @@
+Metadata-Version: 2.1
+Name: iwpc
+Version: 0.1.0
+Summary: An implementation of the divergence framework as described here https://arxiv.org/abs/2405.06397
+Author-email: "Jeremy J. H. Wilkinson" <jero.wilkinson@gmail.com>
+Project-URL: Homepage, https://bitbucket.org/jjhw3/divergences/src/main/
+Classifier: Development Status :: 3 - Alpha
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: torch
+Requires-Dist: lightning
+Requires-Dist: matplotlib
+Requires-Dist: pandas
+Requires-Dist: scikit-learn
+
 # IWPC - I Will Prove Convergence #
 
 This package implements the methods described in the research paper https://arxiv.org/abs/2405.06397 for estimating a 
