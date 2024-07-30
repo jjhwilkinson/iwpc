@@ -5,24 +5,24 @@ lower bound on the divergence between any two distributions, p and q, using samp
 
 Install using `pip install iwpc`
 
-This machine learning code in this package is organised using the fantastic [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/)
+The machine learning code in this package is organised using the fantastic [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/)
 package. Some familiarity with the structure of lightning is recommended.
 
 # Basic Usage #
 
 The most basic usage of this package is for calculating an estimator for a lower bound on an f-divergence (such as the 
 KL-divergence) between two distribution, p and q. Each example below assumes one is provided with a set of samples from
-drawn from distribution p and from distribution q labelled 0 and 1 respectively
+drawn from distribution p and from distribution q labelled 0 and 1 respectively.
 
 ## [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) ##
 
-The example script `examples/continuous_example_2D.py`[continuous_example_2D.py](examples%2Fcontinuous_example_2D.py) shows the most basic usage of the [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) function
+The example script [continuous_example_2D.py](examples%2Fcontinuous_example_2D.py) shows the most basic usage of the [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) function
 run on the components of 2D vectors drawn from the distribution `N(r | 0, 0.1) * (1 + eps * cos(theta)) / 2 / pi` for
 the two values `eps = 0.` and `eps = 0.2`. The script shows how to calculate estimates for lower bounds on both the Kullback-Leibler
 divergence and the Jensen-Shannon divergence between the two distributions and compares these to numerically integrated
-values. At the most basic level, all [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) requires is a `LightningDataModule`, in this case an
-instance of `BinaryPandasDataModule`, to provide the data and an instance of `FDivergenceEstimator`, in this case an
-instance of `GenericNaiveVariationalFDivergenceEstimator` to provide the machine learning model.
+values. At the most basic level, all [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) requires is a [LightningDataModule](https://lightning.ai/docs/pytorch/stable/data/datamodule.html), in this case an
+instance of [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_datamodule.py), to provide the data and an instance of [FDivergenceEstimator](src%2Fiwpc%2Fmodules%2Ffdivergence_base.py), in this case an
+instance of [GenericNaiveVariationalFDivergenceEstimator](src%2Fiwpc%2Fmodules%2Fnaive.py), to provide the machine learning model.
 
 ### [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_datamodule.py) ###
 
@@ -34,10 +34,10 @@ data modules in this package provide a 50-50 train-validation split.
 
 ### [GenericNaiveVariationalFDivergenceEstimator](src%2Fiwpc%2Fmodules%2Fnaive.py) ###
 
-For generic data without any specific structures to inspire the topology of the machine learning model, the `LightningModule`
+For generic data without any specific structures to inspire the topology of the machine learning model, the [LightningModule](https://lightning.ai/docs/pytorch/stable/common/lightning_module.html)
 subclass [GenericNaiveVariationalFDivergenceEstimator](src%2Fiwpc%2Fmodules%2Fnaive.py) provides a generic N to 1 dimensional
 function approximator needed for the divergence calculation. The only information required is the number of training 
-features and a `DifferentiableFDivergence` instance to tell the module which divergence to calculate.
+features and a [DifferentiableFDivergence](src%2Fiwpc%2Fdivergences%2Fbase.py) instance to tell the module which divergence to calculate.
 
 ### Output ###
 
@@ -103,14 +103,14 @@ has in fact learnt the features in the data. The full explanation of how these p
 but suffice to say, they demonstrate the ways in which the network believes the distributions look in the given variable.
 The error bars on the 'learned' quantities indicate uncertainty on how well we are able to reconstruct what the network
 believes the distribution to be. These should not be interpreted as error-bars indicating how far the truth may be from
-what the network has learnt, and these plots may well demonstrate hallucinations.
+what the network has learnt, and these 'learned' quantities may well demonstrate hallucinations.
 
 ![divergence_vs_theta.png](images%2Fdivergence_vs_theta.png)
 
 The 2D plot in theta and r is mostly redundant in this case, but we can clearly see many of the features discussed in 
-the 1D case. Top left shows the ratio of the two distributions in validation. Top right once shows the divergence within
-each bin. Bottom left once again shows an estimate for what the net believes the ratio of the two distributions is, and
-the bottom right is simple a histogram of the p distribution in validation.
+the 1D plots. Top left shows the ratio of the two distributions in validation. Top right shows the divergence within
+each bin. Bottom left shows an estimate for what the net believes the ratio of the two distributions is, and
+the bottom right is simple a histogram of the p distribution in the validation dataset.
 
 ![divergence_vs_r_theta.png](images%2Fdivergence_vs_r_theta.png)
 

@@ -32,7 +32,7 @@ module_factory = lambda lr: GenericNaiveVariationalFDivergenceEstimator(
 result = run_reweight_loop(
     module_factory,
     datamodule,
-    1,
+    2,
     'test',
     calculate_divergence_kwargs={'trainer_kwargs': {'max_epochs': 10}},
     initial_lr=1e-3,

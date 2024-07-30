@@ -13,7 +13,7 @@ class DifferentiableFDivergence(ABC):
     """
     Abstract class describing the interface for a differentiable f-divergence for use in the iwpc divergence framework.
     The background of the required generating function, 'f', properties are described in the paper
-    https://arxiv.org/abs/2405.06397. iwpc makes heavy use of both numpy and pytorch. As a result the generating
+    https://arxiv.org/abs/2405.06397. iwpc makes heavy use of both numpy and pytorch. As a result, the generating
     function methods are required to be implemented in numpy and in pytorch, although these should not be used directly.
     Helper methods described below inspect the type of a given array, and use the respective numpy/pytorch
     implementations automatically.
