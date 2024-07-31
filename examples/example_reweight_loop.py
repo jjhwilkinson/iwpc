@@ -12,8 +12,8 @@ from iwpc.reweight_loop import run_reweight_loop
 from iwpc.scalars.scalar import Scalar
 
 
-if Path(Path(".") / "sample_dataset_test_reweighted").exists():
-    shutil.rmtree(Path(".") / "sample_dataset_test_reweighted")
+if Path(Path(".") / "sample_dataset_example_reweighted").exists():
+    shutil.rmtree(Path(".") / "sample_dataset_example_reweighted")
 
 
 datamodule = PandasDirDataModule(
@@ -33,7 +33,7 @@ result = run_reweight_loop(
     module_factory,
     datamodule,
     2,
-    'test',
+    'example',
     calculate_divergence_kwargs={'trainer_kwargs': {'max_epochs': 10}},
     initial_lr=1e-3,
 )
@@ -41,7 +41,7 @@ result = run_reweight_loop(
 angle_scalar = Scalar(lambda df: df['angles'], np.linspace(-np.pi, np.pi, 50), 'angle', latex_label=r'$\theta$')
 radius_scalar = Scalar(lambda df: (df['x']**2 + df['y']**2)**0.5, np.linspace(0.5,1.5, 50), 'r')
 final_data_module = PandasDirDataModule(
-    Path(".") / "sample_dataset_test_reweighted",
+    Path(".") / "sample_dataset_example_reweighted",
     ['x', 'y'],
     target_cols='label',
 )

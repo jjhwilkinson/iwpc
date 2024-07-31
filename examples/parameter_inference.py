@@ -53,7 +53,8 @@ def run_inference_example(
             trainer_kwargs={
                 'accelerator': 'mps' if torch.backends.mps.is_available() else 'cpu',
                 'max_epochs': 20,
-            }
+            },
+            name=f'trial_lambda_{lambda_}'
         )
         trial_divs[i] = result.divergence
         trial_errs[i] = result.divergence_stderr

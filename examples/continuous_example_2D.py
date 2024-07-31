@@ -103,7 +103,8 @@ def run_continuous_example(
             trainer_kwargs={
                 'accelerator': 'mps' if torch.backends.mps.is_available() else 'cpu',
                 'max_epochs': 5,
-            }
+            },
+            name=f"sample_size_{num_samples}"
         )
 
         Dfs[i] = result.divergence
