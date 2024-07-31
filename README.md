@@ -17,7 +17,7 @@ drawn from distribution p and from distribution q labelled 0 and 1 respectively.
 ## [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) ##
 
 The example script [continuous_example_2D.py](examples%2Fcontinuous_example_2D.py) shows the most basic usage of the [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) function
-run on the components of 2D vectors drawn from the distribution `N(r | 0, 0.1) * (1 + eps * cos(theta)) / 2 / pi` for
+run on the components of 2D vectors drawn from the distribution `N(r | 1.0, 0.1) * (1 + eps * cos(theta)) / 2 / pi` for
 the two values `eps = 0.` and `eps = 0.2`. The script shows how to calculate estimates for lower bounds on both the Kullback-Leibler
 divergence and the Jensen-Shannon divergence between the two distributions and compares these to numerically integrated
 values. At the most basic level, all [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) requires is a [LightningDataModule](https://lightning.ai/docs/pytorch/stable/data/datamodule.html), in this case an

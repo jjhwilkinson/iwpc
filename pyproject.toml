@@ -20,6 +20,7 @@ dependencies = [
     "matplotlib",
     "pandas",
     "scikit-learn",
+    "tensorboard",
 ]
 
 [project.urls]

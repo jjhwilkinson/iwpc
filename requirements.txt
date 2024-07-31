@@ -4,3 +4,4 @@ lightning
 matplotlib
 pandas
 scikit-learn
+tensorboard
