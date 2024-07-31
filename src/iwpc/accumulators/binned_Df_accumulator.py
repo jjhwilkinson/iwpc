@@ -99,7 +99,7 @@ class BinnedDfAccumulator:
             q_name=self.q_name
         )
 
-    def _update_train(
+    def update_train(
         self,
         samples: Union[NDArray, List[NDArray]],
         labels: NDArray,
@@ -147,7 +147,7 @@ class BinnedDfAccumulator:
         )
 
     # @profile
-    def _update_val(
+    def update_val(
         self,
         samples: Union[NDArray, List[NDArray]],
         labels: NDArray,
@@ -584,8 +584,8 @@ class BinnedDfAccumulator:
             $\frac{p(x)}{q(x)}$
         """
         for update_fn, include_train, include_val, num_files in [
-            (self._update_train, True, False, len(datamodule.train_files)),
-            (self._update_val, False, True, len(datamodule.validation_files)),
+            (self.update_train, True, False, len(datamodule.train_files)),
+            (self.update_val, False, True, len(datamodule.validation_files)),
         ]:
             for file, df in tqdm(
                 datamodule.file_iter(include_train_files=include_train, include_validation_files=include_val),

@@ -151,10 +151,11 @@ def bin_centers(bins: NDArray) -> NDArray:
     return (bins[1:] + bins[:-1]) / 2
 
 
-def format_quantity_with_uncertainty(val: float, err: float) -> str:
+def format_quantity_with_uncertainty(val: float, err: float, with_sig: bool = False) -> str:
     """
     Formats the given quantity and uncertainty so that a single digit of uncertainly is shown and the value is rounded
-    to the same decimal place. eg 0.123456 with an error of 0.00012345 would be rendered as "1.234E-1 +- 1E-4"
+    to the same decimal place. eg 0.123456 with an error of 0.00012345 would be rendered as "1.2345E-1 +- 1E-4". If
+    with_sig is True, this would be rendered as "1.234E-1 +- 1E-4 (1234.5)"
 
     Parameters
     ----------
@@ -162,11 +163,16 @@ def format_quantity_with_uncertainty(val: float, err: float) -> str:
         The value of some quantity
     err
         The uncertainty in the quantity
+    with_sig
+        Whether to append the significance in brackets
 
     Returns
     -------
     str
     """
-    val_order = int(np.log10(val))
-    err_order = int(np.log10(err))
-    return f"{val:.{val_order - err_order}E} +- {err:.0E}"
+    val_order = int(np.log10(np.abs(val)))
+    err_order = int(np.log10(np.abs(err)))
+    string = f"{val:.{abs(val_order - err_order)}E} +- {err:.0E}"
+    if with_sig:
+        string += f" ({val / err:.1f})"
+    return string

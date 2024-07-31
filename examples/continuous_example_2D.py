@@ -5,7 +5,7 @@ from pandas import DataFrame
 from scipy import stats
 from scipy.integrate import quad
 
-from iwpc.data_modules.pandas_datamodule import BinaryPandasDataModule
+from iwpc.data_modules.pandas_data_module import BinaryPandasDataModule
 from iwpc.divergences import JensenShannonDivergence, KLDivergence
 from iwpc.modules.naive import GenericNaiveVariationalFDivergenceEstimator
 from iwpc.calculate_divergence import calculate_divergence

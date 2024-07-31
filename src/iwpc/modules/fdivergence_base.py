@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Tuple, Optional, Union
 
 import torch
 from lightning import LightningModule
 from torch import optim, Tensor
 from torch.nn import Module
+from torch.optim import Optimizer
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from iwpc.divergences import DifferentiableFDivergence
@@ -23,7 +24,7 @@ class FDivergenceEstimator(LightningModule, ABC):
         divergence: DifferentiableFDivergence,
         initial_learning_rate: float = 1e-3,
         lr_patience: int = 10,
-        lr_decay_factor: float = 0.1,
+        lr_decay_factor: Optional[float] = 0.1,
     ):
         """
         Parameters
@@ -40,7 +41,7 @@ class FDivergenceEstimator(LightningModule, ABC):
             learning is reduced by a factor of lr_decay_factor
         lr_decay_factor
             The factor by which the lr is to be reduced when no improvement is seen in the validation estimate of the
-            f-divergence for lr_patience epochs
+            f-divergence for lr_patience epochs. If set to None, no learning rate scheduler is applied
         """
         super().__init__()
         self.model = model
@@ -136,7 +137,7 @@ class FDivergenceEstimator(LightningModule, ABC):
         self.log('val_Df_sig', self.val_Df_sig, on_step=False, on_epoch=True, prog_bar=True)
         return
 
-    def configure_optimizers(self) -> dict:
+    def configure_optimizers(self) -> Union[dict, Optimizer]:
         """
         Configures an AdamOptimizer initialised with self.learning_rate and associated with a learning rate scheduler
         that reduces the learning rate by a factor of self.lr_decay_factor if no validation improvement is seen in
@@ -144,10 +145,15 @@ class FDivergenceEstimator(LightningModule, ABC):
 
         Returns
         -------
-        dict
-            A dictionary containing the Adam optimizer and configuration for the learning rate scheduler
+        Union[dict, Optimizer]
+            A dictionary containing the Adam optimizer and configuration for the learning rate scheduler if
+            self.lr_decay_factor is not None, otherwise the actual optimizer is returned
         """
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
+
+        if self.lr_decay_factor is None:
+            return optimizer
+
         return {
             "optimizer": optimizer,
             "lr_scheduler": {

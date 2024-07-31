@@ -8,6 +8,8 @@ Install using `pip install iwpc`
 The machine learning code in this package is organised using the fantastic [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/)
 package. Some familiarity with the structure of lightning is recommended.
 
+The plots shown in the [original divergences paper](https://arxiv.org/abs/2405.06397) may be reproduced by running [parity_example.py](examples%2Fparity_example.py)
+
 # Basic Usage #
 
 The most basic usage of this package is for calculating an estimator for a lower bound on an f-divergence (such as the 
@@ -21,14 +23,14 @@ run on the components of 2D vectors drawn from the distribution `N(r | 1.0, 0.1)
 the two values `eps = 0.` and `eps = 0.2`. The script shows how to calculate estimates for lower bounds on both the Kullback-Leibler
 divergence and the Jensen-Shannon divergence between the two distributions and compares these to numerically integrated
 values. At the most basic level, all [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) requires is a [LightningDataModule](https://lightning.ai/docs/pytorch/stable/data/datamodule.html), in this case an
-instance of [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_datamodule.py), to provide the data and an instance of [FDivergenceEstimator](src%2Fiwpc%2Fmodules%2Ffdivergence_base.py), in this case an
+instance of [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_data_module.py), to provide the data and an instance of [FDivergenceEstimator](src%2Fiwpc%2Fmodules%2Ffdivergence_base.py), in this case an
 instance of [GenericNaiveVariationalFDivergenceEstimator](src%2Fiwpc%2Fmodules%2Fnaive.py), to provide the machine learning model.
 
-### [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_datamodule.py) ###
+### [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_data_module.py) ###
 
-Given two Pandas data frames containing the samples from p and q, the [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_datamodule.py) class provides a
+Given two Pandas data frames containing the samples from p and q, the [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_data_module.py) class provides a
 convenient wrapper that casts the data into the form expected by [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py). In addition to the two 
-dataframes, the [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_datamodule.py) requires the user to specify which features columns to use, the two
+dataframes, the [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_data_module.py) requires the user to specify which features columns to use, the two
 cartesian components 'x' and 'y' in this case, as well as the name of a weight column if one exists. By default, all
 data modules in this package provide a 50-50 train-validation split.
 

@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Callable, Optional, Any
 
 import numpy as np
 from numpy._typing import NDArray
@@ -14,7 +14,7 @@ class Scalar:
     """
     def __init__(
         self,
-        fn: Callable[[DataFrame], NDArray],
+        fn: Callable[[Any], NDArray],
         bins: NDArray,
         label: str,
         latex_label: Optional[str] = None,
@@ -23,7 +23,7 @@ class Scalar:
         Parameters
         ----------
         fn
-            A callable function that accepts a Pandas DataFrame and calculates/returns the represented quantity
+            A callable function that accepts some input data in some form and calculates/returns the represented quantity
         bins
             A sequence of regularly spaced bins used when plotting or histogramming in this variable
         label
@@ -36,16 +36,11 @@ class Scalar:
         self.label = label
         self.latex_label = latex_label or label
 
-    def __call__(self, df: DataFrame) -> NDArray:
+    def __call__(self, *args, **kwargs) -> NDArray:
         """
-        Parameters
-        ----------
-        df
-            A DataFrame instance
-
         Returns
         -------
         NDArray
-            The output value of self.fn(df)
+            The output value of self.fn(*args, **kwargs)
         """
-        return self.fn(df)
+        return self.fn(*args, **kwargs)

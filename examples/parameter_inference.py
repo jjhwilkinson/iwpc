@@ -5,7 +5,7 @@ import torch
 from pandas import DataFrame
 from scipy.stats import expon
 
-from iwpc.data_modules.pandas_datamodule import PandasDataModule, BinaryPandasDataModule
+from iwpc.data_modules.pandas_data_module import PandasDataModule, BinaryPandasDataModule
 from iwpc.divergences import JensenShannonDivergence
 from iwpc.modules.naive import GenericNaiveVariationalFDivergenceEstimator
 from iwpc.calculate_divergence import calculate_divergence

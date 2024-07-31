@@ -77,7 +77,7 @@ def calculate_divergence(
     DivergenceResult
     """
     trainer_kwargs = trainer_kwargs or {}
-    datetime_str = datetime.datetime.now().strftime('%Y%m%d%H%M')
+    datetime_str = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
     name = f"{name}-{datetime_str}" if name else datetime_str
 
     checkpoint_callback = ModelCheckpoint(

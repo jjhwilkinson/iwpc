@@ -64,6 +64,11 @@ class BinnedStatAccumulator:
         if values.shape[-1] == 0:
             return
 
+        if isinstance(samples, list):
+            samples = np.stack(samples)
+        if samples.ndim == 1:
+            samples = samples[:, None]
+
         if prev_binned_statistic_result is None:
             prev_binned_statistic_result = construct_binned_statistic_result_regular_bins(samples, self.bins)
 

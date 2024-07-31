@@ -37,7 +37,8 @@ class PandasDataModule(LightningDataModule):
         weight_col
             The name of a column containing sample weights to be provided in batches
         validation_split
-            The train-validation split to use
+            The train-validation split to use. Must be between 0 and 1 and represents the fraction of data used for
+            training. Defaults to 0.5
         dataloader_kwargs
             Any other arguments to be provided to DataLoader instances
         """
@@ -53,7 +54,11 @@ class PandasDataModule(LightningDataModule):
         self.weight_col = weight_col
         self.dataloader_kwargs = dataloader_kwargs or {}
         self.validation_split = validation_split
-        self.train_ds, self.val_ds = train_test_split(self.all_data_ds, test_size=self.validation_split)
+        self.train_ds, self.val_ds = train_test_split(
+            self.all_data_ds,
+            train_size=self.validation_split,
+            shuffle=True,
+        )
 
     def train_dataloader(self) -> DataLoader:
         """
@@ -97,8 +102,8 @@ class BinaryPandasDataModule(PandasDataModule):
     """
     def __init__(
         self,
-        df1: DataFrame,
-        df2: DataFrame,
+        p_df: DataFrame,
+        q_df: DataFrame,
         feature_cols: List[str] = None,
         weight_col: Optional[str] = None,
         validation_split: Optional[float] = 0.5,
@@ -107,23 +112,24 @@ class BinaryPandasDataModule(PandasDataModule):
         """
         Parameters
         ----------
-        df1
+        p_df
             A DataFrame containing features from one class
-        df2
+        q_df
             A DataFrame containing features from a second class must have the same columns as df1
         feature_cols
             A list of the features in the dataframes which should be provided by the various DataLoaders
         weight_col
             The name of a column containing sample weights to be provided in batches
         validation_split
-            The train-validation split to use
+            The train-validation split to use. Must be between 0 and 1 and represents the fraction of data used for
+            training. Defaults to 0.5
         dataloader_kwargs
             Any other arguments to be provided to DataLoader instances
         """
-        self.df1 = df1
-        self.df2 = df2
-        all_data_df = pd.concat([df1, df2], ignore_index=True)
-        all_data_df['__label'] = np.concat([np.zeros(self.df1.shape[0]), np.ones(self.df1.shape[0])])
+        self.p_df = p_df
+        self.q_df = q_df
+        all_data_df = pd.concat([p_df, q_df], ignore_index=True)
+        all_data_df['__label'] = np.concat([np.zeros(self.p_df.shape[0]), np.ones(self.p_df.shape[0])])
 
         super().__init__(
             all_data_df,
