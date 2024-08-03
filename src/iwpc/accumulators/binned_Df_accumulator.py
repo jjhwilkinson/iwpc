@@ -16,7 +16,7 @@ from .utils import construct_bin_number_regular_bins
 from ..data_modules.pandas_directory_data_module import PandasDirDataModule
 from ..divergences import DifferentiableFDivergence
 from ..scalars.scalar import Scalar
-from ..stat_utils import propagate_uncertainty_through_ratio, normalised_weight_sum_uncertainty
+from ..stat_utils import propagate_uncertainty_through_ratio, normalised_weight_sum_uncertainty, calculate_class_weights
 from ..utils import bin_centers, format_quantity_with_uncertainty
 
 
@@ -125,6 +125,7 @@ class BinnedDfAccumulator:
             samples = np.asarray(samples).T
         is_p = labels == 0
         is_q = ~is_p
+
         self.train_p_hist.update(
             samples[is_p],
             weights[is_p],
@@ -133,20 +134,22 @@ class BinnedDfAccumulator:
             samples[is_q],
             weights[is_q],
         )
+
+        class_weights = calculate_class_weights(weights, labels)
+        unbiased_mixture_weights = class_weights * weights
         self.train_learned_dists.update(
             samples,
-            [weights, weights * 2 * (p_over_q / (1 + p_over_q)), weights * 2 * (1 / (1 + p_over_q))],
+            [unbiased_mixture_weights, unbiased_mixture_weights * 2 * (p_over_q / (1 + p_over_q)), unbiased_mixture_weights * 2 * (1 / (1 + p_over_q))],
         )
         self.train_learned_p.update(
             samples,
-            weights * 2 * (p_over_q / (1 + p_over_q)),
+            unbiased_mixture_weights * 2 * (p_over_q / (1 + p_over_q)),
         )
         self.train_learned_q.update(
             samples,
-            weights * 2 * (1 / (1 + p_over_q)),
+            unbiased_mixture_weights * 2 * (1 / (1 + p_over_q)),
         )
 
-    # @profile
     def update_val(
         self,
         samples: Union[NDArray, List[NDArray]],
@@ -215,9 +218,12 @@ class BinnedDfAccumulator:
             weights[is_q],
             prev_binned_statistic_result=q_result,
         )
+
+        class_weights = calculate_class_weights(weights, labels)
+        unbiased_mixture_weights = class_weights * weights
         self.val_learned_dists.update(
             samples,
-            [weights, weights * 2 * (p_over_q / (1 + p_over_q)), weights * 2 * (1 / (1 + p_over_q))],
+            [unbiased_mixture_weights, unbiased_mixture_weights * 2 * (p_over_q / (1 + p_over_q)), unbiased_mixture_weights * 2 * (1 / (1 + p_over_q))],
         )
 
         self.marginalised_df_accumulator.update(
@@ -339,10 +345,10 @@ class BinnedDfAccumulator:
             raise NotImplementedError("Plotting not implemented for more than 2 scalars")
 
         perp_df, perp_df_errs = self.perp_df_hist, self.perp_df_err_hist
-        train_p_sum, train_p_errs = self.train_p_hist.weight_sum_hist, self.train_p_hist.weight_sum_stderr_hist
-        train_q_sum, train_q_errs = self.train_q_hist.weight_sum_hist, self.train_q_hist.weight_sum_stderr_hist
-        val_p_sum, val_p_errs = self.val_p_hist.weight_sum_hist, self.val_p_hist.weight_sum_stderr_hist
-        val_q_sum, val_q_errs = self.val_q_hist.weight_sum_hist, self.val_q_hist.weight_sum_stderr_hist
+        train_p_sum, train_p_errs = self.train_p_hist.normalised_weight_sum_hist, self.train_p_hist.normalised_weight_sum_stderr_hist
+        train_q_sum, train_q_errs = self.train_q_hist.normalised_weight_sum_hist, self.train_q_hist.normalised_weight_sum_stderr_hist
+        val_p, val_p_errs = self.val_p_hist.normalised_weight_sum_hist, self.val_p_hist.normalised_weight_sum_stderr_hist
+        val_q, val_q_errs = self.val_q_hist.normalised_weight_sum_hist, self.val_q_hist.normalised_weight_sum_stderr_hist
 
         marginalised_df_str = format_quantity_with_uncertainty(
             self.marginalised_df_accumulator.accumulated_df,
@@ -365,14 +371,14 @@ class BinnedDfAccumulator:
             for ax in (ax0, ax1, ax2, ax3):
                 ax.set_xlabel(scalar.latex_label)
 
-            ax0.set_ylabel('Weight Sum')
+            ax0.set_ylabel('Normalised Weight Sum')
             ax1.set_ylabel(f'{self.divergence.short_name}')
-            ax2.set_ylabel('Weight Sum')
+            ax2.set_ylabel('Normalised Weight Sum')
             ax3.set_ylabel(f'{self.p_name} / {self.q_name}')
 
             ax0.errorbar(
                 centers,
-                val_p_sum,
+                val_p,
                 yerr=val_p_errs,
                 markersize=0,
                 capsize=3,
@@ -381,7 +387,7 @@ class BinnedDfAccumulator:
             )
             ax0.errorbar(
                 centers,
-                val_q_sum,
+                val_q,
                 yerr=val_q_errs,
                 markersize=0,
                 capsize=3,
@@ -418,7 +424,7 @@ class BinnedDfAccumulator:
                 markersize=0,
                 capsize=3,
                 drawstyle='steps-mid',
-                label=f'learned {self.p_name} hist',
+                label=f'val learned {self.p_name} hist',
             )
             ax2.errorbar(
                 centers,
@@ -430,16 +436,16 @@ class BinnedDfAccumulator:
                 markersize=0,
                 capsize=3,
                 drawstyle='steps-mid',
-                label=f'learned {self.q_name} hist',
+                label=f'val learned {self.q_name} hist',
             )
             ax2.legend()
 
             ax3.errorbar(
                 centers,
-                val_p_sum / val_q_sum,
+                val_p / val_q,
                 yerr=propagate_uncertainty_through_ratio(
-                    val_p_sum,
-                    val_q_sum,
+                    val_p,
+                    val_q,
                     np.asarray([[val_p_errs**2, np.zeros_like(val_p_errs)], [np.zeros_like(val_q_errs), val_q_errs**2]])
                 ),
                 markersize=0,
@@ -488,7 +494,7 @@ class BinnedDfAccumulator:
                 ax.set_ylabel(scalar2.latex_label)
 
             im = ax0.imshow(
-                (val_p_sum / val_q_sum).T,
+                (val_p / val_q).T,
                 origin='lower',
                 extent=(scalar1.bins[0], scalar1.bins[-1], scalar2.bins[0], scalar2.bins[-1]),
                 cmap='bwr',
@@ -534,7 +540,7 @@ class BinnedDfAccumulator:
             fig.colorbar(im, orientation='vertical', label=f'Learned {self.p_name} / {self.q_name}')
 
             im = ax3.imshow(
-                np.log(val_p_sum.T) if log_dists else train_p_sum.T,
+                np.log(self.val_p_hist.weight_sum_hist.T) if log_dists else self.val_p_hist.weight_sum_hist.T,
                 origin='lower',
                 extent=(scalar1.bins[0], scalar1.bins[-1], scalar2.bins[0], scalar2.bins[-1]),
                 aspect='auto',
@@ -593,7 +599,7 @@ class BinnedDfAccumulator:
             ):
                 df = self._prep_data(df)
                 scalar_values = [scalar(df) for scalar in self.scalars]
-                labels = df.label.values.astype(bool)
+                labels = df[datamodule.target_cols[0]].values.astype(bool)
                 weights = df[datamodule.weight_col].values if datamodule.weight_col else np.ones_like(labels, dtype=float)
                 p_over_q = construct_p_over_q(df, p_over_q_cols)
                 update_fn(scalar_values, labels, weights, p_over_q)
