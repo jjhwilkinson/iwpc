@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from typing import Dict, Callable, Tuple, List
 
@@ -49,8 +50,11 @@ def add_p_over_q_transformation(
         data_module.weight_col,
     )
     trainer = Trainer(enable_checkpointing=False, logger=False)
-    log_p_over_q = trainer.predict(model=module, dataloaders=DataLoader(ds, data_module.batch_size))
-    p_over_q = np.exp(np.concat(log_p_over_q))
+    log_p_over_q = trainer.predict(
+        model=module,
+        dataloaders=DataLoader(ds, data_module.dataloader_kwargs['batch_size'], num_workers=os.cpu_count())
+    )
+    p_over_q = np.exp(np.concatenate(log_p_over_q))
     df[p_over_q_col] = p_over_q
     return df
 
@@ -155,7 +159,7 @@ def run_reweight_loop(
         The minimum significance required to accept that the model has learnt a significant feature in the data which
         should be reweighted away before the next iteration
     resume
-        Whether training should be resumed
+        Whether the reweight loop should be resumed at a certain iteration
     initial_lr
         The initial learning rate
     lr_decay_factor
@@ -178,6 +182,7 @@ def run_reweight_loop(
     elif reweighted_path.exists():
         raise Exception(f"{reweighted_path} already exists. Please manually delete, or configure training to resume, and try again.")
 
+    calculate_divergence_kwargs = calculate_divergence_kwargs or {}
     calculate_divergence_kwargs.setdefault('trainer_kwargs', {})
     calculate_divergence_kwargs['trainer_kwargs'].setdefault("max_epochs", -1)
 

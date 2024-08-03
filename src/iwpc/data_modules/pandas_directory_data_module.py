@@ -1,5 +1,6 @@
 import copy
 import logging
+import os
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -51,9 +52,8 @@ class PandasDirDataModule(LightningDataModule):
         target_cols: Optional[Union[str, List[str]]] = None,
         weight_col: Optional[str] = None,
         split: float = 0.5,
-        batch_size: int = 2**15,
         limit_files: Optional[int] = None,
-        num_workers: int = 0,
+        dataloader_kwargs: Optional[dict] = None,
     ):
         """
         Parameters
@@ -69,12 +69,10 @@ class PandasDirDataModule(LightningDataModule):
         split
             The train-validation split. The first ceil(N * split) files are allocated for training and the remaining
             files are used for validation
-        batch_size
-            The batch size to passed DataLoader instances
         limit_files
             Limit the number of files used to allow rapid testing
-        num_workers
-            The number of workers to provide the DataLoader instances. os.cpu_count() is recommended
+        dataloader_kwargs
+            Any other arguments to be provided to DataLoader instances
         """
         super().__init__()
         self.dataset_dir = Path(dataset_dir)
@@ -82,9 +80,13 @@ class PandasDirDataModule(LightningDataModule):
         self.target_cols = [target_cols] if isinstance(target_cols, str) else target_cols
         self.weight_col = weight_col
         self.split = split
-        self.batch_size = batch_size
         self.limit_files = limit_files
-        self.num_workers = num_workers
+
+        self.dataloader_kwargs = dataloader_kwargs or {}
+        self.dataloader_kwargs.setdefault("batch_size", 2**15)
+        self.dataloader_kwargs.setdefault("num_workers", os.cpu_count())
+        if self.dataloader_kwargs["num_workers"] > 0:
+            self.dataloader_kwargs.setdefault("persistent_workers", True)
 
         self.ds_info = read_yaml(self.dataset_dir / 'ds_info.yml')
         self.all_files = [self.dataset_dir / f"file_{i}.pkl" for i in range(len(self.ds_info['file_sizes']))]
@@ -150,15 +152,10 @@ class PandasDirDataModule(LightningDataModule):
         """
         Returns a DataLoader which iterates over the samples in the training files
         """
-        if self.num_workers == 1:
-            raise Exception("Fix num_workers == 1, you wanted to set to os.cpu_count()")
-
         return DataLoader(
             self.train_ds,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            persistent_workers=self.num_workers > 0,
             shuffle=False,
+            **self.dataloader_kwargs,
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -167,10 +164,8 @@ class PandasDirDataModule(LightningDataModule):
         """
         return DataLoader(
             self.val_ds,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            persistent_workers=self.num_workers > 0,
-            shuffle=False
+            shuffle=False,
+            **self.dataloader_kwargs,
         )
 
     @property
@@ -293,7 +288,7 @@ class PandasDirDataModule(LightningDataModule):
             self.target_cols,
             self.weight_col,
             split=self.split,
-            batch_size=self.batch_size,
+            dataloader_kwargs=self.dataloader_kwargs,
         )
 
     def reweight(
@@ -358,8 +353,7 @@ class PandasDirDataModule(LightningDataModule):
             target_cols=self.target_cols,
             weight_col=output_weight_col,
             split=self.split,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
+            dataloader_kwargs=self.dataloader_kwargs,
         )
         new_dm.normalise_weights(label_col)
         return self.copy(dataset_dir=out_dir, weight_col=output_weight_col)
@@ -423,8 +417,8 @@ class PandasDirDataModule(LightningDataModule):
             'target_cols': self.target_cols,
             'weight_col': self.weight_col,
             'split': self.split,
-            'batch_size': self.batch_size,
             'limit_files': self.limit_files,
+            'dataloader_kwargs': self.dataloader_kwargs,
         }
         arguments.update(overrides)
         return PandasDirDataModule(**arguments)
