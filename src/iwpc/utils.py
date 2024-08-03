@@ -36,7 +36,7 @@ def split_by_mask(
         A pair of tuples, each containing the same number of entries as arrs. The first containing the list values for
         which mask is 'True' and the second containing the list values for which mask is 'False'
     """
-    if mask.dtype not in [np.bool, torch.bool]:
+    if mask.dtype not in [bool, torch.bool]:
         mask = mask.astype(bool)
     return (arr[mask] for arr in arrs), (arr[~mask] for arr in arrs)
 
@@ -170,6 +170,9 @@ def format_quantity_with_uncertainty(val: float, err: float, with_sig: bool = Fa
     -------
     str
     """
+    if not np.isfinite(val) or not np.isfinite(err):
+        return "NaN"
+
     val_order = int(np.log10(np.abs(val)))
     err_order = int(np.log10(np.abs(err)))
     string = f"{val:.{abs(val_order - err_order)}E} +- {err:.0E}"

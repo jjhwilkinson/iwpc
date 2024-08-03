@@ -58,7 +58,7 @@ def construct_binned_statistic_result_regular_bins(
         BinnedStatisticddResult instance containing the bin indices of each sample in the format expected by
         binned_statistic_dd
     """
-    bins_with_overflow = [np.concat([[2*b[0] - b[1]], b, [2*b[-1] - b[-2]]]) for b in bins]
+    bins_with_overflow = [np.concatenate([[2*b[0] - b[1]], b, [2*b[-1] - b[-2]]]) for b in bins]
     bin_numbers = np.ceil(construct_bin_number_regular_bins(samples, bins_with_overflow).T).astype(int)
     bin_numbers = np.clip(bin_numbers, 0, np.asarray([b.shape[0] for b in bins_with_overflow])[:, None])
     return BinnedStatisticddResult(

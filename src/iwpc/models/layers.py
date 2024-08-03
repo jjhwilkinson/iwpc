@@ -76,8 +76,8 @@ class RunningNormLayer(Module):
         x
             A batch of data. The first dimension is assumed to be the batch dimension
         """
-        self.sum_ += x.sum(dim=0)
-        self.sq_sum_ += (x**2).sum(dim=0)
+        self.sum_ += x.sum(dim=0).detach()
+        self.sq_sum_ += (x**2).sum(dim=0).detach()
         self.N_ += x.shape[0]
 
     def forward(self, x: Tensor) -> Tensor:
