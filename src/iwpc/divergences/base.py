@@ -202,7 +202,7 @@ class DifferentiableFDivergence(ABC):
         """
         return self._np_or_torch(x, self._f_dash_torch, self._f_dash_np)
 
-    def calculate_naive_p_values(self, p_over_q: TensorOrNDArray) -> TensorOrNDArray:
+    def calculate_naive_p_summands(self, p_over_q: TensorOrNDArray) -> TensorOrNDArray:
         """
         Evaluates the function in the expectation value over the distribution p in the naive representation of the
         f-divergence (https://arxiv.org/abs/2405.06397)
@@ -218,7 +218,7 @@ class DifferentiableFDivergence(ABC):
         """
         return self.f_dash(p_over_q)
 
-    def calculate_naive_q_values(self, p_over_q: TensorOrNDArray) -> TensorOrNDArray:
+    def calculate_naive_q_summands(self, p_over_q: TensorOrNDArray) -> TensorOrNDArray:
         """
         Evaluates the function in the expectation value over the distribution q in the naive representation of the
         f-divergence (https://arxiv.org/abs/2405.06397)
@@ -234,7 +234,7 @@ class DifferentiableFDivergence(ABC):
         """
         return self.f_conj(self.f_dash(p_over_q))
 
-    def calculate_naive_rep_values_by_label(
+    def calculate_naive_rep_summands_by_label(
         self,
         p_over_q: TensorOrNDArray,
         label: TensorOrNDArray,
@@ -258,7 +258,7 @@ class DifferentiableFDivergence(ABC):
             The list of values to be averaged over in the naive representation of the f-divergence
         """
         (samples_from_q,), (samples_from_p,) = split_by_mask(label, p_over_q)
-        return self.calculate_naive_p_values(samples_from_p), self.calculate_naive_q_values(samples_from_q)
+        return self.calculate_naive_p_summands(samples_from_p), self.calculate_naive_q_summands(samples_from_q)
 
     def naive_estimate(
         self,
@@ -287,13 +287,13 @@ class DifferentiableFDivergence(ABC):
         TensorOrNDArray
             A scalar value providing an estimate of a lower bound of $D_f(p, q)$
         """
-        p_values, q_values = self.calculate_naive_rep_values_by_label(p_over_q, label)
+        p_summands, q_summands = self.calculate_naive_rep_summands_by_label(p_over_q, label)
         (q_weights,), (p_weights,) = split_by_mask(label, weights)
 
         Df_hat = 0.0
-        if len(p_values) > 0:
-            Df_hat += (p_weights * p_values).mean()
-        if len(q_values) > 0:
-            Df_hat -= (q_weights * q_values).mean()
+        if len(p_summands) > 0:
+            Df_hat += (p_weights * p_summands).mean() / p_weights.mean()
+        if len(q_summands) > 0:
+            Df_hat -= (q_weights * q_summands).mean() / q_weights.mean()
 
         return Df_hat
