@@ -63,7 +63,7 @@ class HistogramAccumulator(BinnedStatAccumulator):
 
     @property
     def normalised_weight_sum_hist(self) -> NDArray:
-        return self.sum_hist[0] / self.sum_hist[0].sum()
+        return self.weight_sum_hist / self.weight_sum_hist.sum()
 
     @property
     def weight_sum_stderr_hist(self) -> NDArray:
@@ -71,4 +71,4 @@ class HistogramAccumulator(BinnedStatAccumulator):
 
     @property
     def normalised_weight_sum_stderr_hist(self) -> NDArray:
-        return normalised_weight_sum_uncertainty(self.sum_hist, np.sqrt(self.sq_sum_hist[0, 0]))
+        return normalised_weight_sum_uncertainty(self.sum_hist[0], np.sqrt(self.sq_sum_hist[0, 0]))

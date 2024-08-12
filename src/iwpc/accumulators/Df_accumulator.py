@@ -140,13 +140,13 @@ class LabeledBinaryNaiveDfAccumulator(DfAccumulator):
         if self.clip_log_p_over_q:
             p_over_q = np.exp(np.clip(np.log(p_over_q), *self.clip_log_p_over_q))
 
-        p_values, q_values = self.divergence.calculate_naive_rep_values_by_label(
+        p_summands, q_summands = self.divergence.calculate_naive_rep_summands_by_label(
             p_over_q,
             labels,
         )
         (p_weights,), (q_weights,) = split_by_mask(labels == 0, weights)
-        self.p_accumulator.update(p_weights, p_values)
-        self.q_accumulator.update(q_weights, q_values)
+        self.p_accumulator.update(p_weights, p_summands)
+        self.q_accumulator.update(q_weights, q_summands)
 
     @property
     def accumulated_df(self) -> float:

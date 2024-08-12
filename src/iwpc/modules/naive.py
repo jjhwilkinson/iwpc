@@ -60,11 +60,11 @@ class NaiveVariationalFDivergenceEstimator(FDivergenceEstimator):
 
         log_p_over_q_hat = self.model(x)[:, 0]
         clipped_p_over_q = torch.exp(torch.clip(log_p_over_q_hat, -14, 14))
-        p_samples, q_samples = self.divergence.calculate_naive_rep_values_by_label(clipped_p_over_q, labels)
+        p_summands, q_summands = self.divergence.calculate_naive_rep_summands_by_label(clipped_p_over_q, labels)
         (p_weights,), (q_weights,) = split_by_mask(labels == 0, weights)
 
-        self.val_p_accumulator(p_weights, p_samples)
-        self.val_q_accumulator(q_weights, q_samples)
+        self.val_p_accumulator(p_weights, p_summands)
+        self.val_q_accumulator(q_weights, q_summands)
 
 
 class GenericNaiveVariationalFDivergenceEstimator(NaiveVariationalFDivergenceEstimator):

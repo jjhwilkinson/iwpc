@@ -196,16 +196,16 @@ class BinnedDfAccumulator:
         marginalised_p_over_q[(marginalised_p == 0) & (marginalised_q == 0)] = 1.
         cond_p_over_q = p_over_q[mask] / marginalised_p_over_q
 
-        learned_p_values = self.divergence.calculate_naive_p_values(cond_p_over_q[is_p[mask]])
-        learned_q_values = self.divergence.calculate_naive_q_values(cond_p_over_q[is_q[mask]])
+        learned_p_summands = self.divergence.calculate_naive_p_summands(cond_p_over_q[is_p[mask]])
+        learned_q_summands = self.divergence.calculate_naive_q_summands(cond_p_over_q[is_q[mask]])
         p_result = self.perp_p_accumulator.update(
             samples[is_p],
-            learned_p_values,
+            learned_p_summands,
             weights[is_p],
         )
         q_result = self.perp_q_accumulator.update(
             samples[is_q],
-            learned_q_values,
+            learned_q_summands,
             weights[is_q],
         )
         self.val_p_hist.update(
@@ -219,11 +219,17 @@ class BinnedDfAccumulator:
             prev_binned_statistic_result=q_result,
         )
 
+        print("FIX! CLASS WEIGHTS SHOULD BE GLOBALLY INFERRED IN TRAIN DATA")
         class_weights = calculate_class_weights(weights, labels)
-        unbiased_mixture_weights = class_weights * weights
+        unbiased_mixture_weights = weights * class_weights
+
         self.val_learned_dists.update(
             samples,
-            [unbiased_mixture_weights, unbiased_mixture_weights * 2 * (p_over_q / (1 + p_over_q)), unbiased_mixture_weights * 2 * (1 / (1 + p_over_q))],
+            [
+                unbiased_mixture_weights,
+                unbiased_mixture_weights * 2 * (p_over_q / (1 + p_over_q)),
+                unbiased_mixture_weights * 2 * (1 / (1 + p_over_q))
+            ],
         )
 
         self.marginalised_df_accumulator.update(
@@ -345,8 +351,8 @@ class BinnedDfAccumulator:
             raise NotImplementedError("Plotting not implemented for more than 2 scalars")
 
         perp_df, perp_df_errs = self.perp_df_hist, self.perp_df_err_hist
-        train_p_sum, train_p_errs = self.train_p_hist.normalised_weight_sum_hist, self.train_p_hist.normalised_weight_sum_stderr_hist
-        train_q_sum, train_q_errs = self.train_q_hist.normalised_weight_sum_hist, self.train_q_hist.normalised_weight_sum_stderr_hist
+        train_p, train_p_errs = self.train_p_hist.normalised_weight_sum_hist, self.train_p_hist.normalised_weight_sum_stderr_hist
+        train_q, train_q_errs = self.train_q_hist.normalised_weight_sum_hist, self.train_q_hist.normalised_weight_sum_stderr_hist
         val_p, val_p_errs = self.val_p_hist.normalised_weight_sum_hist, self.val_p_hist.normalised_weight_sum_stderr_hist
         val_q, val_q_errs = self.val_q_hist.normalised_weight_sum_hist, self.val_q_hist.normalised_weight_sum_stderr_hist
 
@@ -393,6 +399,24 @@ class BinnedDfAccumulator:
                 capsize=3,
                 drawstyle='steps-mid',
                 label=f"val {self.q_name}",
+            )
+            ax0.errorbar(
+                centers,
+                train_p,
+                yerr=train_p_errs,
+                markersize=0,
+                capsize=3,
+                drawstyle='steps-mid',
+                label=f"train {self.p_name}",
+            )
+            ax0.errorbar(
+                centers,
+                train_q,
+                yerr=train_q_errs,
+                markersize=0,
+                capsize=3,
+                drawstyle='steps-mid',
+                label=f"train {self.q_name}",
             )
             plt.text(
                 0.125,
@@ -468,11 +492,11 @@ class BinnedDfAccumulator:
             )
             ax3.errorbar(
                 centers,
-                train_p_sum / train_q_sum,
+                train_p / train_q,
                 yerr=propagate_uncertainty_through_ratio(
-                    train_p_sum,
-                    train_q_sum,
-                    np.asarray([[train_p_errs**2, np.zeros_like(train_p_errs)], [np.zeros_like(train_q_errs), train_q_errs**2]])
+                    train_p,
+                    train_q,
+                    np.asarray([[train_p_errs**2, np.zeros_like(train_p)], [np.zeros_like(train_q), train_q_errs**2]])
                 ),
                 markersize=0,
                 capsize=3,

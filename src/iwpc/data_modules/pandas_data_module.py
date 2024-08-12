@@ -129,7 +129,7 @@ class BinaryPandasDataModule(PandasDataModule):
         self.p_df = p_df
         self.q_df = q_df
         all_data_df = pd.concat([p_df, q_df], ignore_index=True)
-        all_data_df['__label'] = np.concatenate([np.zeros(self.p_df.shape[0]), np.ones(self.p_df.shape[0])])
+        all_data_df['__label'] = np.concatenate([np.zeros(self.p_df.shape[0]), np.ones(self.q_df.shape[0])])
 
         super().__init__(
             all_data_df,
