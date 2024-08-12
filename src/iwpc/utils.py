@@ -200,10 +200,6 @@ def pickle_cache(directory: PathLike) -> Callable[[Callable], Callable[[...], An
     ----------
     directory
         The directory into which the cached pickle files should be placed
-
-    Returns
-    -------
-
     """
     directory = Path(directory)
 
