@@ -4,7 +4,7 @@ import os
 import shutil
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Union, List, Callable, Tuple
+from typing import Optional, Union, List, Callable, Tuple, Dict
 
 import numpy as np
 import pandas as pd
@@ -19,6 +19,42 @@ from ..types import PathLike, TensorOrNDArray
 from ..utils import read_yaml, temp_directory, dump_yaml
 
 logger = logging.getLogger(__name__)
+
+
+def batched_df_pickles_iter(in_dir: Path, batch_size: int) -> DataFrame:
+    """
+    Loops over the files in in_dir and yields the data contained therein in batches of size batch_size
+
+    Parameters
+    ----------
+    in_dir
+        A directory containing a number of pickled pandas DataFrames named file_0.pkl ...
+    batch_size
+        The desired batch size
+
+    Yields
+    ------
+    DataFrame
+        A DataFrame containing batch_size rows except for the possible the last batch
+    """
+    batch = []
+    batch_fill = 0
+    for file in tqdm(list(in_dir.glob('*.pkl')), desc="Looping through files for rebatch"):
+        data = pd.read_pickle(file)
+        used_data = 0
+        while used_data < data.shape[0]:
+            to_fill = min(data.shape[0] - used_data, batch_size - batch_fill)
+            batch.append(data[used_data: used_data + to_fill])
+            used_data += to_fill
+            batch_fill += to_fill
+
+            if batch_fill == batch_size:
+                yield pd.concat(batch)
+                batch = []
+                batch_fill = 0
+
+    if batch_fill > 0:
+        yield pd.concat(batch)
 
 
 class PandasDirDataModule(LightningDataModule):
@@ -88,7 +124,6 @@ class PandasDirDataModule(LightningDataModule):
         if self.dataloader_kwargs["num_workers"] > 0:
             self.dataloader_kwargs.setdefault("persistent_workers", True)
 
-        self.ds_info = read_yaml(self.dataset_dir / 'ds_info.yml')
         self.all_files = [self.dataset_dir / f"file_{i}.pkl" for i in range(len(self.ds_info['file_sizes']))]
         if limit_files:
             self.all_files = self.all_files[:limit_files]
@@ -96,6 +131,15 @@ class PandasDirDataModule(LightningDataModule):
         self.train_files = self.all_files[:num_train_files]
         self.validation_files = self.all_files[num_train_files:]
 
+    @property
+    def ds_info(self) -> Dict:
+        """
+        Returns
+        -------
+        Dict
+            The contents of the ds_info.yml file
+        """
+        return read_yaml(self.dataset_dir / 'ds_info.yml')
 
     @property
     def train_ds(self) -> PandasFileListDataset:
@@ -126,7 +170,7 @@ class PandasDirDataModule(LightningDataModule):
         )
 
     @property
-    def ndim(self) -> int:
+    def num_features(self) -> int:
         """
         The number of dimensions/features in the data
         """
@@ -177,6 +221,21 @@ class PandasDirDataModule(LightningDataModule):
             The list of tags associated with the dataset
         """
         return self.ds_info.get('tags', [])
+
+    def add_tag(self, tag: Union[str, List[str]]) -> None:
+        """
+        Adds a tag to the dataset
+
+        Parameters
+        ----------
+        tag
+            A tag or list of tags
+        """
+        if isinstance(tag, str):
+            tag = [tag]
+        new_ds_info = self.ds_info
+        new_ds_info['tags'] = new_ds_info.get('tags', []) + list(tag)
+        dump_yaml(new_ds_info, self.dataset_dir / 'ds_info.yml')
 
     def file_iter(
         self,
@@ -264,11 +323,6 @@ class PandasDirDataModule(LightningDataModule):
             if update_ds_info:
                 new_ds_info.update(update_ds_info)
             new_ds_info['file_sizes'] = new_file_sizes
-
-            if tag is not None:
-                if isinstance(tag, str):
-                    tag = [tag]
-                new_ds_info['tags'] = new_ds_info.get('tags', []) + tag
             dump_yaml(new_ds_info, tmpdir / 'ds_info.yml')
 
             if out_dir.exists():
@@ -282,7 +336,7 @@ class PandasDirDataModule(LightningDataModule):
                 shutil.move(file, out_dir / file.name)
             shutil.move(tmpdir / "ds_info.yml", out_dir / "ds_info.yml")
 
-        return PandasDirDataModule(
+        new_dm = PandasDirDataModule(
             out_dir,
             self.feature_cols,
             self.target_cols,
@@ -290,6 +344,8 @@ class PandasDirDataModule(LightningDataModule):
             split=self.split,
             dataloader_kwargs=self.dataloader_kwargs,
         )
+        new_dm.add_tag(tag)
+        return new_dm
 
     def reweight(
         self,
@@ -396,6 +452,68 @@ class PandasDirDataModule(LightningDataModule):
             desc="Normalising weights",
             force=True,
         )
+
+    def rebatch_files(self, new_file_size: int) -> None:
+        """
+        Re-arranges the data contained in dataset_dir, merging or splitting the constituent pandas dataframes so that
+        all but the last dataframe has size new_file_size. Operation maintains order. Be careful not to accidentally mix
+        training and validation data when using this function
+
+        Parameters
+        ----------
+        new_file_size
+            The desired new file size
+        """
+        logger.info(f"Original file sizes {self.ds_info['file_sizes']}")
+
+        ds_info = self.ds_info
+        new_batch_sizes = []
+        for i, batch in enumerate(batched_df_pickles_iter(self.dataset_dir, new_file_size)):
+            pd.to_pickle(batch, self.dataset_dir / f"file_{i}.pkl_")
+            new_batch_sizes.append(batch.shape[0])
+        ds_info['file_sizes'] = new_batch_sizes
+        dump_yaml(ds_info, self.dataset_dir / 'ds_info.yml')
+
+        for file in self.all_files:
+            file.unlink()
+        for file in self.dataset_dir.glob("*.pkl_"):
+            file.rename(self.dataset_dir / file.name[:-1])
+
+        logger.info(f"New file sizes {self.ds_info['file_sizes']}")
+        self.add_tag("rebatched")
+
+    def shuffle(self) -> None:
+        """
+        In-place shuffles all the data in dataset_dir randomly assigning each row to a new file and position in the
+        file. The size of each file is not changed
+        """
+        rng = np.random.Generator(np.random.PCG64())
+        in_files = list(self.dataset_dir.glob('*.pkl'))
+        shuffled_sizes = np.zeros(len(in_files), dtype=int)
+        new_ds_info = self.ds_info
+        batch_sizes = np.asarray(self.ds_info["file_sizes"])
+
+        for i, file in enumerate(tqdm(in_files, desc='Shuffling and splitting')):
+            data = pd.read_pickle(file).sample(frac=1).reset_index(drop=True)
+            partition = rng.multivariate_hypergeometric(batch_sizes - shuffled_sizes, data.shape[0])
+            shuffled_sizes += partition
+
+            cum_partition = np.cumsum(np.concatenate([[0], partition]))
+            for j in range(len(in_files)):
+                pd.to_pickle(data[cum_partition[j]: cum_partition[j + 1]], self.dataset_dir / f'{j}_{i}.pkl')
+
+        new_file_sizes = []
+        for j in tqdm(range(len(in_files)), desc='Merging and shuffling'):
+            data = pd.concat([pd.read_pickle(self.dataset_dir / f'{j}_{i}.pkl') for i in range(len(in_files))])
+            data = data.sample(frac=1).reset_index(drop=True)
+            pd.to_pickle(data, self.dataset_dir / f'file_{j}.pkl')
+            for i in range(len(in_files)):
+                (self.dataset_dir / f'{j}_{i}.pkl').unlink()
+            new_file_sizes.append(data.shape[0])
+
+        new_ds_info['file_sizes'] = new_file_sizes
+        dump_yaml(new_ds_info, self.dataset_dir / "ds_info.yml")
+        self.add_tag("shuffled")
 
     def copy(self, **overrides) -> "PandasDirDataModule":
         """
