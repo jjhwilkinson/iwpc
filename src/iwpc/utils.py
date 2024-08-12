@@ -1,23 +1,30 @@
+import hashlib
+import logging
 import pickle
 import shutil
 import tempfile
 import uuid
 from contextlib import contextmanager
+from functools import wraps
 from pathlib import Path
-from typing import Iterable, Tuple, Optional
+from typing import Iterable, Tuple, Optional, List, Callable, Any
 
 import numpy as np
 import torch
 import yaml
 from numpy._typing import NDArray
+from torch import Tensor
 
 from .types import TensorOrNDArray, PathLike
+
+
+logger = logging.getLogger(__name__)
 
 
 def split_by_mask(
     mask: TensorOrNDArray,
     *arrs: TensorOrNDArray
-) -> Tuple[Iterable[TensorOrNDArray], Iterable[TensorOrNDArray]]:
+) -> Tuple[List[TensorOrNDArray], List[TensorOrNDArray]]:
     """
     Splits each array in arrs into two arrays, the first containing the values for which mask is 'True' and the second
     containing the values for which mask is 'False'
@@ -32,13 +39,15 @@ def split_by_mask(
 
     Returns
     -------
-    Tuple[Iterable[TensorOrNDArray], Iterable[TensorOrNDArray]]
-        A pair of tuples, each containing the same number of entries as arrs. The first containing the list values for
+    Tuple[List[TensorOrNDArray], List[TensorOrNDArray]]
+        A pair of lists, each containing the same number of entries as arrs. The first containing the list values for
         which mask is 'True' and the second containing the list values for which mask is 'False'
     """
-    if mask.dtype not in [bool, torch.bool]:
-        mask = mask.astype(bool)
-    return (arr[mask] for arr in arrs), (arr[~mask] for arr in arrs)
+    if isinstance(mask, Tensor):
+        mask = mask.cpu().detach().numpy()
+
+    mask = mask.astype(bool)
+    return [arr[mask] for arr in arrs], [arr[~mask] for arr in arrs]
 
 
 def read_yaml(path: PathLike) -> dict:
@@ -179,3 +188,40 @@ def format_quantity_with_uncertainty(val: float, err: float, with_sig: bool = Fa
     if with_sig:
         string += f" ({val / err:.1f})"
     return string
+
+
+def pickle_cache(directory: PathLike) -> Callable[[Callable], Callable[[...], Any]]:
+    """
+    Handy utility decorator that attempts to cache a functions outputs using pickle files. Arguments are converted to
+    strings using repr and hashed. Repeated calls with the same has, even after restarting the script, will result in
+    the same output being loaded from the cached pickle file
+
+    Parameters
+    ----------
+    directory
+        The directory into which the cached pickle files should be placed
+
+    Returns
+    -------
+
+    """
+    directory = Path(directory)
+
+    def pickle_decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            args_kwargs_repr = repr(args) + repr(kwargs)
+            args_kwargs_hash = int(hashlib.sha256(args_kwargs_repr.encode('utf-8')).hexdigest(), 16) % 10 ** 8
+            cache_file = directory / f'{args_kwargs_hash}.pkl'
+            if cache_file.exists():
+                logger.info("Function call exists in-cache, loading pickle file")
+                with open(cache_file, 'rb') as f:
+                    ret_val = pickle.load(f)
+            else:
+                logger.info("Function call does not exist in-cache")
+                ret_val = fn(*args, **kwargs)
+                with open(cache_file, 'wb') as f:
+                    pickle.dump(ret_val, f)
+            return ret_val
+        return wrapper
+    return pickle_decorator
