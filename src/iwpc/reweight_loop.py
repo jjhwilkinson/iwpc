@@ -178,7 +178,7 @@ def run_reweight_loop(
     reweighted_path = data_module.dataset_dir.parent / f"{data_module.dataset_dir.name}_{tag}_reweighted"
     current_datamodule = data_module
     if resume:
-        current_datamodule = data_module.copy(dataset_dir=reweighted_path)
+        current_datamodule = data_module.copy(dataset_dir=reweighted_path, weight_col=output_weight_col)
     elif reweighted_path.exists():
         raise Exception(f"{reweighted_path} already exists. Please manually delete, or configure training to resume, and try again.")
 
