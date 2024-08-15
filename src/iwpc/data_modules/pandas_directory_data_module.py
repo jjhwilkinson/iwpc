@@ -344,7 +344,9 @@ class PandasDirDataModule(LightningDataModule):
             split=self.split,
             dataloader_kwargs=self.dataloader_kwargs,
         )
-        new_dm.add_tag(tag)
+        if tag is not None:
+            new_dm.add_tag(tag)
+
         return new_dm
 
     def reweight(
