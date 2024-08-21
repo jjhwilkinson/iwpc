@@ -17,7 +17,7 @@ from iwpc.calculate_divergence import DivergenceResult, calculate_divergence
 from iwpc.data_modules.numpy_data_module import BinaryNumpyDataModule
 from iwpc.divergences import KLDivergence, DifferentiableFDivergence
 from iwpc.modules.naive import GenericNaiveVariationalFDivergenceEstimator
-from iwpc.scalars.scalar import Scalar
+from iwpc.scalars.scalar_function import ScalarFunction
 from iwpc.utils import format_quantity_with_uncertainty
 
 
@@ -82,11 +82,11 @@ def calculate_mag_x_binned_Dfs(mag_x_bins: NDArray, result: DivergenceResult) ->
     -------
     BinnedDfAccumulator
     """
-    scalar = Scalar(
+    scalar = ScalarFunction(
         lambda arr: np.sqrt(arr[:, 0]**2 + arr[:, 1]**2 + arr[:, 2]**2),
-        mag_x_bins,
-        "|x|",
-        latex_label=r"|\vec{x}|"
+        label="|x|",
+        latex_label=r"|\vec{x}|",
+        bins=mag_x_bins,
     )
     df_accumulator = BinnedDfAccumulator(
         [scalar],

@@ -15,7 +15,7 @@ from .histogram_accumulator import HistogramAccumulator
 from .utils import construct_bin_number_regular_bins
 from ..data_modules.pandas_directory_data_module import PandasDirDataModule
 from ..divergences import DifferentiableFDivergence
-from ..scalars.scalar import Scalar
+from ..scalars.scalar_function import ScalarFunction
 from ..stat_utils import propagate_uncertainty_through_ratio, normalised_weight_sum_uncertainty, calculate_class_weights
 from ..utils import bin_centers, format_quantity_with_uncertainty
 
@@ -38,7 +38,7 @@ class BinnedDfAccumulator:
     """
     def __init__(
         self,
-        scalars: Union[Scalar, List[Scalar]],
+        scalars: Union[ScalarFunction, List[ScalarFunction]],
         divergence: DifferentiableFDivergence,
         p_name: str = 'p',
         q_name: str = 'q',
@@ -69,7 +69,7 @@ class BinnedDfAccumulator:
             recommended unless you know what you're doing
         """
         super().__init__()
-        self.scalars = [scalars] if isinstance(scalars, Scalar) else scalars
+        self.scalars = [scalars] if isinstance(scalars, ScalarFunction) else scalars
         self.divergence = divergence
         self.p_name = p_name
         self.q_name = q_name
@@ -135,8 +135,16 @@ class BinnedDfAccumulator:
             weights[is_q],
         )
 
-        class_weights = calculate_class_weights(weights, labels)
-        unbiased_mixture_weights = class_weights * weights
+        # WARNING/TODO: When operating on dataset with an unequal number of samples in each class we need calculate the
+        #  appropriate weight to correct the imbalance for the calculation of some quantities. Below is a quick and
+        #  dirty estimate based on the data accumulated thus far. Technically this should be evaluated on the whole
+        #  train distribution first but this would significantly slow things down for probably no extra noticable
+        #  improvements.
+        total_weight_sum = self.train_p_hist.weight_sum_hist.sum() + self.train_q_hist.weight_sum_hist.sum()
+        unbiased_mixture_weights = weights.copy()
+        unbiased_mixture_weights[is_p] *= total_weight_sum / self.train_p_hist.weight_sum_hist.sum() / 2
+        unbiased_mixture_weights[is_q] *= total_weight_sum / self.train_q_hist.weight_sum_hist.sum() / 2
+
         self.train_learned_dists.update(
             samples,
             [unbiased_mixture_weights, unbiased_mixture_weights * 2 * (p_over_q / (1 + p_over_q)), unbiased_mixture_weights * 2 * (1 / (1 + p_over_q))],
@@ -219,9 +227,11 @@ class BinnedDfAccumulator:
             prev_binned_statistic_result=q_result,
         )
 
-        print("FIX! CLASS WEIGHTS SHOULD BE GLOBALLY INFERRED IN TRAIN DATA")
-        class_weights = calculate_class_weights(weights, labels)
-        unbiased_mixture_weights = weights * class_weights
+        # Correct for class imbalance based on the ratio in train data
+        total_weight_sum = self.train_p_hist.weight_sum_hist.sum() + self.train_q_hist.weight_sum_hist.sum()
+        unbiased_mixture_weights = weights.copy()
+        unbiased_mixture_weights[is_p] *= total_weight_sum / self.train_p_hist.weight_sum_hist.sum() / 2
+        unbiased_mixture_weights[is_q] *= total_weight_sum / self.train_q_hist.weight_sum_hist.sum() / 2
 
         self.val_learned_dists.update(
             samples,

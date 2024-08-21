@@ -1,46 +1,18 @@
-from typing import Callable, Optional, Any
+from typing import Optional
 
-import numpy as np
 from numpy._typing import NDArray
-from pandas import DataFrame
 
 
 class Scalar:
     """
-    Represents a single scalar value that may be calculated from the features in a given sample in a dataset. Provides
-    a function to calculate the value as well as the names, bin range and labels required for making a plot in with the
-    quantity. An example might be the magnitude of a vector where the dataset might only provide the three components
-    directly
+    Represents a single scalar quantity. Provides bin range and labels required for making a plot in with the quantity
     """
     def __init__(
         self,
-        fn: Callable[[Any], NDArray],
-        bins: NDArray,
         label: str,
         latex_label: Optional[str] = None,
+        bins: Optional[NDArray] = None,
     ):
-        """
-        Parameters
-        ----------
-        fn
-            A callable function that accepts some input data in some form and calculates/returns the represented quantity
-        bins
-            A sequence of regularly spaced bins used when plotting or histogramming in this variable
-        label
-            A print friendly name for the quantity
-        latex_label
-            A version of the label that may use LaTeX for additional formatting. Defaults to the label above
-        """
-        self.fn = fn
         self.bins = bins
         self.label = label
         self.latex_label = latex_label or label
-
-    def __call__(self, *args, **kwargs) -> NDArray:
-        """
-        Returns
-        -------
-        NDArray
-            The output value of self.fn(*args, **kwargs)
-        """
-        return self.fn(*args, **kwargs)

@@ -9,7 +9,7 @@ from iwpc.data_modules.pandas_directory_data_module import PandasDirDataModule
 from iwpc.divergences import JensenShannonDivergence
 from iwpc.modules.naive import GenericNaiveVariationalFDivergenceEstimator
 from iwpc.reweight_loop import run_reweight_loop
-from iwpc.scalars.scalar import Scalar
+from iwpc.scalars.scalar_function import ScalarFunction
 
 
 if __name__ == '__main__':
@@ -38,8 +38,8 @@ if __name__ == '__main__':
         initial_lr=1e-3,
     )
 
-    angle_scalar = Scalar(lambda df: df['angles'], np.linspace(-np.pi, np.pi, 50), 'angle', latex_label=r'$\theta$')
-    radius_scalar = Scalar(lambda df: (df['x']**2 + df['y']**2)**0.5, np.linspace(0.5,1.5, 50), 'r')
+    angle_scalar = ScalarFunction(lambda df: df['angles'], 'angle', latex_label=r'$\theta$', bins=np.linspace(-np.pi, np.pi, 50))
+    radius_scalar = ScalarFunction(lambda df: (df['x'] ** 2 + df['y'] ** 2) ** 0.5, 'r', bins=np.linspace(0.5,1.5, 50))
     final_data_module = PandasDirDataModule(
         Path(".") / "sample_dataset_example_reweighted",
         ['x', 'y'],
