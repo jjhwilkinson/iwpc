@@ -72,7 +72,7 @@ class PandasFileListDataset(Dataset):
         int
             The number of samples in the dataset across all files
         """
-        return np.sum(self.file_sizes)
+        return int(np.sum(self.file_sizes))
 
     def load_file(self, file_idx: int) -> PandasDataset:
         """

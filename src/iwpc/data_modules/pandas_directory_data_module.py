@@ -124,12 +124,48 @@ class PandasDirDataModule(LightningDataModule):
         if self.dataloader_kwargs["num_workers"] > 0:
             self.dataloader_kwargs.setdefault("persistent_workers", True)
 
-        self.all_files = [self.dataset_dir / f"file_{i}.pkl" for i in range(len(self.ds_info['file_sizes']))]
-        if limit_files:
-            self.all_files = self.all_files[:limit_files]
-        num_train_files = int(np.ceil(len(self.all_files) * split))
-        self.train_files = self.all_files[:num_train_files]
-        self.validation_files = self.all_files[num_train_files:]
+    @property
+    def all_files(self) -> List[Path]:
+        """
+        Returns
+        -------
+        List[Path]
+            List of paths to all the files that comprise this dataset
+        """
+        files = [self.dataset_dir / f"file_{i}.pkl" for i in range(len(self.ds_info['file_sizes']))]
+        if self.limit_files:
+            return self.all_files[:self.limit_files]
+        return files
+
+    @property
+    def num_train_files(self) -> int:
+        """
+        Returns
+        -------
+        int
+            The number of train files in this dataset
+        """
+        return int(np.ceil(len(self.all_files) * self.split))
+
+    @property
+    def train_files(self):
+        """
+        Returns
+        -------
+        List[Path]
+            List of paths to all the files containing train samples in this dataset
+        """
+        return self.all_files[:self.num_train_files]
+
+    @property
+    def validation_files(self):
+        """
+        Returns
+        -------
+        List[Path]
+            List of paths to all the files containing validation samples in this dataset
+        """
+        return self.all_files[self.num_train_files:]
 
     @property
     def ds_info(self) -> Dict:
@@ -315,6 +351,7 @@ class PandasDirDataModule(LightningDataModule):
             new_file_sizes = []
             for file, df in tqdm(self.file_iter(), desc=desc, total=self.num_files):
                 new_df = transformation(df.copy())
+                assert isinstance(new_df, pd.DataFrame)
                 new_file_sizes.append(new_df.shape[0])
                 pd.to_pickle(new_df, tmpdir / file.name)
 
@@ -418,7 +455,7 @@ class PandasDirDataModule(LightningDataModule):
 
     def normalise_weights(self, label_col: Optional[str]) -> None:
         """
-        Normalises the weights in the dataset so the average weights are normalised to 1.0. If label_col is provided,
+        Normalises the weights in the dataset so the average weight is normalised to 1.0. If label_col is not None,
         the average weight is normalised to 1.0 within each class
 
         Parameters
@@ -474,13 +511,13 @@ class PandasDirDataModule(LightningDataModule):
             pd.to_pickle(batch, self.dataset_dir / f"file_{i}.pkl_")
             new_batch_sizes.append(batch.shape[0])
         ds_info['file_sizes'] = new_batch_sizes
-        dump_yaml(ds_info, self.dataset_dir / 'ds_info.yml')
 
         for file in self.all_files:
             file.unlink()
         for file in self.dataset_dir.glob("*.pkl_"):
             file.rename(self.dataset_dir / file.name[:-1])
 
+        dump_yaml(ds_info, self.dataset_dir / 'ds_info.yml')
         logger.info(f"New file sizes {self.ds_info['file_sizes']}")
         self.add_tag("rebatched")
 
