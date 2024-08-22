@@ -12,5 +12,11 @@ Created by: Jeremy J. H. Wilkinson (jero.wilkinson@gmail.com).
 If this tool has been helpful in your research, please consider citing https://arxiv.org/abs/2405.06397.
 Disable with the env variable DISABLE_IWPC_WELCOME=1"""
 
-# if not os.environ.get('DISABLE_IWPC_WELCOME', default=False):
-#     print(welcome_message)
+
+def print_welcome_message():
+    print(welcome_message)
+    os.environ['DISABLE_IWPC_WELCOME'] = "1"
+
+
+if not os.environ.get('DISABLE_IWPC_WELCOME', default=False):
+    print_welcome_message()
