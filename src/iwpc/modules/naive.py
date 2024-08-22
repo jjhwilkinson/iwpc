@@ -1,10 +1,11 @@
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Union
 
 import torch
 from torch import Tensor
 
 from .fdivergence_base import FDivergenceEstimator
 from ..divergences import DifferentiableFDivergence
+from ..encodings.encoding_base import Encoding
 from ..metrics.weighted_mean_metric import WeightedMeanMetric
 from ..models.utils import basic_model_factory
 from ..types import Shape
@@ -74,7 +75,7 @@ class GenericNaiveVariationalFDivergenceEstimator(NaiveVariationalFDivergenceEst
     """
     def __init__(
         self,
-        input_shape: Shape,
+        input: Union[Encoding, Shape],
         divergence: DifferentiableFDivergence,
         model_factory_kwargs: Dict = None,
         **kwargs
@@ -82,8 +83,10 @@ class GenericNaiveVariationalFDivergenceEstimator(NaiveVariationalFDivergenceEst
         """
         Parameters
         ----------
-        input_shape
-            The shape of input samples without the batch dimension
+        input
+            Either the shape of the input of the network (an int or tuple of ints), or the input encoding of the network.
+            If an instance of Encoding, the input shape is inferred is from the encoding dimensions and the encoding is set
+            as the first layer of the network
         divergence
             A DifferentiableFDivergence
         model_factory_kwargs
@@ -91,10 +94,10 @@ class GenericNaiveVariationalFDivergenceEstimator(NaiveVariationalFDivergenceEst
         kwargs
             Any additional arguments passed to the super constructor
         """
-        self.input_shape = input_shape
+        self.input = input
         self.model_factory_kwargs = model_factory_kwargs or {}
         self.kwargs = kwargs
 
-        model = basic_model_factory(input_shape=self.input_shape, output_shape=1, **self.model_factory_kwargs)
+        model = basic_model_factory(self.input, output=1, **self.model_factory_kwargs)
         self.save_hyperparameters()
         super().__init__(model=model, divergence=divergence, **kwargs)

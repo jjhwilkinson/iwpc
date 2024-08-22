@@ -23,7 +23,7 @@ if __name__ == '__main__':
     )
     divergence = JensenShannonDivergence()
     module_factory = lambda lr: GenericNaiveVariationalFDivergenceEstimator(
-        datamodule.ndim,
+        datamodule.num_features,
         divergence,
         initial_learning_rate=lr,
         lr_patience=10

@@ -116,6 +116,12 @@ the bottom right is simple a histogram of the p distribution in the validation d
 
 ![divergence_vs_r_theta.png](images%2Fdivergence_vs_r_theta.png)
 
+# Other Utilities
+
+## Encoding layers
+
+See [Encoding](src%2Fiwpc%2Fencodings%2Fencoding_base.py) docstring.
+
 # Help and Suggestions #
 
 For any suggestions or questions please reach out to [Jeremy J. H. Wilkinson](mailto:jero.wilkinson@gmail.com).
