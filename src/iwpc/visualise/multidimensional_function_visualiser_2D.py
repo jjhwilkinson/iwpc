@@ -198,7 +198,7 @@ class MultidimensionalFunctionVisualiser2D(MultidimensionalFunctionVisualiser):
         input[:, self.y_axis_variable_radio.index_selected] = Y.flatten()
         output = self.function(input)
 
-        return output.reshape((self.num_plot_points, self.num_plot_points))
+        return output.reshape((self.num_plot_points, self.num_plot_points, -1))
 
     def evaluate_z_values(self) -> NDArray:
         """
