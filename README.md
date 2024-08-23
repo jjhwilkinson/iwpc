@@ -122,6 +122,15 @@ the bottom right is simple a histogram of the p distribution in the validation d
 
 See [Encoding](src%2Fiwpc%2Fencodings%2Fencoding_base.py) docstring.
 
+TODO: Elaborate
+
+## Multidimensional Function Visualisers
+
+See [MultidimensionalFunctionVisualiser](src%2Fiwpc%2Fvisualise%2Fmultidimensional_function_visualiser.py) docstring and [multidimensional_function_visualiser_example.py](examples%2Fmultidimensional_function_visualiser_example.py).
+Multidimensional function visualisers are extremely useful for verifying the output of a learnt function which is typically high-dimensional.
+
+TODO: Elaborate
+
 # Help and Suggestions #
 
 For any suggestions or questions please reach out to [Jeremy J. H. Wilkinson](mailto:jero.wilkinson@gmail.com).
