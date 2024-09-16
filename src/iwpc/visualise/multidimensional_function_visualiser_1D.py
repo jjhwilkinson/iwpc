@@ -130,6 +130,7 @@ class MultidimensionalFunctionVisualiser1D(MultidimensionalFunctionVisualiser):
             y_min, y_max = self.y_axis_scalar.bins[0], self.y_axis_scalar.bins[-1]
         else:
             y_values = self.evaluate_y_values()
+            y_values = y_values[np.isfinite(y_values)]
             y_range = y_values.max() - y_values.min()
             if y_range == 0:
                 y_range = 1

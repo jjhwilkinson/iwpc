@@ -62,6 +62,7 @@ class MultidimensionalFunctionVisualiser(ABC):
             The size of the interactive plot figure
         """
         assert len(input_scalars) > 0 and len(output_scalars) > 0
+        assert center_point is None or len(center_point) == len(input_scalars)
         self.function = fn
         self.input_scalars = input_scalars
         self.output_scalars = output_scalars

@@ -91,7 +91,7 @@ class MultidimensionalFunctionVisualiser2D(MultidimensionalFunctionVisualiser):
         """
         Sets up the initial heatmap
         """
-        self.image = self.ax.imshow(self.evaluate_z_values(), origin='lower', aspect='auto', cmap=self.cmap)
+        self.image = self.ax.imshow(self.evaluate_z_values(), origin='lower', aspect='auto', cmap=self.cmap, interpolation='none')
         self.c_bar = plt.colorbar(self.image)
 
     def update_plot(self) -> None:
@@ -198,7 +198,7 @@ class MultidimensionalFunctionVisualiser2D(MultidimensionalFunctionVisualiser):
         input[:, self.y_axis_variable_radio.index_selected] = Y.flatten()
         output = self.function(input)
 
-        return output.reshape((self.num_plot_points, self.num_plot_points, *output.shape[1:]))
+        return output.reshape((self.num_plot_points, self.num_plot_points) + output.shape[1:])
 
     def evaluate_z_values(self) -> NDArray:
         """
