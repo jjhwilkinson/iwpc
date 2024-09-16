@@ -178,6 +178,20 @@ class PandasDirDataModule(LightningDataModule):
         return read_yaml(self.dataset_dir / 'ds_info.yml')
 
     @property
+    def all_data_ds(self) -> PandasFileListDataset:
+        """
+        Constructs a PandasFileListDataset for all files in the dataset (train and validation)
+        """
+        return PandasFileListDataset(
+            self.all_files,
+            self.feature_cols,
+            self.target_cols,
+            self.weight_col,
+            file_sizes=self.file_sizes,
+            shuffle_in_file=False,
+        )
+
+    @property
     def train_ds(self) -> PandasFileListDataset:
         """
         Constructs a PandasFileListDataset for the training files
@@ -213,6 +227,13 @@ class PandasDirDataModule(LightningDataModule):
         return len(self.feature_cols)
 
     @property
+    def num_targets(self) -> int:
+        """
+        The number of target dimensions/features in the data
+        """
+        return len(self.target_cols)
+
+    @property
     def file_sizes(self) -> List[int]:
         """
         List of the number of samples in each file
@@ -227,6 +248,16 @@ class PandasDirDataModule(LightningDataModule):
         Total number of train and validation files
         """
         return len(self.all_files)
+
+    def all_dataloader(self) -> DataLoader:
+        """
+        Returns a DataLoader which iterates over all samples in all files
+        """
+        return DataLoader(
+            self.all_data_ds,
+            shuffle=False,
+            **self.dataloader_kwargs,
+        )
 
     def train_dataloader(self) -> DataLoader:
         """
