@@ -65,7 +65,7 @@ class BinnedStatAccumulator:
             return
 
         if isinstance(samples, list):
-            samples = np.stack(samples)
+            samples = np.stack(samples).T
         if samples.ndim == 1:
             samples = samples[:, None]
 
