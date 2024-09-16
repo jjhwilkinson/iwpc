@@ -82,12 +82,12 @@ def basic_model_factory(
     final_layers = final_layers or []
     if isinstance(input, Encoding):
         initial_layers.insert(0, input)
-        input_shape = input.output_dimension
+        input_shape = int(input.output_dimension)
     else:
         input_shape = input
     if isinstance(output, Encoding):
-        final_layers.insert(-1, input)
-        output_shape = output.input_dimension
+        final_layers = [*final_layers, output]
+        output_shape = int(output.input_dimension)
     else:
         output_shape = output
 
