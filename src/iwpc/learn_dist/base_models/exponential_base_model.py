@@ -23,7 +23,7 @@ class ExponentialBaseModel(SampleableBaseModel):
         return torch.stack([
             self.expon.log_prob(sample) if sample > 0 else torch.tensor(-torch.inf)
             for sample in (x - self.loc)
-        ])
+        ]).squeeze()
 
     @classmethod
     def fit(cls, x, loc, weights=None):

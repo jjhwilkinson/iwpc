@@ -20,9 +20,8 @@ class DistributionApproximator(LightningModule):
     ):
         super().__init__()
         self.log_p_over_q_model = basic_model_factory(
-            int(input_encoding.output_dimension),
+            input_encoding if input_encoding is not None else base_distribution.dimension,
             1,
-            input_encoding=input_encoding,
             hidden_layer_sizes=(128, 64, 64, 64, 64),
         )
         self.base_distribution_sample_rate = base_distribution_sample_rate
@@ -62,7 +61,7 @@ class DistributionApproximator(LightningModule):
                 "scheduler": ReduceLROnPlateau(
                     optimizer,
                     mode="min",
-                    patience=30,
+                    patience=5,
                     factor=0.5,
                     monitor='val_loss',
                 ),

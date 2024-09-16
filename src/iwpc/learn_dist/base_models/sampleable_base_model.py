@@ -29,7 +29,7 @@ class SampleableBaseModel(ABC):
 
     def __and__(self, other):
         if isinstance(other, ConcatenatedBaseModel):
-            return other & self
+            return ConcatenatedBaseModel([self] + other.models)
         return ConcatenatedBaseModel([self, other])
 
     def __add__(self, other):
@@ -54,7 +54,7 @@ class ConcatenatedBaseModel(SampleableBaseModel):
     def __and__(self, other):
         if isinstance(other, ConcatenatedBaseModel):
             return ConcatenatedBaseModel(self.models + other.models)
-        return ConcatenatedBaseModel([self, other])
+        return ConcatenatedBaseModel(self.models + [other])
 
 
 class MixtureBaseModel(SampleableBaseModel):
