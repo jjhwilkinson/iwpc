@@ -338,7 +338,7 @@ class PandasDirDataModule(LightningDataModule):
         out_dir: Optional[PathLike],
         new_ds_info: dict = None,
         update_ds_info: dict = None,
-        desc: str = 'Applying transformation',
+        desc: Optional[str] = None,
         force: bool = False,
         tag: Union[str, List[str]] = None,
     ) -> "PandasDirDataModule":
@@ -372,6 +372,10 @@ class PandasDirDataModule(LightningDataModule):
         PandasDirDataModule
             The new data module with the transformation applied
         """
+        if desc is None and isinstance(tag, str):
+            desc = f'Applying {tag}'
+        desc = desc or 'Applying transformation'
+
         if out_dir is None:
             out_dir = self.dataset_dir
         out_dir = Path(out_dir)
