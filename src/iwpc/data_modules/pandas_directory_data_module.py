@@ -382,6 +382,7 @@ class PandasDirDataModule(LightningDataModule):
         if out_dir.exists() and not force:
             raise Exception(f"{out_dir} already exists. Use `force' to overwrite.")
 
+        old_file_sizes = self.file_sizes
         with temp_directory(out_dir.parent) as tmpdir:
             new_file_sizes = []
             for file, df in tqdm(self.file_iter(), desc=desc, total=self.num_files):
@@ -407,6 +408,9 @@ class PandasDirDataModule(LightningDataModule):
             for file in tmpdir.glob("*.pkl"):
                 shutil.move(file, out_dir / file.name)
             shutil.move(tmpdir / "ds_info.yml", out_dir / "ds_info.yml")
+
+        print(f"Transformation complete from {self.dataset_dir} to {out_dir}")
+        print(f"{sum(old_file_sizes)} data entries transformed into {sum(new_file_sizes)} data entries across {len(new_file_sizes)} files")
 
         new_dm = PandasDirDataModule(
             out_dir,
