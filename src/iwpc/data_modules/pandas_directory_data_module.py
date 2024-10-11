@@ -492,7 +492,7 @@ class PandasDirDataModule(LightningDataModule):
         new_dm.normalise_weights(label_col)
         return self.copy(dataset_dir=out_dir, weight_col=output_weight_col)
 
-    def normalise_weights(self, label_col: Optional[str]) -> None:
+    def normalise_weights(self, label_col: Optional[str], output_weight_col: Optional[str] = None) -> None:
         """
         Normalises the weights in the dataset so the average weight is normalised to 1.0. If label_col is not None,
         the average weight is normalised to 1.0 within each class
@@ -503,6 +503,7 @@ class PandasDirDataModule(LightningDataModule):
             Optional name of the column which labels the class a given sample is from
         """
         assert self.weight_col is not None
+        output_weight_col = output_weight_col or self.weight_col
 
         weight_metrics = defaultdict(MeanMetric)
         for file, df in tqdm(self.file_iter(), desc="Calculating weight sums", total=self.num_files):
@@ -521,7 +522,7 @@ class PandasDirDataModule(LightningDataModule):
                 for label, metric in weight_metrics.items():
                     weights[df[label_col].values == label] /= metric.compute()
 
-            df[self.weight_col] = weights
+            df[output_weight_col] = weights
             return df
 
         self.transform(
