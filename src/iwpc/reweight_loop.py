@@ -52,7 +52,7 @@ def add_p_over_q_transformation(
     trainer = Trainer(enable_checkpointing=False, logger=False)
     log_p_over_q = trainer.predict(
         model=module,
-        dataloaders=DataLoader(ds, data_module.dataloader_kwargs['batch_size'], num_workers=os.cpu_count())
+        dataloaders=DataLoader(ds, data_module.dataloader_kwargs['batch_size'])
     )
     p_over_q = np.exp(np.concatenate(log_p_over_q))
     df[p_over_q_col] = p_over_q
