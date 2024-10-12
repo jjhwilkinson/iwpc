@@ -133,8 +133,7 @@ class BokehFunctionVisualiser(ABC):
         Abstract method to update the output of the function and plots. Overriding definitions must call this parent
         method as a last step
         """
-        if not self.freeze_output_axes_switch.active:
-            self.update_output_axes()
+        self.update_output_axes()
 
     def update_all(self) -> None:
         """

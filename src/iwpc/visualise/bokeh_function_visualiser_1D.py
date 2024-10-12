@@ -13,8 +13,16 @@ class BokehFunctionVisualiser1D(BokehFunctionVisualiser):
         """
         Updates the label and range of the plot's x-axis
         """
+        self.figure.x_range.update(
+            reset_start=self.xbins[0],
+            reset_end=self.xbins[-1],
+        )
+
         if not self.freeze_input_axes_switch.active:
-            self.figure.x_range.update(start=self.xbins[0], end=self.xbins[-1])
+            self.figure.x_range.update(
+                start=self.xbins[0],
+                end=self.xbins[-1]
+            )
 
         self.figure.xaxis.axis_label = self.input_scalar1.latex_label
         self.figure.yaxis.axis_label = self.output_scalar.latex_label
@@ -24,7 +32,19 @@ class BokehFunctionVisualiser1D(BokehFunctionVisualiser):
         Updates the label and range of the plot's y-axis
         """
         y_min, y_max = self.output_scalar_range(self.last_output)
-        self.figure.y_range.update(start=y_min, end=y_max)
+
+        self.figure.y_range.update(
+            reset_start=y_min,
+            reset_end=y_max,
+        )
+
+        if not self.freeze_output_axes_switch.active:
+            self.figure.y_range.update(
+                start=y_min,
+                end=y_max,
+                reset_start=y_min,
+                reset_end=y_max,
+            )
 
     def update_output(self) -> None:
         """
@@ -46,9 +66,11 @@ class BokehFunctionVisualiser1D(BokehFunctionVisualiser):
         """
         hover = HoverTool(
             tooltips=[
-                ("x", "$x"),
-                ("y", "$y"),
-            ]
+                ("x", "@x"),
+                ("y", "@y"),
+            ],
+            point_policy='snap_to_data',
+            line_policy='interp',
         )
         self.figure = figure(
             x_range=(0, 1),

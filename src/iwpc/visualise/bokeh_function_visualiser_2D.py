@@ -21,8 +21,8 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         """
         hover = HoverTool(
             tooltips=[
-                ("x", "$x"),
-                ("y", "$y"),
+                ("x", "@x"),
+                ("y", "@y"),
                 ("value", "@image"),
             ]
         )
@@ -125,6 +125,9 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         self.x_line_profile_figure.yaxis.axis_label = self.output_scalar.latex_label
         self.y_line_profile_figure.xaxis.axis_label = self.output_scalar.latex_label
 
+        self.main_figure.x_range.update(reset_start=self.xbins[0], reset_end=self.xbins[-1])
+        self.main_figure.y_range.update(reset_start=self.ybins[0], reset_end=self.ybins[-1])
+
         if not self.freeze_input_axes_switch.active:
             self.main_figure.x_range.update(start=self.xbins[0], end=self.xbins[-1])
             self.main_figure.y_range.update(start=self.ybins[0], end=self.ybins[-1])
@@ -134,9 +137,14 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         Updates the label and range of the plot's z-axis
         """
         z_min, z_max = self.output_scalar_range(self.last_output)
-        self.x_line_profile_figure.y_range.update(start=z_min, end=z_max)
-        self.y_line_profile_figure.x_range.update(start=z_min, end=z_max)
-        self.color_mapper.update(low=z_min, high=z_max)
+
+        self.x_line_profile_figure.y_range.update(reset_start=z_min, reset_end=z_max)
+        self.y_line_profile_figure.x_range.update(reset_start=z_min, reset_end=z_max)
+
+        if not self.freeze_output_axes_switch.active:
+            self.x_line_profile_figure.y_range.update(start=z_min, end=z_max)
+            self.y_line_profile_figure.x_range.update(start=z_min, end=z_max)
+            self.color_mapper.update(low=z_min, high=z_max)
 
     def update_output(self) -> None:
         """
