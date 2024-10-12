@@ -21,8 +21,8 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         """
         hover = HoverTool(
             tooltips=[
-                ("x", "@x"),
-                ("y", "@y"),
+                ("x", "$x"),
+                ("y", "$y"),
                 ("value", "@image"),
             ]
         )
