@@ -101,7 +101,7 @@ class BokehFunctionVisualiser(ABC):
             *self.sliders,
             self.reset_button,
             sizing_mode='stretch_height',
-            width=400,
+            width=300,
         )
 
     @abstractmethod

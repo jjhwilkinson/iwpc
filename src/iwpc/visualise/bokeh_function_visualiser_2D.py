@@ -56,12 +56,12 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
 
         self.x_line_profile_figure = figure(
             x_range=self.main_figure.x_range, y_range=(self.color_mapper.low, self.color_mapper.high),
-            sizing_mode='stretch_width', height=200
+            sizing_mode='stretch_width', height=150
         )
         self.x_line_profile = self.x_line_profile_figure.line()
         self.y_line_profile_figure = figure(
             y_range=self.main_figure.y_range, x_range=(self.color_mapper.low, self.color_mapper.high),
-            sizing_mode='stretch_height', width=200
+            sizing_mode='stretch_height', width=150
         )
         self.y_line_profile = self.y_line_profile_figure.line()
 
