@@ -17,7 +17,13 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
     A 2D implementation of BokehFunctionVisualiser.
     """
 
-    def __init__(self, *args, panel_1d_kwargs: Optional[Dict] = None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        panel_1d_kwargs: Optional[Dict] = None,
+        use_points_for_xsecs: bool = False,
+        **kwargs
+    ):
         """
 
         Parameters
@@ -26,10 +32,13 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
             Any BokehFunctionVisualiser arguments
         panel_1d_kwargs
             Any arguments to pass through to the 1D tab's BokehFunctionVisualiser1D constructor
+        use_points_for_xsecs
+            If true, the 1d cross-section plots will render points instead of a continuous line
         kwargs
             Any BokehFunctionVisualiser keyword arguments
         """
         self.panel_1d_kwargs = panel_1d_kwargs or {}
+        self.use_points_for_xsecs = use_points_for_xsecs
         super().__init__(*args, **kwargs)
 
     def setup_figure(self):
@@ -76,12 +85,17 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
             x_range=self.main_figure.x_range, y_range=(self.color_mapper.low, self.color_mapper.high),
             sizing_mode='stretch_width', height=150
         )
-        self.x_line_profile = self.x_line_profile_figure.line()
         self.y_line_profile_figure = figure(
             y_range=self.main_figure.y_range, x_range=(self.color_mapper.low, self.color_mapper.high),
             sizing_mode='stretch_height', width=150
         )
-        self.y_line_profile = self.y_line_profile_figure.line()
+
+        if self.use_points_for_xsecs:
+            self.x_line_profile = self.x_line_profile_figure.scatter(line_color="#3288bd", fill_color="white", line_width=2)
+            self.y_line_profile = self.y_line_profile_figure.scatter(line_color="#3288bd", fill_color="white", line_width=2)
+        else:
+            self.x_line_profile = self.x_line_profile_figure.line()
+            self.y_line_profile = self.y_line_profile_figure.line()
 
         self.figure = gridplot(
             [[self.main_figure, self.y_line_profile_figure], [self.x_line_profile_figure, None]],
