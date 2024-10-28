@@ -4,7 +4,7 @@ import os
 import shutil
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Union, List, Callable, Tuple, Dict
+from typing import Optional, Union, List, Callable, Tuple, Dict, Iterable, Any
 
 import numpy as np
 import pandas as pd
@@ -492,15 +492,19 @@ class PandasDirDataModule(LightningDataModule):
         new_dm.normalise_weights(label_col)
         return self.copy(dataset_dir=out_dir, weight_col=output_weight_col)
 
-    def normalise_weights(self, label_col: Optional[str], output_weight_col: Optional[str] = None) -> None:
+    def normalise_weights(self, label_col: Optional[str] = None, output_weight_col: Optional[str] = None) -> None:
         """
-        Normalises the weights in the dataset so the average weight is normalised to 1.0. If label_col is not None,
+        Normalises the weights in the dataset so the average weight is normalised to 1.0. If label_col is provided,
         the average weight is normalised to 1.0 within each class
 
         Parameters
         ----------
         label_col
-            Optional name of the column which labels the class a given sample is from
+            Optional name of the column which labels the class a given sample is from. If provided, the average weight
+            within each class is set to 1 instead of the average weight over the whole dataset
+        output_weight_col
+            The column into which the normalised weight should be written. Defaults to self.weight_col and must be
+            specified if self.weight_col is None
         """
         assert self.weight_col is not None
         output_weight_col = output_weight_col or self.weight_col
@@ -543,6 +547,8 @@ class PandasDirDataModule(LightningDataModule):
         new_file_size
             The desired new file size
         """
+        new_file_size = int(new_file_size)
+        assert new_file_size > 0
         logger.info(f"Original file sizes {self.ds_info['file_sizes']}")
 
         ds_info = self.ds_info
@@ -619,3 +625,74 @@ class PandasDirDataModule(LightningDataModule):
         }
         arguments.update(overrides)
         return PandasDirDataModule(**arguments)
+
+    def merge(
+        self,
+        others: Union[Iterable["PandasDirDataModule"], "PandasDirDataModule"],
+        out_dir: PathLike,
+        label_col: Optional[str] = None,
+        labels: Optional[Iterable[Any]] = None,
+        force: bool = False,
+    ) -> "PandasDirDataModule":
+        """
+        Merges this dataset with the provided others
+
+        Parameters
+        ----------
+        others
+            A sequence of other PandasDirDataModule instances
+        out_dir
+            The directory into which the merged dataset should be written
+        label_col
+            Optional label_col used to label which dataset each sample originated from
+        labels
+            If label_col is provided, these labels are used as the values for each dataset. Must be a sequence of length
+            len(others) + 1. The first label corresponds to this dataset and the remainder are paired up in order with
+            the others
+        force
+            Whether to overwrite existing files in the out_dir
+
+        Returns
+        -------
+        PandasDirDataModule
+            The merged dataset
+        """
+        others = others if isinstance(others, Iterable) else [others]
+        if labels is None:
+            assert label_col is None
+            labels = list(range(len(others) + 1))
+        assert len(labels) == len(others) + 1
+
+        out_dir = Path(out_dir)
+        out_dir.mkdir(exist_ok=force)
+        file_sizes = []
+
+        i = 0
+        for label, dm in tqdm(zip(labels, [self, *others]), desc='Merging datasets', total=len(others)+1):
+            for file in dm.all_files:
+                df = pd.read_pickle(file)
+                if label_col is not None:
+                    df[label_col] = label
+
+                pd.to_pickle(df, out_dir / f"file_{i}.pkl")
+                file_sizes.append(df.shape[0])
+                i += 1
+
+        new_ds_info = self.ds_info
+        new_ds_info.update({
+            'file_sizes': file_sizes,
+        })
+        dump_yaml(new_ds_info, out_dir / 'ds_info.yml')
+        new_dm = PandasDirDataModule(
+            dataset_dir=out_dir,
+            feature_cols=self.feature_cols,
+            target_cols=self.target_cols,
+            weight_col=self.weight_col,
+            split=self.split,
+            limit_files=self.limit_files,
+            dataloader_kwargs=self.dataloader_kwargs,
+        )
+        for dm in [self, *others]:
+            new_dm.add_tag(f'merged from {dm.dataset_dir}')
+
+        return new_dm
