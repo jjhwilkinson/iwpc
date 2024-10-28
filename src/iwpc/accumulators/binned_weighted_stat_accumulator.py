@@ -26,7 +26,7 @@ class BinnedWeightedStatAccumulator(BinnedStatAccumulator):
         self,
         samples: NDArray,
         values: NDArray,
-        weights: NDArray,
+        weights: Optional[NDArray] = None,
         prev_binned_statistic_result: Optional[BinnedStatisticddResult] = None,
     ) -> Optional[BinnedStatisticddResult]:
         """
@@ -40,7 +40,7 @@ class BinnedWeightedStatAccumulator(BinnedStatAccumulator):
         values
             A numpy array of size N
         weights
-            A numpy array of size N containing the weight of each sample
+            A numpy array of size N containing the weight of each sample. Defaults to all 1s
         prev_binned_statistic_result
             A BinnedStatisticddResult object containing the indices of each samples' binned features for reuse in
             binned_statistic_dd calls
@@ -51,6 +51,12 @@ class BinnedWeightedStatAccumulator(BinnedStatAccumulator):
             A BinnedStatisticddResult object containing the indices of each samples' binned features for reuse in
             binned_statistic_dd calls
         """
+        if isinstance(samples, list):
+            samples = np.asarray(samples).T
+
+        if weights is None:
+            weights = np.ones(samples.shape[0])
+
         return super().update(
             samples,
             [weights, weights * values],
@@ -123,7 +129,7 @@ class WeightedHistogramAccumulator(BinnedWeightedStatAccumulator):
     def update(
         self,
         samples: NDArray,
-        weights: NDArray,
+        weights: Optional[NDArray] = None,
         prev_binned_statistic_result: Optional[BinnedStatisticddResult] = None,
     ) -> Optional[BinnedStatisticddResult]:
         """
@@ -135,7 +141,7 @@ class WeightedHistogramAccumulator(BinnedWeightedStatAccumulator):
         samples
             A numpy array of shape (N, B) where B is the number of binned features
         weights
-            A numpy array of size N containing the weight of each sample
+            A numpy array of size N containing the weight of each sample. Defaults to all 1s
         prev_binned_statistic_result
             A BinnedStatisticddResult object containing the indices of each samples' binned features for reuse in
             binned_statistic_dd calls
