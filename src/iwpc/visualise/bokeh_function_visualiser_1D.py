@@ -6,6 +6,21 @@ from .bokeh_function_visualiser import BokehFunctionVisualiser
 
 
 class BokehFunctionVisualiser1D(BokehFunctionVisualiser):
+    def __init__(self, *args, use_points: bool = False, **kwargs):
+        """
+
+        Parameters
+        ----------
+        args
+            Any BokehFunctionVisualiser arguments
+        use_points
+            Whether the data should be rendered as a line or with points
+        kwargs
+            Any BokehFunctionVisualiser keyword arguments
+        """
+        self.use_points = use_points
+        super().__init__(*args, **kwargs)
+
     """
     1D implementation of BokehFunctionVisualiser
     """
@@ -82,7 +97,12 @@ class BokehFunctionVisualiser1D(BokehFunctionVisualiser):
             y_axis_label='y'
         )
         self.figure.add_tools(hover)
-        self.line = self.figure.line()
+
+        if self.use_points:
+            self.line = self.figure.scatter(line_color="#3288bd", fill_color="white", line_width=2)
+        else:
+            self.line = self.figure.line()
+
 
     def setup(self) -> None:
         """

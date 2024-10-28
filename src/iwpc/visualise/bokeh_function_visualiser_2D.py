@@ -1,3 +1,5 @@
+from typing import Optional, Dict
+
 import numpy as np
 from bokeh.layouts import gridplot
 from bokeh.models import HoverTool, LinearColorMapper, Span, ColorBar, Row, TabPanel, Tabs, Select
@@ -14,6 +16,22 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
     """
     A 2D implementation of BokehFunctionVisualiser.
     """
+
+    def __init__(self, *args, panel_1d_kwargs: Optional[Dict] = None, **kwargs):
+        """
+
+        Parameters
+        ----------
+        args
+            Any BokehFunctionVisualiser arguments
+        panel_1d_kwargs
+            Any arguments to pass through to the 1D tab's BokehFunctionVisualiser1D constructor
+        kwargs
+            Any BokehFunctionVisualiser keyword arguments
+        """
+        self.panel_1d_kwargs = panel_1d_kwargs or {}
+        super().__init__(*args, **kwargs)
+
     def setup_figure(self):
         """
         Configures a central heatmap figure for a 2D visualisation of the function as well as two additional
@@ -78,7 +96,11 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         super().setup()
 
         self.visualiser_1d = BokehFunctionVisualiser1D(
-            self.function, self.input_scalars, self.output_scalars, self.center_point
+            self.function,
+            self.input_scalars,
+            self.output_scalars,
+            self.center_point,
+            **self.panel_1d_kwargs,
         )
         self.panel_2d = Row(self.figure, self.settings_column, sizing_mode='stretch_both')
         self.tab_1d = TabPanel(child=self.visualiser_1d.root, title="1D View")
