@@ -100,12 +100,12 @@ class HistogramAccumulator(BinnedStatAccumulator):
             plt.xlabel(self.bin_labels[0])
             plt.ylabel(self.bin_labels[1])
             plt.imshow(
-                self.weight_sum_hist,
+                self.weight_sum_hist.T,
                 extent=(
-                    bins2[0],
-                    bins2[-1],
                     bins1[0],
                     bins1[-1],
+                    bins2[0],
+                    bins2[-1],
                 ),
                 origin='lower',
                 interpolation='none',
