@@ -7,10 +7,9 @@ import uuid
 from contextlib import contextmanager
 from functools import wraps
 from pathlib import Path
-from typing import Iterable, Tuple, Optional, List, Callable, Any
+from typing import Tuple, Optional, List, Callable, Any
 
 import numpy as np
-import torch
 import yaml
 from numpy._typing import NDArray
 from torch import Tensor

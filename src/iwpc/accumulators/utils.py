@@ -58,6 +58,7 @@ def construct_binned_statistic_result_regular_bins(
         BinnedStatisticddResult instance containing the bin indices of each sample in the format expected by
         binned_statistic_dd
     """
+    assert all(is_regular_bins(b) for b in bins)
     bins_with_overflow = [np.concatenate([[2*b[0] - b[1]], b, [2*b[-1] - b[-2]]]) for b in bins]
     bin_numbers = np.ceil(construct_bin_number_regular_bins(samples, bins_with_overflow).T).astype(int)
     bin_numbers = np.clip(bin_numbers, 0, np.asarray([b.shape[0] for b in bins_with_overflow])[:, None])
@@ -84,3 +85,20 @@ def faster_binned_statistic_dd_without_overflow(samples, values, bins=None, stat
 
     slices = (slice(0, values.shape[0]),) + (( slice(1, -1),) * len(binned_statistic_result.bin_edges))
     return result.statistic[slices], result
+
+
+def is_regular_bins(bins: NDArray) -> bool:
+    """
+    Returns whether the bin spacings are equal
+
+    Parameters
+    ----------
+    bins
+        A numpy array of bin edges
+
+    Returns
+    -------
+    bool
+        Whether the bin spacings are equal
+    """
+    return np.allclose(bins[1:] - np.roll(bins, 1)[:-1], bins[1] - bins[0])

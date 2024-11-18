@@ -4,7 +4,10 @@ import numpy as np
 from numpy._typing import NDArray
 from scipy.stats._binned_statistic import BinnedStatisticddResult, binned_statistic_dd
 
-from .utils import construct_binned_statistic_result_regular_bins, faster_binned_statistic_dd_without_overflow
+from .utils import (
+    construct_binned_statistic_result_regular_bins, faster_binned_statistic_dd_without_overflow,
+    is_regular_bins,
+)
 
 
 class BinnedStatAccumulator:
@@ -31,6 +34,8 @@ class BinnedStatAccumulator:
         self.count_hist = np.zeros((self.num_statistics,) + self.hist_shape)
         self.sum_hist = np.zeros((self.num_statistics,) + self.hist_shape)
         self.sq_sum_hist = np.zeros((self.num_statistics, self.num_statistics) + self.hist_shape)
+
+        assert all(is_regular_bins(b) for b in self.bins)
 
     def update(
         self,
