@@ -101,4 +101,4 @@ def is_regular_bins(bins: NDArray) -> bool:
     bool
         Whether the bin spacings are equal
     """
-    return np.allclose(bins[1:] - np.roll(bins, 1)[:-1], bins[1] - bins[0])
+    return np.allclose((bins - np.roll(bins, 1))[1:], bins[1] - bins[0])
