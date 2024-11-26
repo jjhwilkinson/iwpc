@@ -54,7 +54,7 @@ class RunningNormLayer(Module):
         Tensor
             The running mean of each input component
         """
-        return self.sum_ / self.N_
+        return self.sum_ / max(self.N_, 1.)
 
     @property
     def scale(self):
@@ -64,7 +64,7 @@ class RunningNormLayer(Module):
         Tensor
             The running standard deviation of each input component
         """
-        return torch.sqrt(self.sq_sum_ / self.N_ - self.shift**2)
+        return torch.sqrt(self.sq_sum_ / max(self.N_, 1.) - self.shift**2)
 
     def _update(self, x: torch.Tensor) -> None:
         """
