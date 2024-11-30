@@ -1,7 +1,7 @@
 from typing import List, Optional
 
 import torch
-from torch import nn, tensor
+from torch import nn
 
 
 class IndependentSumModule(nn.Module):
