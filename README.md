@@ -1,4 +1,4 @@
-# IWPC - I Will Prove Convergence #
+# IWPC #
 
 This package implements the methods described in the research paper https://arxiv.org/abs/2405.06397 for estimating a 
 lower bound on the divergence between any two distributions, p and q, using samples from each distribution.
