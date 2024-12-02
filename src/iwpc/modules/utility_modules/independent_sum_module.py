@@ -20,17 +20,24 @@ class IndependentSumModule(nn.Module):
         sub_modules
             A list of submodules
         training_indices
-            If None, each model is evaluated on all input feature. If not None, each entry must correspond to the list
-            of indices within the set of overall input features provided to this IndependentSumModule instance that each
-            submodule expects to be evaluated on. Must have the same number of
-            entries as sub_modules
+            If None, each model is evaluated on all input feature. If not None, must have the same number of entries as
+            sub_modules and each entry must correspond to the list of indices within the set of overall input features
+            that each submodule expects to be evaluated on. Each entry may also be None in which case the corresponding
+            model is evaluated on all input features
         """
         super().__init__()
         assert training_indices is None or len(sub_modules) == len(training_indices)
+        if training_indices is None:
+            training_indices = [None] * len(sub_modules)
 
         self.models = sub_modules
-        self.register_buffer('training_indices', torch.tensor(training_indices, dtype=torch.int))
-        for i, model in enumerate(self.models):
+        self.training_indices = []
+        for i, (indices, model) in enumerate(zip(training_indices, self.models)):
+            if indices is not None:
+                self.register_buffer(f"indices_{i}", torch.tensor(indices, dtype=torch.long))
+                self.training_indices.append(getattr(self, f"indices_{i}"))
+            else:
+                self.training_indices.append(None)
             self.register_module(f"model_{i}", model)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -45,10 +52,10 @@ class IndependentSumModule(nn.Module):
         Tensor
             The sum of the output of each submodule evaluated on their respective input features within x
         """
-        if self.training_indices is None:
-            return sum(
-                [model(x) for model, index_set in zip(self.models, self.training_indices)],
-            )
-        return sum(
-            [model(x[:, index_set]) for model, index_set in zip(self.models, self.training_indices)],
-        )
+        sum_ = 0
+        for indices, model in zip(self.training_indices, self.models):
+            if indices is not None:
+                sum_ = model(x[:, indices]) + sum_
+            else:
+                sum_ = model(x) + sum_
+        return sum_
