@@ -172,7 +172,7 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         """
         Updates the label and range of the plot's z-axis
         """
-        z_min, z_max = self.output_scalar_range(self.last_output)
+        z_min, z_max = self.output_scalar_range(self.last_scalar_output)
 
         self.x_line_profile_figure.y_range.update(reset_start=z_min, reset_end=z_max)
         self.y_line_profile_figure.x_range.update(reset_start=z_min, reset_end=z_max)
@@ -182,17 +182,39 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
             self.y_line_profile_figure.x_range.update(start=z_min, end=z_max)
             self.color_mapper.update(low=z_min, high=z_max)
 
-    def update_output(self) -> None:
+    def _update_output(self, reuse_previous_output=False) -> None:
         """
-        Re-computes the output of the function and updates the data in the heatmap and line-profile cross sections
+        Re-computes the output of the function and updates the data in the heatmap and line-profile cross-sections
+
+        Parameters
+        ----------
+        reuse_previous_output
+            Whether to reuse the outputs of the previous function evaluation. Useful if the user has performed some
+            action that would not affect the output of the function such as changing the output scalar
         """
-        eval_point = np.asarray(list(slider.value for slider in self.sliders))
-        input = np.tile(eval_point, (self.xbins.shape[0], self.ybins.shape[0], 1))
-        input[..., self.input_scalar_ind1] = self.xbins[:, np.newaxis]
-        input[..., self.input_scalar_ind2] = self.ybins[np.newaxis, :]
-        input = input.reshape((-1, eval_point.shape[0]))
-        self.last_output = self.output_scalar(self.function(input)).reshape((self.xbins.shape[0], self.ybins.shape[0]))
-        self.image.data_source.data = {'image': [self.last_output.T]}
+        if not reuse_previous_output:
+            eval_point = np.asarray(list(slider.value for slider in self.sliders))
+            input = np.tile(eval_point, (self.xbins.shape[0], self.ybins.shape[0], 1))
+            input[..., self.input_scalar_ind1] = self.xbins[:, np.newaxis]
+            input[..., self.input_scalar_ind2] = self.ybins[np.newaxis, :]
+            input = input.reshape((-1, eval_point.shape[0]))
+            self.last_output = self.function(input)
+        self.last_scalar_output = self.output_scalar(self.last_output).reshape((self.xbins.shape[0], self.ybins.shape[0]))
+        super()._update_output()
+
+    def update_output(self, reuse_previous_output: bool = False) -> None:
+        """
+        Updates the output of the function and the plots
+
+        Parameters
+        ----------
+        reuse_previous_output
+            Whether to reuse the outputs of the previous function evaluation. Useful if the user has performed some
+            action that would not affect the output of the function such as changing the output scalar
+        """
+        super().update_output(reuse_previous_output)
+        self.update_line_profiles()
+        self.image.data_source.data = {'image': [self.last_scalar_output.T]}
         delta_x = (self.xbins[1] - self.xbins[0])
         delta_y = (self.ybins[1] - self.ybins[0])
         self.image.glyph.update(
@@ -201,8 +223,6 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
             dw=self.xbins[-1] - self.xbins[0] + delta_x,
             dh=self.ybins[-1] - self.ybins[0] + delta_y,
         )
-        self.update_line_profiles()
-        super().update_output()
 
     def setup_input_scalar_pickers(self) -> None:
         """
@@ -219,7 +239,7 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
             )
         ]
         for picker in self.input_pickers:
-            picker.on_change('value', lambda attr, old, new: self.update_all())
+            picker.on_change('value', lambda attr, old, new: self.update_output())
 
     def nearest_bin_index(self, bins: ndarray, value: float) -> int:
         """
@@ -306,9 +326,9 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
 
         self.y_line_profile.data_source.data = {
             'y': self.ybins,
-            'x': self.last_output[self.nearest_bin_index(self.xbins, x), :]
+            'x': self.last_scalar_output[self.nearest_bin_index(self.xbins, x), :]
         }
         self.x_line_profile.data_source.data = {
             'x': self.xbins,
-            'y': self.last_output[:, self.nearest_bin_index(self.ybins, y)]
+            'y': self.last_scalar_output[:, self.nearest_bin_index(self.ybins, y)]
         }

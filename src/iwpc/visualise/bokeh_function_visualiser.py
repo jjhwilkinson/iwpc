@@ -1,3 +1,4 @@
+import datetime as dt
 from abc import abstractmethod, ABC
 from collections import OrderedDict
 from typing import List, Optional, Callable, Tuple
@@ -48,9 +49,10 @@ class BokehFunctionVisualiser(ABC):
         self.input_scalar_menu = OrderedDict([(scalar.label, scalar) for scalar in self.input_scalars])
         self.output_scalar_menu = OrderedDict([(scalar.label, scalar) for scalar in self.output_scalars])
 
+        self.main_figure = None
         self.input_pickers = []
         self.setup()
-        self.update_all()
+        self.update_output()
 
     @abstractmethod
     def setup_figure(self) -> None:
@@ -67,7 +69,13 @@ class BokehFunctionVisualiser(ABC):
             title="Output Scalar", options=list(self.output_scalar_menu.keys()), sizing_mode='scale_width',
             value=self.output_scalars[0].label
         )
-        self.output_scalar_picker.on_change('value', lambda attr, old, new: self.update_all())
+        self.output_scalar_picker.on_change('value', lambda attr, old, new: self.update_output(reuse_previous_output=True))
+        self.min_output = Spinner(value=0., sizing_mode='stretch_width', title='Output range min')
+        self.min_output.on_change('value', lambda attr, old, new: self.update_output(reuse_previous_output=True))
+        self.max_output = Spinner(value=1., sizing_mode='stretch_width', title='Output range max')
+        self.max_output.on_change('value', lambda attr, old, new: self.update_output(reuse_previous_output=True))
+        self.use_custom_output_range = Switch(active=False)
+        self.use_custom_output_range.on_change('active', lambda attr, old, new: self.update_output(reuse_previous_output=True))
 
         self.sliders = [Slider(
             start=scalar.bins[0],
@@ -84,22 +92,35 @@ class BokehFunctionVisualiser(ABC):
         self.freeze_output_axes_switch = Switch(active=False)
         self.axis_resolutions = [
             Spinner(low=2, step=1, value=100, width=80, sizing_mode='stretch_height', title='Num points') for _ in
-            self.input_pickers]
+            self.input_pickers
+        ]
         for s in self.axis_resolutions:
             s.on_change('value', lambda attr, old, new: self.update_output())
 
         self.reset_button = Button(label="Reset")
         self.reset_button.on_click(self.reset_sliders)
+        self.last_updated_div = Div(text="")
 
         self.settings_column = Column(
             *[Row(picker, res, sizing_mode='stretch_width') for picker, res in
               zip(self.input_pickers, self.axis_resolutions)],
             self.output_scalar_picker,
+            Row(
+                self.min_output,
+                self.max_output,
+                Row(
+                    PreText(text="Use: "),
+                    self.use_custom_output_range,
+                    sizing_mode='stretch_height'
+                ),
+                sizing_mode='stretch_width'
+            ),
             Row(PreText(text="Freeze input axes auto-scale"), self.freeze_input_axes_switch),
             Row(PreText(text="Freeze output axis auto-scale"), self.freeze_output_axes_switch),
             Div(text="<h2><b>Input Sliders</b></h2>", sizing_mode='stretch_width'),
             *self.sliders,
             self.reset_button,
+            self.last_updated_div,
             sizing_mode='stretch_height',
             width=300,
         )
@@ -128,19 +149,37 @@ class BokehFunctionVisualiser(ABC):
         pass
 
     @abstractmethod
-    def update_output(self) -> None:
+    def _update_output(self, reuse_previous_output: bool = False) -> None:
         """
-        Abstract method to update the output of the function and plots. Overriding definitions must call this parent
-        method as a last step
-        """
-        self.update_output_axes()
+        Abstract method to update the output of the function. Derived visualisers must define this
 
-    def update_all(self) -> None:
+        Parameters
+        ----------
+        reuse_previous_output
+            Whether to reuse the outputs of the previous function evaluation. Useful if the user has performed some
+            action that would not affect the output of the function such as changing the output scalar
         """
-        Recomputes the output of the function and updates all the widgets in the UI
+
+    def update_output(self, reuse_previous_output: bool = False) -> None:
         """
-        self.update_output()
+        Updates the output of the function and the plots
+
+        Parameters
+        ----------
+        reuse_previous_output
+            Whether to reuse the outputs of the previous function evaluation. Useful if the user has performed some
+            action that would not affect the output of the function such as changing the output scalar
+        """
+        self._update_output(reuse_previous_output=reuse_previous_output)
         self.update_input_axes()
+        self.update_output_axes()
+        self.update_last_updated()
+
+    def update_last_updated(self) -> None:
+        """
+        Updates the date and time of the 'last updated' label
+        """
+        self.last_updated_div.text = f"<p>Last updated: {dt.datetime.now().strftime('%y-%m-%d %H:%M:%S')}</p>"
 
     @property
     def input_scalar_ind1(self) -> int:
@@ -187,7 +226,7 @@ class BokehFunctionVisualiser(ABC):
             sizing_mode='scale_width',
             value=self.input_scalars[0].label
         )]
-        self.input_pickers[0].on_change('value', lambda attr, old, new: self.update_all())
+        self.input_pickers[0].on_change('value', lambda attr, old, new: self.update_output())
 
     @property
     def output_scalar(self) -> ScalarFunction:
@@ -201,15 +240,18 @@ class BokehFunctionVisualiser(ABC):
 
     def output_scalar_range(self, output_values: ndarray) -> Tuple[float, float]:
         """
-        Calculates the range of the output range for adjusting axes. Returns the min and max values of the
-        self.output_scalar.bins if provided. Otherwise, returns a range 10% larger either side of the min/max of
-        output_values
+        Calculates the range of the output range for adjusting axes. If the custom output range stich is active returns
+        the values of the custom range inputs. Otherwise, returns the min and max values of the self.output_scalar.bins
+        if provided. Otherwise, returns a range 10% larger either side of the min/max of output_values
 
         Returns
         -------
         Tuple[float, float]
             The min and max values of the output_scalar's range for adjusting axes
         """
+        if self.use_custom_output_range.active:
+            return self.min_output.value, self.max_output.value
+
         if self.output_scalar.bins is not None:
             return min(self.output_scalar.bins), max(self.output_scalar.bins)
 
