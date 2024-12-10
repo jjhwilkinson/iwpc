@@ -22,6 +22,8 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         *args,
         panel_1d_kwargs: Optional[Dict] = None,
         use_points_for_xsecs: bool = False,
+        initial_x_axis_scalar_ind: int = 0,
+        initial_y_axis_scalar_ind: int = 1,
         **kwargs
     ):
         """
@@ -34,11 +36,17 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
             Any arguments to pass through to the 1D tab's BokehFunctionVisualiser1D constructor
         use_points_for_xsecs
             If true, the 1d cross-section plots will render points instead of a continuous line
+        initial_x_axis_scalar_ind
+            The index of the x-axis scalar to initially select on start up
+        initial_y_axis_scalar_ind
+            The index of the y-axis scalar to initially select on start up
         kwargs
             Any BokehFunctionVisualiser keyword arguments
         """
         self.panel_1d_kwargs = panel_1d_kwargs or {}
         self.use_points_for_xsecs = use_points_for_xsecs
+        self.initial_x_axis_scalar_ind = initial_x_axis_scalar_ind
+        self.initial_y_axis_scalar_ind = initial_y_axis_scalar_ind
         super().__init__(*args, **kwargs)
 
     def setup_figure(self):
@@ -114,6 +122,7 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
             self.input_scalars,
             self.output_scalars,
             self.center_point,
+            initial_x_axis_scalar_ind=self.initial_x_axis_scalar_ind,
             **self.panel_1d_kwargs,
         )
         self.panel_2d = Row(self.figure, self.settings_column, sizing_mode='stretch_both')
@@ -231,11 +240,11 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         self.input_pickers = [
             Select(
                 title="x-axis", options=list(self.input_scalar_menu.keys()), sizing_mode='scale_width',
-                value=self.input_scalars[0].label
+                value=self.input_scalars[self.initial_x_axis_scalar_ind].label
             ),
             Select(
                 title="y-axis", options=list(self.input_scalar_menu.keys()), sizing_mode='scale_width',
-                value=self.input_scalars[min(1, len(self.input_scalars) - 1)].label
+                value=self.input_scalars[min(self.initial_y_axis_scalar_ind, len(self.input_scalar_menu) - 1)].label
             )
         ]
 

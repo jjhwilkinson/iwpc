@@ -6,9 +6,14 @@ from .bokeh_function_visualiser import BokehFunctionVisualiser
 
 
 class BokehFunctionVisualiser1D(BokehFunctionVisualiser):
-    def __init__(self, *args, use_points: bool = False, **kwargs):
+    def __init__(
+        self,
+        *args,
+        use_points: bool = False,
+        initial_x_axis_scalar_ind: int = 0,
+        **kwargs
+    ):
         """
-
         Parameters
         ----------
         args
@@ -17,8 +22,11 @@ class BokehFunctionVisualiser1D(BokehFunctionVisualiser):
             Whether the data should be rendered as a line or with points
         kwargs
             Any BokehFunctionVisualiser keyword arguments
+        initial_x_axis_scalar_ind
+            The index of the x-axis scalar to initially select on start up
         """
         self.use_points = use_points
+        self.initial_x_axis_scalar_ind = initial_x_axis_scalar_ind
         super().__init__(*args, **kwargs)
 
     """
@@ -130,3 +138,14 @@ class BokehFunctionVisualiser1D(BokehFunctionVisualiser):
         """
         super().setup()
         self.root = Row(self.main_figure, self.settings_column, sizing_mode='stretch_both')
+
+    def setup_input_scalar_pickers(self) -> None:
+        """
+        Configures a single input scalar picker for the x-axis
+        """
+        self.input_pickers = [Select(
+            title="x-axis",
+            options=list(self.input_scalar_menu.keys()),
+            sizing_mode='scale_width',
+            value=self.input_scalars[self.initial_x_axis_scalar_ind].label,
+        )]

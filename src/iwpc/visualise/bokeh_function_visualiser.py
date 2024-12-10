@@ -25,6 +25,7 @@ class BokehFunctionVisualiser(ABC):
         input_scalars: List[Scalar],
         output_scalars: List[ScalarFunction],
         center_point: Optional[ndarray] = None,
+        initial_output_scalar_ind: int = 0,
     ):
         """
         Parameters
@@ -39,11 +40,14 @@ class BokehFunctionVisualiser(ABC):
             from the function's actual output. These are used to provide axis labels and obtain the plotted values
         center_point
             The default value to use for each input scalar. Defaults to the middle of the bins attribute of each scalar
+        initial_output_scalar_ind
+            The index of the output scalar to initially select on start up
         """
         self.function = fn
         self.input_scalars = input_scalars
         self.output_scalars = output_scalars
         self.center_point = center_point
+        self.initial_output_scalar_ind = initial_output_scalar_ind
         if center_point is None:
             self.center_point = np.asarray([scalar.bins[len(scalar.bins) // 2] for scalar in input_scalars])
 
@@ -71,7 +75,7 @@ class BokehFunctionVisualiser(ABC):
             title="Output Scalar",
             options=list(self.output_scalar_menu.keys()),
             sizing_mode='scale_width',
-            value=self.output_scalars[0].label,
+            value=self.output_scalars[self.initial_output_scalar_ind].label,
         )
         self.min_output = Spinner(value=0., sizing_mode='stretch_width', title='Output range min')
         self.max_output = Spinner(value=1., sizing_mode='stretch_width', title='Output range max')
@@ -228,17 +232,12 @@ class BokehFunctionVisualiser(ABC):
         """
         return np.linspace(self.input_scalar1.bins[0], self.input_scalar1.bins[-1], int(self.axis_resolutions[0].value))
 
+    @abstractmethod
     def setup_input_scalar_pickers(self) -> None:
         """
         Method to define the Select widgets for the input scalars must place the constructed widgets into
-        self.input_pickers. Base implementation provides a select for a single input scalar
+        self.input_pickers
         """
-        self.input_pickers = [Select(
-            title="x-axis",
-            options=list(self.input_scalar_menu.keys()),
-            sizing_mode='scale_width',
-            value=self.input_scalars[0].label
-        )]
 
     @property
     def output_scalar(self) -> ScalarFunction:
