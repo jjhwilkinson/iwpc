@@ -4,8 +4,9 @@ from collections import OrderedDict
 from typing import List, Optional, Callable, Tuple
 
 import numpy as np
+from bokeh.io import curdoc
 from bokeh.models import (
-    Column, Select, Slider, Switch, Row, PreText, Div, Button, Spinner,
+    Column, Select, Slider, Switch, Row, PreText, Div, Button, Spinner, CustomJS,
 )
 from numpy import ndarray
 
@@ -50,6 +51,7 @@ class BokehFunctionVisualiser(ABC):
         self.output_scalar_menu = OrderedDict([(scalar.label, scalar) for scalar in self.output_scalars])
 
         self.main_figure = None
+        self.last_scalar_output = None
         self.input_pickers = []
         self.setup()
         self.update_output()
@@ -66,16 +68,24 @@ class BokehFunctionVisualiser(ABC):
         Sets up the right hand column of settings including the scalar selectors, sliders, and more
         """
         self.output_scalar_picker = Select(
-            title="Output Scalar", options=list(self.output_scalar_menu.keys()), sizing_mode='scale_width',
-            value=self.output_scalars[0].label
+            title="Output Scalar",
+            options=list(self.output_scalar_menu.keys()),
+            sizing_mode='scale_width',
+            value=self.output_scalars[0].label,
         )
-        self.output_scalar_picker.on_change('value', lambda attr, old, new: self.update_output(reuse_previous_output=True))
         self.min_output = Spinner(value=0., sizing_mode='stretch_width', title='Output range min')
-        self.min_output.on_change('value', lambda attr, old, new: self.update_output(reuse_previous_output=True))
         self.max_output = Spinner(value=1., sizing_mode='stretch_width', title='Output range max')
-        self.max_output.on_change('value', lambda attr, old, new: self.update_output(reuse_previous_output=True))
+        for widget in [self.output_scalar_picker, self.min_output, self.max_output]:
+            widget.on_change(
+                'value',
+                lambda attr, old, new: self.update_output(reuse_previous_output=True)
+            )
+
         self.use_custom_output_range = Switch(active=False)
-        self.use_custom_output_range.on_change('active', lambda attr, old, new: self.update_output(reuse_previous_output=True))
+        self.use_custom_output_range.on_change(
+            'active',
+            lambda attr, old, new: self.update_output(reuse_previous_output=True)
+        )
 
         self.sliders = [Slider(
             start=scalar.bins[0],
@@ -134,6 +144,9 @@ class BokehFunctionVisualiser(ABC):
         self.setup_input_scalar_pickers()
         self.setup_settings_column()
 
+        for picker in self.input_pickers:
+            picker.on_change('value', lambda attr, old, new: self.update_output())
+
     @abstractmethod
     def update_input_axes(self) -> None:
         """
@@ -173,7 +186,7 @@ class BokehFunctionVisualiser(ABC):
         self._update_output(reuse_previous_output=reuse_previous_output)
         self.update_input_axes()
         self.update_output_axes()
-        self.update_last_updated()
+        curdoc().add_next_tick_callback(self.update_last_updated)
 
     def update_last_updated(self) -> None:
         """
@@ -226,7 +239,6 @@ class BokehFunctionVisualiser(ABC):
             sizing_mode='scale_width',
             value=self.input_scalars[0].label
         )]
-        self.input_pickers[0].on_change('value', lambda attr, old, new: self.update_output())
 
     @property
     def output_scalar(self) -> ScalarFunction:

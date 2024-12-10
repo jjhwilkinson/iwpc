@@ -238,8 +238,6 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
                 value=self.input_scalars[min(1, len(self.input_scalars) - 1)].label
             )
         ]
-        for picker in self.input_pickers:
-            picker.on_change('value', lambda attr, old, new: self.update_output())
 
     def nearest_bin_index(self, bins: ndarray, value: float) -> int:
         """
