@@ -39,7 +39,7 @@ def batched_df_pickles_iter(in_dir: Path, batch_size: int) -> DataFrame:
     """
     batch = []
     batch_fill = 0
-    for file in tqdm(list(in_dir.glob('*.pkl')), desc="Looping through files for rebatch"):
+    for file in tqdm(list(in_dir.glob('file_*.pkl')), desc="Looping through files for rebatch"):
         data = pd.read_pickle(file)
         used_data = 0
         while used_data < data.shape[0]:
@@ -399,13 +399,13 @@ class PandasDirDataModule(LightningDataModule):
             dump_yaml(new_ds_info, tmpdir / 'ds_info.yml')
 
             if out_dir.exists():
-                for path in out_dir.glob('*.pkl'):
+                for path in out_dir.glob('file_*.pkl'):
                     path.unlink()
                 (out_dir / "ds_info.yml").unlink()
             else:
                 out_dir.mkdir()
 
-            for file in tmpdir.glob("*.pkl"):
+            for file in tmpdir.glob("file_*.pkl"):
                 shutil.move(file, out_dir / file.name)
             shutil.move(tmpdir / "ds_info.yml", out_dir / "ds_info.yml")
 
@@ -560,7 +560,7 @@ class PandasDirDataModule(LightningDataModule):
 
         for file in self.all_files:
             file.unlink()
-        for file in self.dataset_dir.glob("*.pkl_"):
+        for file in self.dataset_dir.glob("file_*.pkl_"):
             file.rename(self.dataset_dir / file.name[:-1])
 
         dump_yaml(ds_info, self.dataset_dir / 'ds_info.yml')
@@ -573,7 +573,7 @@ class PandasDirDataModule(LightningDataModule):
         file. The size of each file is not changed
         """
         rng = np.random.Generator(np.random.PCG64())
-        in_files = list(self.dataset_dir.glob('*.pkl'))
+        in_files = list(self.dataset_dir.glob('file_*.pkl'))
         shuffled_sizes = np.zeros(len(in_files), dtype=int)
         new_ds_info = self.ds_info
         batch_sizes = np.asarray(self.ds_info["file_sizes"])
