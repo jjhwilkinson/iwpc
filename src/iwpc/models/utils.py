@@ -85,14 +85,17 @@ def basic_model_factory(
         input_shape = int(input.output_dimension)
     else:
         input_shape = input
+    if not isinstance(input_shape, Iterable) or (hasattr(input_shape, "shape") and input_shape.shape == tuple()):
+        input_shape = (input_shape,)
+
     if isinstance(output, Encoding):
         final_layers = [*final_layers, output]
         output_shape = int(output.input_dimension)
     else:
         output_shape = output
-
-    if isinstance(output_shape, int):
+    if not isinstance(output_shape, Iterable) or (hasattr(output_shape, "shape") and output_shape.shape == tuple()):
         output_shape = (output_shape,)
+
     input_size = int(np.prod(np.asarray(input_shape)))
     out_size = int(np.prod(np.asarray(output_shape)))
     shape = (input_size,) + tuple(hidden_layer_sizes) + (out_size,)
