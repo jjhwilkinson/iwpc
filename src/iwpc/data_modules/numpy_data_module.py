@@ -52,7 +52,7 @@ class BinaryNumpyDataModule(LightningDataModule):
         self.q_weights = (np.ones(q_samples.shape[0]) if q_weights is None else q_weights).copy()
         self.q_weights /= self.q_weights.mean()
         self.validation_split = validation_split
-        self.dataloader_kwargs = dataloader_kwargs
+        self.dataloader_kwargs = dataloader_kwargs or {}
         self.ndim = p_samples.shape[1]
 
         all_samples = torch.as_tensor(np.concatenate((self.p_samples, self.q_samples)), dtype=torch.float32)
