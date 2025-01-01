@@ -12,27 +12,27 @@ class IndependentSumModule(nn.Module):
     def __init__(
         self,
         sub_modules: List[nn.Module],
-        training_indices: Optional[List[List[int]]] = None,
+        feature_indices: Optional[List[List[int]]] = None,
     ):
         """
         Parameters
         ----------
         sub_modules
             A list of submodules
-        training_indices
-            If None, each model is evaluated on all input feature. If not None, must have the same number of entries as
+        feature_indices
+            If None, each model is evaluated on all input features. If not None, must have the same number of entries as
             sub_modules and each entry must correspond to the list of indices within the set of overall input features
             that each submodule expects to be evaluated on. Each entry may also be None in which case the corresponding
             model is evaluated on all input features
         """
         super().__init__()
-        assert training_indices is None or len(sub_modules) == len(training_indices)
-        if training_indices is None:
-            training_indices = [None] * len(sub_modules)
+        assert feature_indices is None or len(sub_modules) == len(feature_indices)
+        if feature_indices is None:
+            feature_indices = [None] * len(sub_modules)
 
         self.models = sub_modules
         self.training_indices = []
-        for i, (indices, model) in enumerate(zip(training_indices, self.models)):
+        for i, (indices, model) in enumerate(zip(feature_indices, self.models)):
             if indices is not None:
                 self.register_buffer(f"indices_{i}", torch.tensor(indices, dtype=torch.long))
                 self.training_indices.append(getattr(self, f"indices_{i}"))
