@@ -90,14 +90,11 @@ class GenericNaiveVariationalFDivergenceEstimator(NaiveVariationalFDivergenceEst
         divergence
             A DifferentiableFDivergence
         model_factory_kwargs
-            Any additional arguments to provide to the generic model factory. See docstring of basic_model_factory
+            Any additional arguments to provide to the basic model factory. See docstring of basic_model_factory
         kwargs
             Any additional arguments passed to the super constructor
         """
-        self.input = input
         self.model_factory_kwargs = model_factory_kwargs or {}
-        self.kwargs = kwargs
-
-        model = basic_model_factory(self.input, output=1, **self.model_factory_kwargs)
-        self.save_hyperparameters()
+        model = basic_model_factory(input, output=1, **self.model_factory_kwargs)
         super().__init__(model=model, divergence=divergence, **kwargs)
+        self.save_hyperparameters()
