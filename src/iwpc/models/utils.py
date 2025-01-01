@@ -49,6 +49,7 @@ def basic_model_factory(
     batch_norm: bool = False,
     initial_layers: Optional[Iterable[nn.Module]] = None,
     final_layers: Optional[Iterable[nn.Module]] = None,
+    running_norm_one_epoch_only: bool = True,
 ) -> Sequential:
     """
     Parameters
@@ -71,6 +72,10 @@ def basic_model_factory(
         An optional list of any additional layers to insert at the start of the sequential model sequence
     final_layers
         An optional list of any additional layers to insert at the end of the sequential model sequence
+    running_norm_one_epoch_only
+        Models are equipped with a RunningNormLayer that tracks and normalises its input data.
+        running_norm_one_epoch_only=True ensures this normalization only occurs during the first epoch of training and
+        is subsequently constant
 
     Returns
     -------
@@ -100,7 +105,7 @@ def basic_model_factory(
     out_size = int(np.prod(np.asarray(output_shape)))
     shape = (input_size,) + tuple(hidden_layer_sizes) + (out_size,)
 
-    norm_layer = RunningNormLayer(input_size)
+    norm_layer = RunningNormLayer(input_size, one_epoch_only=running_norm_one_epoch_only)
     layers = [
         *list(initial_layers),
         Flatten(),
