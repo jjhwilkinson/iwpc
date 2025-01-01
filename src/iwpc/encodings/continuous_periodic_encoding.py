@@ -9,7 +9,7 @@ from iwpc.encodings.encoding_base import Encoding
 class ContinuousPeriodicEncoding(Encoding):
     """
     An encoding that provides a continuous parametrization of a 1D quantity such that all continuous functions on the
-    encoded variables are automatically continuous and periodic on the given range. For example,
+    encoded variables are automatically continuous and periodic on the given range, including the boundary. For example,
     if one were to use a NN to learn a continuous function on an angle, then, without an encoding the output of the
     network would be discontinuous on the 0 / 2*pi boundary as it is free to output whatever value it pleases for 0 and for
     2*pi. While the training examples might cause the network to converge onto a function that is almost continuous
@@ -28,7 +28,7 @@ class ContinuousPeriodicEncoding(Encoding):
             The range over which the periodic quantity is defined. Defaults to -pi to pi.
         """
         super().__init__(1, 2)
-        self.register_buffer('period', torch.tensor(range_[1] - range_[0]))
+        self.register_buffer('period', torch.tensor(range_[1] - range_[0], dtype=torch.float))
 
     def _encode(self, x: Tensor) -> Tensor:
         """
