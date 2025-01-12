@@ -54,6 +54,8 @@ class RunningNormLayer(Module):
         Tensor
             The running mean of each input component
         """
+        if self.N_ == 0:
+            return torch.zeros_like(self.sum_)
         return self.sum_ / max(self.N_, 1.)
 
     @property
@@ -64,7 +66,14 @@ class RunningNormLayer(Module):
         Tensor
             The running standard deviation of each input component
         """
-        return torch.sqrt(self.sq_sum_ / max(self.N_, 1.) - self.shift**2)
+        if self.N_ == 0:
+            return torch.ones_like(self.sum_)
+
+        var = self.sq_sum_ / max(self.N_, 1.) - self.shift**2
+        if (var <= 0).any():
+            return torch.ones_like(self.sum_)
+
+        return torch.sqrt(var)
 
     def _update(self, x: torch.Tensor) -> None:
         """
