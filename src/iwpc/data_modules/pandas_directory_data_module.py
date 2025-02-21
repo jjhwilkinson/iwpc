@@ -134,7 +134,7 @@ class PandasDirDataModule(LightningDataModule):
         """
         files = [self.dataset_dir / f"file_{i}.pkl" for i in range(len(self.ds_info['file_sizes']))]
         if self.limit_files:
-            return self.all_files[:self.limit_files]
+            return files[:self.limit_files]
         return files
 
     @property
