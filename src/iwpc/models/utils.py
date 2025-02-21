@@ -6,6 +6,7 @@ from torch.nn import BatchNorm1d, LeakyReLU, Linear, Dropout, Module, Sequential
 
 from .layers import RunningNormLayer, LambdaLayer
 from ..encodings.encoding_base import Encoding
+from ..symmetries.group_action import GroupAction
 from ..types import Shape
 
 
@@ -50,6 +51,8 @@ def basic_model_factory(
     initial_layers: Optional[Iterable[nn.Module]] = None,
     final_layers: Optional[Iterable[nn.Module]] = None,
     running_norm_one_epoch_only: bool = True,
+    symmetries: Union[GroupAction, Iterable[GroupAction]] = tuple(),
+    complement_symmetries: Union[GroupAction, Iterable[GroupAction]] = tuple(),
 ) -> Sequential:
     """
     Parameters
@@ -119,4 +122,12 @@ def basic_model_factory(
         *list(final_layers),
     ]
 
-    return Sequential(*layers)
+    symmetries = [symmetries] if isinstance(symmetries, GroupAction) else symmetries
+    complement_symmetries = [complement_symmetries] if isinstance(complement_symmetries, GroupAction) else complement_symmetries
+    model = Sequential(*layers)
+    for group in symmetries:
+        model = group.symmetrize(model)
+    for group in complement_symmetries:
+        model = group.complement(model)
+
+    return model
