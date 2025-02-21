@@ -1,4 +1,4 @@
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 
 import numpy as np
 from bokeh.layouts import gridplot
@@ -7,9 +7,9 @@ from bokeh.palettes import Viridis256
 from bokeh.plotting import figure
 from numpy import ndarray
 
-from ..scalars.scalar import Scalar
 from .bokeh_function_visualiser import BokehFunctionVisualiser
 from .bokeh_function_visualiser_1D import BokehFunctionVisualiser1D
+from ..scalars.scalar import Scalar
 
 
 class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
@@ -24,6 +24,7 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         use_points_for_xsecs: bool = False,
         initial_x_axis_scalar_ind: int = 0,
         initial_y_axis_scalar_ind: int = 1,
+        color_palette: Tuple = Viridis256,
         **kwargs
     ):
         """
@@ -40,6 +41,8 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
             The index of the x-axis scalar to initially select on start up
         initial_y_axis_scalar_ind
             The index of the y-axis scalar to initially select on start up
+        color_palette
+            A tuple of hex colours to use as the heatmap scale
         kwargs
             Any BokehFunctionVisualiser keyword arguments
         """
@@ -47,6 +50,7 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         self.use_points_for_xsecs = use_points_for_xsecs
         self.initial_x_axis_scalar_ind = initial_x_axis_scalar_ind
         self.initial_y_axis_scalar_ind = initial_y_axis_scalar_ind
+        self.color_palette = color_palette
         super().__init__(*args, **kwargs)
 
     def setup_figure(self):
@@ -72,7 +76,7 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         )
         self.main_figure.add_tools(hover)
         self.main_figure.on_event('tap', self.handle_main_figure_click)
-        self.color_mapper = LinearColorMapper(palette=Viridis256, low=-1, high=1)
+        self.color_mapper = LinearColorMapper(palette=self.color_palette, low=-1, high=1)
         self.x_span = Span(
             location=0, dimension='height', line_color='red', line_width=1, line_dash='dashed', visible=False,
             line_alpha=0.5

@@ -12,6 +12,7 @@ from numpy import ndarray
 
 from iwpc.scalars.scalar import Scalar
 from iwpc.scalars.scalar_function import ScalarFunction
+from iwpc.visualise import Visualisable
 
 
 class BokehFunctionVisualiser(ABC):
@@ -25,7 +26,7 @@ class BokehFunctionVisualiser(ABC):
         input_scalars: List[Scalar],
         output_scalars: List[ScalarFunction],
         center_point: Optional[ndarray] = None,
-        initial_output_scalar_ind: int = 0,
+        initial_output_scalar_ind: int = -1,
     ):
         """
         Parameters
@@ -49,7 +50,7 @@ class BokehFunctionVisualiser(ABC):
         self.center_point = center_point
         self.initial_output_scalar_ind = initial_output_scalar_ind
         if center_point is None:
-            self.center_point = np.asarray([scalar.bins[len(scalar.bins) // 2] for scalar in input_scalars])
+            self.center_point = np.asarray([scalar.bins[len(scalar.bins) // 2] for scalar in input_scalars], dtype=float)
 
         self.input_scalar_menu = OrderedDict([(scalar.label, scalar) for scalar in self.input_scalars])
         self.output_scalar_menu = OrderedDict([(scalar.label, scalar) for scalar in self.output_scalars])
@@ -59,6 +60,31 @@ class BokehFunctionVisualiser(ABC):
         self.input_pickers = []
         self.setup()
         self.update_output()
+
+    @classmethod
+    def visualise(cls, fn: Visualisable, **kwargs) -> "BokehFunctionVisualiser":
+        """
+        Takes a visualisable function and returns a BokehFunctionVisualiser instance configured to render the function
+
+        Parameters
+        ----------
+        fn
+            An object satisfying the Visualisable interface
+        kwargs
+            Any other kwargs to pass to the BokehFunctionVisualiser constructor
+
+        Returns
+        -------
+        BokehFunctionVisualiser
+            A BokehFunctionVisualiser instance configured to render the function
+        """
+        return cls(
+            fn.evaluate_for_visualiser,
+            fn.get_input_scalars(),
+            fn.get_output_scalars(),
+            fn.center_point,
+            **kwargs,
+        )
 
     @abstractmethod
     def setup_figure(self) -> None:
