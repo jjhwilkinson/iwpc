@@ -6,7 +6,7 @@ from torch.nn import Module
 from .group_action_element import GroupActionElement
 
 
-class GroupAction(ABC):
+class GroupAction(ABC, Module):
     @abstractmethod
     def batch(self) -> List[GroupActionElement]:
         pass
