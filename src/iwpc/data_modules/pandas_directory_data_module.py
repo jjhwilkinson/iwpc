@@ -249,6 +249,12 @@ class PandasDirDataModule(LightningDataModule):
         """
         return len(self.all_files)
 
+    def open_file(self, idx: int) -> DataFrame:
+        """
+        Opens and returns the DataFrame in the file corresponding to the given index
+        """
+        return pd.read_pickle(self.all_files[idx])
+
     def all_dataloader(self) -> DataLoader:
         """
         Returns a DataLoader which iterates over all samples in all files
