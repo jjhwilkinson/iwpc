@@ -82,7 +82,7 @@ def basic_model_factory(
     symmetries
         A series of symmetry group actions under which the network should be invariant
     complement_symmetries
-        A series of symmetry group actions for which the network output should reside in the symmetrized complement of
+        A series of symmetry group actions which the network output should reside in the symmetrized complement of
 
     Returns
     -------
