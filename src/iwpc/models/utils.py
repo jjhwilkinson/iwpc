@@ -82,8 +82,7 @@ def basic_model_factory(
     symmetries
         A series of symmetry group actions under which the network should be invariant
     complement_symmetries
-        Symmetry group actions over which the network should average to 0. Averaging is defined with respect to the
-        group's Haar measure
+        A series of symmetry group actions for which the network output should reside in the symmetrized complement of
 
     Returns
     -------
