@@ -1,26 +1,37 @@
-from typing import Iterable, Callable
-
-from torch import Tensor
-from torch.nn import Module
+from typing import Iterable, Tuple
 
 from iwpc.symmetries.group_action import GroupAction
 from iwpc.symmetries.group_action_element import GroupActionElement, Identity
 
 
 class FiniteGroupAction(GroupAction):
-    def __init__(self, elements: Iterable[GroupActionElement]):
+    """
+    Generic implementation of a finite group action
+    """
+    def __init__(self, non_id_elements: Iterable[GroupActionElement]):
+        """
+        Parameters
+        ----------
+        non_id_elements
+            An iterable of the non-identity GroupActionElements in the group action
+        """
         super().__init__()
-        self.elements = set(elements)
+        self.elements = (Identity(), *non_id_elements)
 
-    def batch(self):
-        for element in self.elements:
-            yield element
+    def batch(self) -> Tuple[GroupActionElement, ...]:
+        """
+        Returns
+        -------
+        Tuple[GroupActionElement, ...]
+            All the elements in the group action, including the identity element
+        """
+        return self.elements
 
     def __len__(self):
+        """
+        Returns
+        -------
+        int
+            The number of elements in the group action including the identity element
+        """
         return len(self.elements)
-
-
-class Z2GroupAction(FiniteGroupAction):
-    def __init__(self, involution: Callable[[Tensor], Tensor]):
-        super().__init__([Identity(), involution])
-        self.involution = involution

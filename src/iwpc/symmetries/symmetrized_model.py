@@ -1,5 +1,3 @@
-from typing import Union, List
-
 import torch
 from torch import Tensor
 from torch.nn import Module
@@ -8,13 +6,39 @@ from iwpc.symmetries.group_action import GroupAction
 
 
 class SymmetrizedModel(Module):
-    def __init__(self, group: GroupAction, base_model, return_haar_batch_results=False):
+    """
+    Group actions, G, define a projection operator S_G where S_Gf(x) = E_G[gf(x)] and expectation is taken with
+    respect to the Haar measure on G. This wrapper module implements the complement projection operator on the
+    base_model. The resulting module is invariant under the action of G. Note that the averaging procedure can
+    significantly increase model evaluation time.
+    """
+    def __init__(self, group: GroupAction, base_model: Module):
+        """
+        Parameters
+        ----------
+        group
+            A group action over which the base_model should be averaged
+        base_model
+            Some base model
+        """
         super().__init__()
         self.group = group
         self.base_model = base_model
-        self.return_haar_batch_results = return_haar_batch_results
 
-    def forward(self, input: Tensor) -> Union[Tensor, List[Tensor]]:
+    def forward(self, input: Tensor) -> Tensor:
+        """
+        Computes the average of base_model under the group action, S_G base_model
+
+        Parameters
+        ----------
+        input
+            An input tensor
+
+        Returns
+        -------
+        Tensor
+            The average of base_model under the group action for the batch
+        """
         full_input = []
         actions = list(self.group.batch())
         for action in actions:
@@ -26,8 +50,5 @@ class SymmetrizedModel(Module):
         final_outputs = []
         for action, output in zip(actions, base_output):
             final_outputs.append(action.output_space_action(output))
-
-        if self.return_haar_batch_results:
-            return final_outputs
 
         return sum(final_outputs) / len(final_outputs)

@@ -79,6 +79,11 @@ def basic_model_factory(
         Models are equipped with a RunningNormLayer that tracks and normalises its input data.
         running_norm_one_epoch_only=True ensures this normalization only occurs during the first epoch of training and
         is subsequently constant
+    symmetries
+        A series of symmetry group actions under which the network should be invariant
+    complement_symmetries
+        Symmetry group actions over which the network should average to 0. Averaging is defined with respect to the
+        group's Haar measure
 
     Returns
     -------
