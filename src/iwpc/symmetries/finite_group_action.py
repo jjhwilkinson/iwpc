@@ -17,6 +17,8 @@ class FiniteGroupAction(GroupAction):
         """
         super().__init__()
         self.elements = (Identity(), *non_id_elements)
+        for i, element in enumerate(self.elements):
+            self.register_module(f"non_id_element_{i}", element)
 
     def batch(self) -> Tuple[GroupActionElement, ...]:
         """
