@@ -2,10 +2,11 @@ from typing import Optional, List, Union
 
 import numpy as np
 from numpy._typing import NDArray
-from scipy.stats._binned_statistic import BinnedStatisticddResult, binned_statistic_dd
+from scipy.stats._binned_statistic import BinnedStatisticddResult
 
 from .utils import (
-    construct_binned_statistic_result_regular_bins, faster_binned_statistic_dd_without_overflow,
+    construct_binned_statistic_result_regular_bins,
+    faster_binned_statistic_dd_without_overflow,
     is_regular_bins,
 )
 
@@ -123,3 +124,16 @@ class BinnedStatAccumulator:
         """
         mean_hist = self.mean_hist
         return self.sq_sum_hist / self.count_hist - mean_hist[:, np.newaxis] * mean_hist[np.newaxis, :]
+
+    @property
+    def corr_hist(self) -> NDArray:
+        """
+        Returns
+        -------
+        NDArray
+            An array of shape (F, F, len(bins[0]) - 1, len(bins[1]) - 1, ...) containing the correlation matrix of the F
+            statistic features in each bin
+        """
+        cov = self.cov_hist
+        stds = np.sqrt(cov[range(self.num_statistics), range(self.num_statistics)])
+        return cov / stds[:, None] / stds[None, :]
