@@ -1,4 +1,4 @@
-from typing import List, Callable, Iterable, Optional, Union
+from typing import List, Callable, Iterable, Optional, Union, Dict
 
 import numpy as np
 from torch import Tensor, nn
@@ -6,6 +6,7 @@ from torch.nn import BatchNorm1d, LeakyReLU, Linear, Dropout, Module, Sequential
 
 from .layers import RunningNormLayer, LambdaLayer
 from ..encodings.encoding_base import Encoding
+from ..modules.utility_modules.independent_sum_module import IndependentSumModule
 from ..symmetries.group_action import GroupAction
 from ..types import Shape
 
@@ -135,3 +136,30 @@ def basic_model_factory(
         model = group.complement(model)
 
     return model
+
+
+def basic_model_factory_sum(specs: Iterable[Dict], **common_spec):
+    """
+    Shorthand for creating a model that is the sum of a number of sub models. Useful for when you want submodules with
+    different symmetries or input encodings. Models are combined using an IndependentSumModule with the average flag
+    set to True
+
+    Parameters
+    ----------
+    specs
+        A list of dictionaries describing the sub-modules to be passed to basic_model_factory
+    common_spec
+        Key word args to serve as the base for each sub-module to be passed basic_model_factory. Options are overridden
+        by the specs above
+
+
+    Returns
+    -------
+    IndependentSumModule
+    """
+    models = []
+    for spec in specs:
+        base_spec = common_spec.copy()
+        base_spec.update(spec)
+        models.append(basic_model_factory(**base_spec))
+    return IndependentSumModule(models)
