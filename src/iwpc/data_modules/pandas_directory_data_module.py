@@ -84,7 +84,7 @@ class PandasDirDataModule(LightningDataModule):
     def __init__(
         self,
         dataset_dir: PathLike,
-        feature_cols: List[str],
+        feature_cols: Optional[List[str]] = None,
         target_cols: Optional[Union[str, List[str]]] = None,
         weight_col: Optional[str] = None,
         split: float = 0.5,
@@ -112,7 +112,7 @@ class PandasDirDataModule(LightningDataModule):
         """
         super().__init__()
         self.dataset_dir = Path(dataset_dir)
-        self.feature_cols = feature_cols
+        self.feature_cols = feature_cols if feature_cols is not None else []
         self.target_cols = [target_cols] if isinstance(target_cols, str) else target_cols
         self.weight_col = weight_col
         self.split = split
