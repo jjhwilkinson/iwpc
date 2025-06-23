@@ -24,7 +24,6 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         use_points_for_xsecs: bool = False,
         initial_x_axis_scalar_ind: int = 0,
         initial_y_axis_scalar_ind: int = 1,
-        color_palette: Tuple = Viridis256,
         **kwargs
     ):
         """
@@ -41,8 +40,6 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
             The index of the x-axis scalar to initially select on start up
         initial_y_axis_scalar_ind
             The index of the y-axis scalar to initially select on start up
-        color_palette
-            A tuple of hex colours to use as the heatmap scale
         kwargs
             Any BokehFunctionVisualiser keyword arguments
         """
@@ -50,7 +47,6 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         self.use_points_for_xsecs = use_points_for_xsecs
         self.initial_x_axis_scalar_ind = initial_x_axis_scalar_ind
         self.initial_y_axis_scalar_ind = initial_y_axis_scalar_ind
-        self.color_palette = color_palette
         super().__init__(*args, **kwargs)
 
     def setup_figure(self):
@@ -76,7 +72,7 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
         )
         self.main_figure.add_tools(hover)
         self.main_figure.on_event('tap', self.handle_main_figure_click)
-        self.color_mapper = LinearColorMapper(palette=self.color_palette, low=-1, high=1)
+        self.color_mapper = LinearColorMapper(low=-1, high=1)
         self.x_span = Span(
             location=0, dimension='height', line_color='red', line_width=1, line_dash='dashed', visible=False,
             line_alpha=0.5
@@ -113,6 +109,10 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
             [[self.main_figure, self.y_line_profile_figure], [self.x_line_profile_figure, None]],
             sizing_mode='stretch_both'
         )
+        self.main_figure.axis.axis_label_text_font_size = self.label_font_size
+        self.colorbar.title_text_font_size = self.label_font_size
+        self.main_figure.axis.major_label_text_font_size = self.tick_font_size
+        self.colorbar.major_label_text_font_size = self.tick_font_size
 
     def setup(self) -> None:
         """
@@ -194,6 +194,7 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
             self.x_line_profile_figure.y_range.update(start=z_min, end=z_max)
             self.y_line_profile_figure.x_range.update(start=z_min, end=z_max)
             self.color_mapper.update(low=z_min, high=z_max)
+            self.color_mapper.palette = self.output_scalar.color_palette
 
     def _update_output(self, reuse_previous_output=False) -> None:
         """

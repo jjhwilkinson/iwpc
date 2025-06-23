@@ -125,6 +125,8 @@ class BokehFunctionVisualiser1D(BokehFunctionVisualiser):
             y_axis_label='y'
         )
         self.main_figure.add_tools(hover)
+        self.main_figure.axis.axis_label_text_font_size = self.label_font_size
+        self.main_figure.axis.major_label_text_font_size = self.tick_font_size
 
         if self.use_points:
             self.line = self.main_figure.scatter(line_color="#3288bd", fill_color="white", line_width=2)

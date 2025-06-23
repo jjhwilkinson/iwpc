@@ -1,7 +1,7 @@
 import datetime as dt
 from abc import abstractmethod, ABC
 from collections import OrderedDict
-from typing import List, Optional, Callable, Tuple
+from typing import List, Optional, Callable, Tuple, Iterable
 
 import numpy as np
 from bokeh.io import curdoc
@@ -27,6 +27,9 @@ class BokehFunctionVisualiser(ABC):
         output_scalars: List[ScalarFunction],
         center_point: Optional[ndarray] = None,
         initial_output_scalar_ind: int = -1,
+        label_font_size: str = "13px",
+        tick_font_size: str = "13px",
+        selected_input_parameter_resolution: int = 256,
     ):
         """
         Parameters
@@ -43,6 +46,12 @@ class BokehFunctionVisualiser(ABC):
             The default value to use for each input scalar. Defaults to the middle of the bins attribute of each scalar
         initial_output_scalar_ind
             The index of the output scalar to initially select on start up
+        label_font_size
+            Font size of the axis and colorbar labels. Defaults to "13px"
+        tick_font_size
+            Font size of the ticks on the axes Defaults to "13px"
+        selected_input_parameter_resolution
+            Default resolution of selected input scalars
         """
         self.function = fn
         self.input_scalars = input_scalars
@@ -51,6 +60,9 @@ class BokehFunctionVisualiser(ABC):
         self.initial_output_scalar_ind = initial_output_scalar_ind
         if center_point is None:
             self.center_point = np.asarray([scalar.bins[len(scalar.bins) // 2] for scalar in input_scalars], dtype=float)
+        self.label_font_size = label_font_size
+        self.tick_font_size = tick_font_size
+        self.selected_input_parameter_resolution = selected_input_parameter_resolution
 
         self.input_scalar_menu = OrderedDict([(scalar.label, scalar) for scalar in self.input_scalars])
         self.output_scalar_menu = OrderedDict([(scalar.label, scalar) for scalar in self.output_scalars])
@@ -71,20 +83,20 @@ class BokehFunctionVisualiser(ABC):
         fn
             An object satisfying the Visualisable interface
         kwargs
-            Any other kwargs to pass to the BokehFunctionVisualiser constructor
+            Any other kwargs to pass to the BokehFunctionVisualiser constructor. Can be used to override options defined
+            in the Visualisable interface
 
         Returns
         -------
         BokehFunctionVisualiser
             A BokehFunctionVisualiser instance configured to render the function
         """
-        return cls(
-            fn.evaluate_for_visualiser,
-            fn.get_input_scalars(),
-            fn.get_output_scalars(),
-            fn.center_point,
-            **kwargs,
-        )
+        kwargs.setdefault('fn', fn.evaluate_for_visualiser)
+        kwargs.setdefault('input_scalars', fn.get_input_scalars())
+        kwargs.setdefault('output_scalars', fn.get_output_scalars())
+        kwargs.setdefault('center_point', fn.center_point)
+
+        return cls(**kwargs)
 
     @abstractmethod
     def setup_figure(self) -> None:
@@ -131,7 +143,7 @@ class BokehFunctionVisualiser(ABC):
         self.freeze_input_axes_switch = Switch(active=False)
         self.freeze_output_axes_switch = Switch(active=False)
         self.axis_resolutions = [
-            Spinner(low=2, step=1, value=100, width=80, sizing_mode='stretch_height', title='Num points') for _ in
+            Spinner(low=2, step=1, value=self.selected_input_parameter_resolution, width=80, sizing_mode='stretch_height', title='Num points') for _ in
             self.input_pickers
         ]
         for s in self.axis_resolutions:

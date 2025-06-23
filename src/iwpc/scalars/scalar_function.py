@@ -1,6 +1,7 @@
-from typing import Callable, Optional, Any
+from typing import Callable, Optional, Any, Tuple
 
 import numpy as np
+from bokeh.palettes import Viridis256
 from numpy._typing import NDArray
 from pandas import DataFrame
 
@@ -19,6 +20,7 @@ class ScalarFunction(Scalar):
         label: str,
         latex_label: Optional[str] = None,
         bins: Optional[NDArray] = None,
+        color_palette: Tuple = Viridis256,
     ):
         """
         Parameters
@@ -31,9 +33,12 @@ class ScalarFunction(Scalar):
             A print friendly name for the quantity
         latex_label
             A version of the label that may use LaTeX for additional formatting. Defaults to the label above
+        color_palette
+            A tuple of hex colours to use as the color scale in bokeh
         """
         super().__init__(label, latex_label, bins=bins)
         self.fn = fn
+        self.color_palette = color_palette
 
     def __call__(self, *args, **kwargs) -> NDArray:
         """
