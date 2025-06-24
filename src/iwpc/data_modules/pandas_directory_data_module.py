@@ -39,7 +39,8 @@ def batched_df_pickles_iter(in_dir: Path, batch_size: int) -> DataFrame:
     """
     batch = []
     batch_fill = 0
-    for file in tqdm(list(in_dir.glob('file_*.pkl')), desc="Looping through files for rebatch"):
+    num_pickles = len(list(in_dir.glob('file_*.pkl')))
+    for file in tqdm([in_dir / f'file_{i}.pkl' for i in range(num_pickles)], desc="Looping through files for rebatch"):
         data = pd.read_pickle(file)
         used_data = 0
         while used_data < data.shape[0]:
