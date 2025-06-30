@@ -61,11 +61,12 @@ def basic_model_factory(
     input
         Either the shape of the input of the network (an int or tuple of ints), or the input encoding of the network.
         If an instance of Encoding, the input shape is inferred is from the encoding dimensions and the encoding is set
-        as the first layer of the network
+        as the first layer of the network. Only Encodings with vector outputs are supported as an input encoding.
     output
-        Either the desired shape of the output of the network (an int or tuple of ints), or the ouput encoding of the
+        Either the desired shape of the output of the network (an int or tuple of ints), or the output encoding of the
         network. If an instance of Encoding, the output shape is inferred is from the encoding dimensions and the
-        encoding is set as the last layer of the network
+        encoding is used as the last layer of the network. Only Encodings with vector inputs are supported as an output
+        encoding.
     hidden_layer_sizes
         A list of the desired shapes of each hidden layer
     dropout
@@ -94,16 +95,20 @@ def basic_model_factory(
     initial_layers = initial_layers or []
     final_layers = final_layers or []
     if isinstance(input, Encoding):
+        if not input.is_vector_output:
+            raise ValueError("Only vector output Encodings are supported as a basic_model_factory input Encoding")
         initial_layers.insert(0, input)
-        input_shape = int(input.output_dimension)
+        input_shape = int(input.output_shape[0])
     else:
         input_shape = input
     if not isinstance(input_shape, Iterable) or (hasattr(input_shape, "shape") and input_shape.shape == tuple()):
         input_shape = (input_shape,)
 
     if isinstance(output, Encoding):
+        if not output.is_vector_input:
+            raise ValueError("Only vector input Encodings are supported as a basic_model_factory output Encoding")
         final_layers = [*final_layers, output]
-        output_shape = int(output.input_dimension)
+        output_shape = int(output.input_shape[0])
     else:
         output_shape = output
     if not isinstance(output_shape, Iterable) or (hasattr(output_shape, "shape") and output_shape.shape == tuple()):

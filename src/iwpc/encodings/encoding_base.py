@@ -1,9 +1,20 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Union
 
 import numpy as np
 import torch
+from numpy._typing import ArrayLike
 from torch import nn, Tensor
+
+
+def to_shape_tensor(x: ArrayLike) -> Tensor:
+    """
+    Converts the given object to a tensor that is a valid shape.
+    """
+    x = torch.tensor(x)
+    if x.dim() == 0:
+        x = x.unsqueeze(0)
+    return x
 
 
 class Encoding(nn.Module, ABC):
@@ -27,33 +38,53 @@ class Encoding(nn.Module, ABC):
 
     In this case, the encoding of a feature vector (r, theta) would be the triplet (r, cos(theta), sin(theta))
     """
-    def __init__(self, input_dimension: int, output_dimension: int):
+    def __init__(self, input_shape: Union[int, ArrayLike], output_shape: Union[int, ArrayLike]):
         """
         Parameters
         ----------
-        input_dimension
+        input_shape
             The number of input features expected by the encoding layer.
-        output_dimension
+        output_shape
             The number of output features produced by the encoding layer.
         """
         super().__init__()
-        self.register_buffer('input_dimension', torch.tensor(input_dimension).int())
-        self.register_buffer('output_dimension', torch.tensor(output_dimension).int())
+        self.register_buffer('input_shape', to_shape_tensor(input_shape).int())
+        self.register_buffer('output_shape', to_shape_tensor(output_shape).int())
+
+    @property
+    def is_vector_input(self) -> bool:
+        """
+        Returns
+        -------
+        bool
+            Whether the input to the Encoding is a feature vector as opposed to some higher rank object
+        """
+        return self.input_shape.shape[0] == 1
+    
+    @property
+    def is_vector_output(self) -> bool:
+        """
+        Returns
+        -------
+        bool
+            Whether the output of the Encoding is a feature vector as opposed to some higher rank object
+        """
+        return self.output_shape.shape[0] == 1
 
     @abstractmethod
-    def _encode(self, x) -> Tensor:
+    def _encode(self, x: Tensor) -> Tensor:
         """
         Perform the encoding and return the result. Subclasses must implement this method.
 
         Parameters
         ----------
         x
-            A Tensor of dimension (..., input_dimension)
+            A Tensor of dimension (..., *input_shape)
 
         Returns
         -------
         Tensor
-            The encoded information with dimension (..., output_dimension)
+            The encoded information with dimension (..., *output_shape)
         """
 
     def forward(self, x: Tensor) -> Tensor:
@@ -63,12 +94,12 @@ class Encoding(nn.Module, ABC):
         Parameters
         ----------
         x
-            A Tensor of dimension (..., input_dimension)
+            A Tensor of dimension (..., *input_shape)
 
         Returns
         -------
         Tensor
-            The encoded information with dimension (..., output_dimension)
+            The encoded information with dimension (..., *output_shape)
         """
         return self._encode(x)
 
@@ -93,8 +124,9 @@ class ConcatenatedEncoding(Encoding):
     """
     A wrapper encoding based on a list of 'sub-encodings' of input dimensions d1...dN and output dimensions o1...oN.
     Evaluates each successive sub-encoding on its respective section of an input feature vector of length d1+...+dN and
-    returns the concatenated result of length o1+...+oN. Any two encodings may be concatenated and nested
-    ConcatenatedEncoding instances are automatically un-curried when using '&' or ConcatenatedEncoding.merge
+    returns the concatenated result of length o1+...+oN. Any collection of vector encodings, that is encodings take in
+    and output a vector of some length, may be concatenated. Nested ConcatenatedEncoding instances are automatically
+    un-curried when constructed using the bitwise and operator, '&', or ConcatenatedEncoding.merge
     """
     def __init__(self, sub_encodings: List[Encoding]):
         """
@@ -103,51 +135,59 @@ class ConcatenatedEncoding(Encoding):
         sub_encodings
             A list of encodings
         """
+        if not all(encoding.is_vector_input for encoding in sub_encodings):
+            raise ValueError('Can only concatenate encodings that operate on vector inputs')
+        if not all(encoding.is_vector_output for encoding in sub_encodings):
+            raise ValueError('Can only concatenate encodings that have vector outputs')
+        
         super().__init__(
-            sum(encoding.input_dimension for encoding in sub_encodings),
-            sum(encoding.output_dimension for encoding in sub_encodings),
+            sum(encoding.input_shape[0] for encoding in sub_encodings),
+            sum(encoding.output_shape[0] for encoding in sub_encodings),
         )
         self.register_buffer(
-            'cum_input_dimensions',
-            torch.tensor(np.cumsum([0] + [encoding.input_dimension for encoding in sub_encodings])).int()
+            'cum_input_shapes',
+            torch.tensor(np.cumsum([0] + [encoding.input_shape[0] for encoding in sub_encodings])).int()
         )
 
         self.sub_encodings = sub_encodings
 
     def _encode(self, x: Tensor) -> Tensor:
         """
-        Applies the j'th sub-encoding to the subset of the feature vector between cum_input_dimensions[j] and
-        cum_input_dimensions[j+1]. The resulting encoded features are concatenated
+        Applies the j'th sub-encoding to the subset of the feature vector between cum_input_shapes[j] and
+        cum_input_shapes[j+1]. The resulting encoded features are concatenated
 
         Parameters
         ----------
         x
-            A tensor of shape (..., input_dimension)
+            A tensor of shape (..., *input_shape)
 
         Returns
         -------
         Tensor
-            of shape (..., output_dimension)
+            of shape (..., *output_shape)
         """
         return torch.concatenate([
             encoding(x[..., low:high]) for encoding, low, high in
-            zip(self.sub_encodings, self.cum_input_dimensions[:-1], self.cum_input_dimensions[1:])
+            zip(self.sub_encodings, self.cum_input_shapes[:-1], self.cum_input_shapes[1:])
         ], dim=-1)
 
     @classmethod
     def merge(cls, a: Encoding, b: Encoding) -> 'ConcatenatedEncoding':
         """
         Constructs a ConcatenatedEncoding from the encodings a and b. If either is itself a ConcatenatedEncoding
-        instance, the contents of the ConcatenatedEncoding is used
+        instance, the contents of the ConcatenatedEncoding is used. Note both a and b must input and output 1D vectors
 
         Parameters
         ----------
         a
+            A vector encoding
         b
+            A vector encoding
 
         Returns
         -------
-
+        ConcatenatedEncoding
+            The concatenation of a and b
         """
         a_encodings = a.sub_encodings if isinstance(a, ConcatenatedEncoding) else [a]
         b_encodings = b.sub_encodings if isinstance(b, ConcatenatedEncoding) else [b]
