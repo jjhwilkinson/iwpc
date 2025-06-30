@@ -1,10 +1,10 @@
 [project]
 name = "iwpc"
-version = "0.4.2"
+version = "0.5.0"
 authors = [
   { name="Jeremy J. H. Wilkinson", email="jero.wilkinson@gmail.com" },
 ]
-description = "An implementation of the divergence framework as described here https://arxiv.org/abs/2405.06397"
+description = "An implementation of the divergence framework as described here https://arxiv.org/abs/2405.06397 and much more..."
 readme = "PYPI_README.md"
 requires-python = ">=3.9"
 classifiers = [
