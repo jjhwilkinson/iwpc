@@ -5,7 +5,7 @@ from numpy._typing import ArrayLike
 from torch import Tensor
 
 from iwpc.symmetries.finite_group_action import FiniteGroupAction
-from iwpc.symmetries.group_action_element import GroupActionElement
+from iwpc.symmetries.group_action_element import GroupActionElement, InputSpaceInvariantException
 
 
 class ProdAddAction(GroupActionElement):
@@ -43,13 +43,20 @@ class ProdAddAction(GroupActionElement):
         self.register_buffer('output_prod', torch.as_tensor(output_prod, dtype=torch.float)[None, :])
         self.register_buffer('output_add', torch.as_tensor(output_add, dtype=torch.float)[None, :])
 
+        if (self.input_prod == 1).all() and (self.input_add == 0).all():
+            self.register_buffer('affects_input_space', torch.as_tensor(False))
+        else:
+            self.register_buffer('affects_input_space', torch.as_tensor(True))
+
     def input_space_action(self, x: Tensor) -> Tensor:
         """
         Returns
         -------
         Tensor
-            Performs the described action on the input space
+            Performs the specified action on the input space
         """
+        if not self.affects_input_space:
+            raise InputSpaceInvariantException()
         return x * self.input_prod + self.input_add
 
     def output_space_action(self, x: Tensor) -> Tensor:
@@ -57,7 +64,7 @@ class ProdAddAction(GroupActionElement):
         Returns
         -------
         Tensor
-            Performs the described action on the output space
+            Performs the specified action on the output space
         """
         return x * self.output_prod + self.output_add
 

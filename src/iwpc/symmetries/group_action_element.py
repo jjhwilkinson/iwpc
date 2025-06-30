@@ -4,6 +4,17 @@ from torch import Tensor
 from torch.nn import Module
 
 
+class InputSpaceInvariantException(Exception):
+    """
+    Special exception that may be raised in the implementation of the input_space_action method of a GroupActionElement
+    if the action does not affect the input space. It is recommended to raise this exception rather than returning the
+    input tensor as various implementations can use this fact to speed up execution and prevent re-evaluating models
+    on duplicate inputs
+    """
+    def __init__(self):
+        super().__init__("Input space is invariant under group element action")
+
+
 class GroupActionElement(Module, ABC):
     """
     Abstract interface for the action of a particular group element, g, on the function space accessible to a NN from
@@ -13,7 +24,9 @@ class GroupActionElement(Module, ABC):
     @abstractmethod
     def input_space_action(self, x: Tensor) -> Tensor:
         """
-        Performs the action of the group element on the input space, R^M, of the function
+        Performs the action of the group element on the input space, R^M, of the function. If the action does not affect
+        the input space, then this function should raise an InputSpaceInvariantException to inform the caller that it
+        may re-use previous model evaluations of the original inputs
 
         Parameters
         ----------
@@ -48,7 +61,7 @@ class Identity(GroupActionElement):
     Convenience implementation of the action of the identity.
     """
     def input_space_action(self, x: Tensor) -> Tensor:
-        return x
+        raise InputSpaceInvariantException()
 
     def output_space_action(self, x: Tensor) -> Tensor:
         return x
