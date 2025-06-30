@@ -55,6 +55,20 @@ class GroupActionElement(Module, ABC):
             The action of g input tensor, gx
         """
 
+    def to_group(self) -> "FiniteGroupAction":
+        """
+        Constructs a group action containing the identity and this group action element. Warning, this method should only
+        be used if this group action element is an involution. In other words, this action undoes itself. It is your
+        responsibility to check this
+
+        Returns
+        -------
+        FiniteGroupAction
+            A FiniteGroupAction containing only this element and the identity
+        """
+        from iwpc.symmetries.finite_group_action import FiniteGroupAction
+        return FiniteGroupAction([self])
+
 
 class Identity(GroupActionElement):
     """
