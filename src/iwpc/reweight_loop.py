@@ -142,7 +142,8 @@ def run_reweight_loop(
     is estimated using calculate_divergence. If the obtained significance of the divergence is greater than min_sig,
     the learned likelihood ratio is used to reweight the distributions to remove the learnt features. The reweighted
     distribution is then used as the input for the next iteration, freeing up the networks to find other smaller
-    features in the data. In each iteration, the initial learning rate of the model is reduced by a
+    features in the data. In each iteration, the initial learning rate of the model is reduced by a factor of
+    lr_decay_factor
 
     Parameters
     ----------
