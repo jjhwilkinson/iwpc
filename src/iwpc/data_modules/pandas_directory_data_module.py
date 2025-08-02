@@ -92,6 +92,7 @@ class PandasDirDataModule(LightningDataModule):
         split: float = 0.5,
         limit_files: Optional[int] = None,
         dataloader_kwargs: Optional[dict] = None,
+        shuffle_in_train_files: bool = True,
     ):
         """
         Parameters
@@ -111,6 +112,8 @@ class PandasDirDataModule(LightningDataModule):
             Limit the number of files used to allow rapid testing
         dataloader_kwargs
             Any other arguments to be provided to DataLoader instances
+        shuffle_in_train_files
+            Whether to shuffle the data within each file during training
         """
         super().__init__()
         self.dataset_dir = Path(dataset_dir)
@@ -119,6 +122,7 @@ class PandasDirDataModule(LightningDataModule):
         self.weight_col = weight_col
         self.split = split
         self.limit_files = limit_files
+        self.shuffle_in_train_files = shuffle_in_train_files
 
         self.dataloader_kwargs = dataloader_kwargs or {}
         self.dataloader_kwargs.setdefault("batch_size", 2**15)
@@ -204,7 +208,7 @@ class PandasDirDataModule(LightningDataModule):
             self.target_cols,
             self.weight_col,
             file_sizes=self.file_sizes[:len(self.train_files)],
-            shuffle_in_file=True,
+            shuffle_in_file=self.shuffle_in_train_files,
         )
 
     @property
@@ -316,7 +320,7 @@ class PandasDirDataModule(LightningDataModule):
         self,
         include_train_files: bool = True,
         include_validation_files: bool = True,
-    ) -> Tuple[Path, DataFrame]:
+    ) -> Iterable[Tuple[Path, DataFrame]]:
         """
         Yields the path and presiding dataframe for each file
 
