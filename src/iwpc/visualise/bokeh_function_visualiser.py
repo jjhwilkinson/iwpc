@@ -59,7 +59,8 @@ class BokehFunctionVisualiser(ABC):
         self.center_point = center_point
         self.initial_output_scalar_ind = initial_output_scalar_ind
         if center_point is None:
-            self.center_point = np.asarray([scalar.bins[len(scalar.bins) // 2] for scalar in input_scalars], dtype=float)
+            self.center_point = [scalar.bins[len(scalar.bins) // 2] for scalar in input_scalars]
+        self.center_point = np.asarray(self.center_point, dtype=float)
         self.label_font_size = label_font_size
         self.tick_font_size = tick_font_size
         self.selected_input_parameter_resolution = selected_input_parameter_resolution
