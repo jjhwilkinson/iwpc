@@ -98,6 +98,30 @@ class PandasFileListDataset(Dataset):
         )
         return self._current_ds
 
+    def file_and_in_file_idx(self, idx: int) -> Tuple[int, int]:
+        """
+        Returns the file idx and the in-file idx corresponding to the given sample idx
+
+        Parameters
+        ----------
+        idx
+            The idx of the sample in the dataset
+
+        Returns
+        -------
+        Tuple[int, int]
+            The file idx and the in-file idx corresponding to the given sample idx
+        """
+        file_idx = 0
+        in_file_idx = None
+        for size in self.file_sizes:
+            if idx < size:
+                in_file_idx = idx
+                break
+            idx = idx - size
+            file_idx += 1
+        return file_idx, in_file_idx
+
     def __getitem__(self, idx: int) -> Tuple:
         """
         Returns the sample data, targets and weight for the requested idx. idx may be a number in
@@ -114,13 +138,5 @@ class PandasFileListDataset(Dataset):
             (sample data, targets, weight) in that order. the targets array can be empty (shape (1, 0)) if no target
             columns are provided and the weight is set to 1.0 if no weight column is specified
         """
-        file_idx = 0
-        in_file_idx = None
-        for size in self.file_sizes:
-            if idx < size:
-                in_file_idx = idx
-                break
-            idx = idx - size
-            file_idx += 1
-
+        file_idx, in_file_idx = self.file_and_in_file_idx(idx)
         return self.load_file(file_idx)[in_file_idx]
