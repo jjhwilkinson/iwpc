@@ -1,6 +1,7 @@
 from typing import List, Callable, Iterable, Optional, Union, Dict
 
 import numpy as np
+import torch
 from torch import Tensor, nn
 from torch.nn import BatchNorm1d, LeakyReLU, Linear, Dropout, Module, Sequential, Flatten
 
@@ -11,7 +12,13 @@ from ..symmetries.group_action import GroupAction
 from ..types import Shape
 
 
-def make_layer_group(in_size: int, out_size: int, dropout: float = 0., batch_norm: bool = False) -> List[Module]:
+def make_layer_group(
+    in_size: int,
+    out_size: int,
+    dropout: float = 0.,
+    batch_norm: bool = False,
+    activation: Callable = LeakyReLU,
+) -> List[Module]:
     """
     Basic linear layer factory supporting dropout and batch normalization
 
@@ -25,6 +32,8 @@ def make_layer_group(in_size: int, out_size: int, dropout: float = 0., batch_nor
         The desired dropout rate. No dropout will be applied if dropout=0
     batch_norm
         Whether to add a batch normalization layer to the output of the layer
+    activation
+        The activation function class to apply to the output of layers
 
     Returns
     -------
@@ -36,7 +45,7 @@ def make_layer_group(in_size: int, out_size: int, dropout: float = 0., batch_nor
         layers.append(Dropout(dropout))
     layers += [
         Linear(in_size, out_size),
-        LeakyReLU(),
+        activation(),
     ]
     if batch_norm:
         layers.append(BatchNorm1d(out_size))
@@ -54,6 +63,7 @@ def basic_model_factory(
     running_norm_one_epoch_only: bool = True,
     symmetries: Union[GroupAction, Iterable[GroupAction]] = tuple(),
     complement_symmetries: Union[GroupAction, Iterable[GroupAction]] = tuple(),
+    activation: Callable = LeakyReLU,
 ) -> Sequential:
     """
     Parameters
@@ -85,6 +95,8 @@ def basic_model_factory(
         A series of symmetry group actions under which the network should be invariant
     complement_symmetries
         A series of symmetry group actions which the network output should reside in the symmetrized complement of
+    activation
+        The activation function class to apply to the output of layers
 
     Returns
     -------
@@ -114,8 +126,8 @@ def basic_model_factory(
     if not isinstance(output_shape, Iterable) or (hasattr(output_shape, "shape") and output_shape.shape == tuple()):
         output_shape = (output_shape,)
 
-    input_size = int(np.prod(np.asarray(input_shape)))
-    out_size = int(np.prod(np.asarray(output_shape)))
+    input_size = int(torch.prod(torch.tensor(input_shape)))
+    out_size = int(torch.prod(torch.tensor(output_shape)))
     shape = (input_size,) + tuple(hidden_layer_sizes) + (out_size,)
 
     norm_layer = RunningNormLayer(input_size, one_epoch_only=running_norm_one_epoch_only)
@@ -125,7 +137,7 @@ def basic_model_factory(
         norm_layer,
     ]
     for i in range(len(shape) - 2):
-        layers += make_layer_group(shape[i], shape[i + 1], dropout=dropout, batch_norm=batch_norm)
+        layers += make_layer_group(shape[i], shape[i + 1], dropout=dropout, batch_norm=batch_norm, activation=activation)
     layers += [
         Linear(shape[-2], shape[-1]),
         LambdaLayer(lambda x: x.reshape((-1,) + output_shape)),
