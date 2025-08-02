@@ -91,7 +91,7 @@ class HistogramAccumulator(BinnedStatAccumulator):
         plt.figure()
         if len(self.bins) == 1:
             bins, = self.bins
-            plt.plot(bin_centers(bins), self.weight_sum_hist)
+            plt.errorbar(bin_centers(bins), self.weight_sum_hist, yerr=self.weight_sum_stderr_hist, capsize=2, fmt='-')
             if self.bin_labels is not None:
                 plt.xlabel(self.bin_labels[0])
             plt.ylabel('Weight Sum')
@@ -127,3 +127,21 @@ class HistogramAccumulator(BinnedStatAccumulator):
         HistogramAccumulator
         """
         return cls(bins=[scalar.bins for scalar in scalars], bin_labels=[scalar.latex_label for scalar in scalars])
+
+    @property
+    def mean(self):
+        weighted_sum = self.weight_sum_hist
+        for i, bedges in enumerate(self.bins):
+            bc = bin_centers(bedges)
+            weighted_sum = weighted_sum * bc[(None,) * i + (slice(None),) + (None,) * (len(self.bins) - i - 1)]
+
+        return weighted_sum.sum() / self.weight_sum_hist.sum()
+
+    @property
+    def stds(self):
+        weighted_sq_sum = self.weight_sum_hist
+        for i, bedges in enumerate(self.bins):
+            bc = bin_centers(bedges)
+            weighted_sq_sum = weighted_sq_sum * bc[(None,) * i + (slice(None),) + (None,) * (len(self.bins) - i - 1)] ** 2
+
+        return np.sqrt(weighted_sq_sum.sum() / self.weight_sum_hist.sum() - self.mean ** 2)
