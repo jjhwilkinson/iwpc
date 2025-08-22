@@ -3,9 +3,10 @@ import logging
 import os
 import shutil
 from collections import defaultdict
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union, List, Callable, Tuple, Dict, Iterable, Any
+from typing import Optional, Union, List, Callable, Tuple, Dict, Iterable, Any, Iterator, Generator
 
 import numpy as np
 import pandas as pd
@@ -413,7 +414,8 @@ class PandasDirDataModule(LightningDataModule):
             if out_dir.exists():
                 for path in out_dir.glob('file_*.pkl'):
                     path.unlink()
-                (out_dir / "ds_info.yml").unlink()
+                if (out_dir / "ds_info.yml").exists():
+                    (out_dir / "ds_info.yml").unlink()
             else:
                 out_dir.mkdir()
 
@@ -436,6 +438,34 @@ class PandasDirDataModule(LightningDataModule):
             new_dm.add_tag(tag)
 
         return new_dm
+
+    @contextmanager
+    def tmp_transform(self, transformation: Callable[[DataFrame], DataFrame]) -> Generator["PandasDirDataModule", None, None]:
+        """
+        Performs the given transformation using self.transform. The resulting datamodule is saved into a temporary
+        directory that is deleted upon completion. Usage:
+
+        dm = PandasDirDataModule(...)
+
+        with dm.tmp_transform(transformation) as new_dm:
+            ... do stuff with new_dm like train a network ...
+
+        # the data in new_dm is now automatically deleted
+
+        Arguments
+        ---------
+        transformation
+            A function that takes a dataframe and returns another dataframe with the desired modification
+
+        Yields
+        ------
+        PandasDirDataModule
+            The new data module with the transformation applied in a temporary directory that is deleted upon exiting
+            the context
+        """
+        with temp_directory() as tmpdir:
+            new_dm = self.transform(transformation, tmpdir, force=True)
+            yield new_dm
 
     def reweight(
         self,
@@ -676,25 +706,21 @@ class PandasDirDataModule(LightningDataModule):
         assert len(labels) == len(others) + 1
 
         out_dir = Path(out_dir)
-        out_dir.mkdir(exist_ok=force)
-        file_sizes = []
 
-        i = 0
-        for label, dm in tqdm(zip(labels, [self, *others]), desc='Merging datasets', total=len(others)+1):
-            for file in dm.all_files:
-                df = pd.read_pickle(file)
-                if label_col is not None:
-                    df[label_col] = label
+        with PandasDirDataModuleBuilder(
+            out_dir,
+            force=force,
+            shuffle=False,
+            tags=[f'merged from {dm.dataset_dir}' for dm in [self, *others]],
+        ) as builder:
+            for label, dm in tqdm(zip(labels, [self, *others]), desc='Merging datasets', total=len(others)+1):
+                for file in tqdm(dm.all_files, total=dm.num_files, leave=False, desc=f'Copying files'):
+                    df = pd.read_pickle(file)
+                    if label_col is not None:
+                        df[label_col] = label
 
-                pd.to_pickle(df, out_dir / f"file_{i}.pkl")
-                file_sizes.append(df.shape[0])
-                i += 1
+                    builder.write(df)
 
-        new_ds_info = self.ds_info
-        new_ds_info.update({
-            'file_sizes': file_sizes,
-        })
-        dump_yaml(new_ds_info, out_dir / 'ds_info.yml')
         new_dm = PandasDirDataModule(
             dataset_dir=out_dir,
             feature_cols=self.feature_cols,
@@ -704,8 +730,6 @@ class PandasDirDataModule(LightningDataModule):
             limit_files=self.limit_files,
             dataloader_kwargs=self.dataloader_kwargs,
         )
-        for dm in [self, *others]:
-            new_dm.add_tag(f'merged from {dm.dataset_dir}')
 
         return new_dm
 
