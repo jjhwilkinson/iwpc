@@ -166,6 +166,9 @@ class ConcatenatedEncoding(Encoding):
         Tensor
             of shape (..., *output_shape)
         """
+        if not x.shape[-1] == self.input_shape[-1]:
+            raise ValueError(f'Expected input shape of shape (..., *{self.input_shape}) got {x.shape}')
+
         return torch.concatenate([
             encoding(x[..., low:high]) for encoding, low, high in
             zip(self.sub_encodings, self.cum_input_shapes[:-1], self.cum_input_shapes[1:])
