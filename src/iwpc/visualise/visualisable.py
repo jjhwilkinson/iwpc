@@ -49,4 +49,10 @@ class Visualisable(ABC):
 
     @property
     def center_point(self) -> Optional[ArrayLike]:
+        """
+        Returns
+        -------
+        Optional[ArrayLike]
+            Returns the set of default points for the sliders in each input scalar.
+        """
         return None
