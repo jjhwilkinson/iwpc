@@ -55,7 +55,7 @@ class SamplableBaseModel(ABC):
         Returns
         -------
         np.ndarray
-            The log likelihood of the samples assuming self.total_volume=1
+            The log probability of the samples assuming self.total_volume=1
         """
 
     def log_prob(self, x: np.ndarray) -> np.ndarray:
@@ -70,7 +70,7 @@ class SamplableBaseModel(ABC):
         Returns
         -------
         np.ndarray
-            The log likelihood of the samples scaled to the total volume of the space
+            The log probability of the samples scaled to the total volume of the space
         """
         if x.shape[0] == 0:
             return np.zeros((0, self.dimension))
@@ -106,7 +106,7 @@ class SamplableBaseModel(ABC):
     def __add__(self, other: "SamplableBaseModel") -> "MixtureBaseModel":
         """
         Syntactic sugar to construct a SamplableBaseModel that produced samples by drawn from either self and other
-        with likelihood given by the relative size of self.total_volume and other.total_volume
+        with probability given by the relative size of self.total_volume and other.total_volume
         """
         if isinstance(other, MixtureBaseModel):
             return other + self
@@ -166,7 +166,7 @@ class ConcatenatedBaseModel(SamplableBaseModel):
         Returns
         -------
         np.ndarray
-            The log likelihood of the samples assuming samples are drawn independently from each sub-model
+            The log probability of the samples assuming samples are drawn independently from each sub-model
         """
         if x.shape[1] != self.dimension:
             raise ValueError(f"Sample dimension {x.shape[1]} does not match model dimension {self.dimension}")
@@ -234,7 +234,7 @@ class MixtureBaseModel(SamplableBaseModel):
         Returns
         -------
         np.ndarray
-            The log likelihood of the samples
+            The log probability of the samples
         """
         probs = np.concat([model.log_prob(x) for model in self.models], axis=-1)
         return logsumexp(probs, axis=-1)
@@ -242,7 +242,7 @@ class MixtureBaseModel(SamplableBaseModel):
     def __add__(self, other: "SamplableBaseModel") -> "MixtureBaseModel":
         """
         Syntactic sugar to construct a SamplableBaseModel that produced samples by drawn from either self and other
-        with likelihood given by the relative size of self.total_volume and other.total_volume. If 'other' is an instance
+        with probability given by the relative size of self.total_volume and other.total_volume. If 'other' is an instance
         of MixtureBaseModel, the list of sub-models are concatenated / un-curried
         """
         if isinstance(other, MixtureBaseModel):

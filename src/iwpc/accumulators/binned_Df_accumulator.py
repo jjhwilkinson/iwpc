@@ -64,7 +64,7 @@ class BinnedDfAccumulator:
             In the process of calculating various quantities, the accumulator requires an estimate of the marginalised
             distribution of each distribution in the S scalars. If estimate_marginalised_from_learned=False these
             distributions are estimated from the binned histograms in the S scalars for each distribution. If
-            estimate_marginalised_from_learned=True, the marginalised distributions are derived from the likelihood
+            estimate_marginalised_from_learned=True, the marginalised distributions are derived from the probability
             ratio between the distributions learnt by the network. estimate_marginalised_from_learned=True is
             recommended unless you know what you're doing
         """
@@ -108,7 +108,7 @@ class BinnedDfAccumulator:
     ) -> None:
         """
         Updates various internal states with training data that may be used in the construction of marginalised
-        likelihood functions without biasing the validation result
+        probability functions without biasing the validation result
 
         Parameters
         ----------
@@ -119,7 +119,7 @@ class BinnedDfAccumulator:
         weights
             The weights of each sample
         p_over_q
-            The predicted likelihood ratio between p and q for this sample
+            The predicted probability ratio between p and q for this sample
         """
         if isinstance(samples, list):
             samples = np.asarray(samples).T
@@ -178,7 +178,7 @@ class BinnedDfAccumulator:
         weights
             The weights of each sample
         p_over_q
-            The predicted likelihood ratio between p and q for this sample
+            The predicted probability ratio between p and q for this sample
         """
         if isinstance(samples, list):
             samples = np.asarray(samples).T
@@ -620,7 +620,7 @@ class BinnedDfAccumulator:
         datamodule
             A PandasDirDataModule instance
         p_over_q_cols
-            The names of columns which should be multiplied together to use as an estimate for the likelihood ratio
+            The names of columns which should be multiplied together to use as an estimate for the probability ratio
             $\frac{p(x)}{q(x)}$
         """
         for update_fn, include_train, include_val, num_files in [

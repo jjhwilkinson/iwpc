@@ -23,7 +23,7 @@ class DfAccumulator(ABC):
         divergence
             A DifferentiableFDivergence object
         clip_log_p_over_q
-            If provided, clips the likelihood ratios passed into 'update' such that the log likelihood ratio is between
+            If provided, clips the probability ratios passed into 'update' such that the log likelihood ratio is between
             the two bounds provided. Used to provide numerical stability as sometimes floating point errors can cause
             issues at extreme values
         """
@@ -106,7 +106,7 @@ class LabeledBinaryNaiveDfAccumulator(DfAccumulator):
         q_name
             The name of the second distribution (label 1)
         clip_log_p_over_q
-            If provided, clips the likelihood ratios passed into 'update' such that the log likelihood ratio is between
+            If provided, clips the probability ratios passed into 'update' such that the log likelihood ratio is between
             the two bounds provided. Used to provide numerical stability as sometimes floating point errors can cause
             issues at extreme values
         """
@@ -130,7 +130,7 @@ class LabeledBinaryNaiveDfAccumulator(DfAccumulator):
         Parameters
         ----------
         p_over_q
-            An estimate of the likelihood ratio $\frac{p(x)}{q(x)}$ for a number of samples
+            An estimate of the probability ratio $\frac{p(x)}{q(x)}$ for a number of samples
         labels
             The sample labels. 0 corresponds to distribution p and 1 corresponds to distribution q
         weights

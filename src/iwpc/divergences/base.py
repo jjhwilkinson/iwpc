@@ -210,7 +210,7 @@ class DifferentiableFDivergence(ABC):
         Parameters
         ----------
         p_over_q
-            An estimator for the likelihood ratio of $\frac{p(x)}{q(x)}$
+            An estimator for the probability ratio of $\frac{p(x)}{q(x)}$
 
         Returns
         -------
@@ -226,7 +226,7 @@ class DifferentiableFDivergence(ABC):
         Parameters
         ----------
         p_over_q
-            An estimator for the likelihood ratio of $\frac{p(x)}{q(x)}$
+            An estimator for the probability ratio of $\frac{p(x)}{q(x)}$
 
         Returns
         -------
@@ -246,7 +246,7 @@ class DifferentiableFDivergence(ABC):
         Parameters
         ----------
         p_over_q
-            An estimator for the likelihood ratio of $\frac{p(x)}{q(x)}$
+            An estimator for the probability ratio of $\frac{p(x)}{q(x)}$
         label
             An array labelling samples in p_over_q from p with 'False' and samples from q are identified with the label
             'True'
@@ -268,13 +268,13 @@ class DifferentiableFDivergence(ABC):
     ) -> TensorOrNDArray:
         """
         Calculates an estimator for lower bound on the f-divergence between p and q given an estimate of the values of
-        the likelihood ratio $\frac{p(x)}{q(x)}$. Used in the divergence training loop and does not provide an estimate
+        the probability ratio $\frac{p(x)}{q(x)}$. Used in the divergence training loop and does not provide an estimate
         of the error on the estimate. You likely want to use a Df accumulator for analysis instead
 
         Parameters
         ----------
         p_over_q
-            An estimate for the likelihood ratio $\frac{p(x)}{q(x)}$
+            An estimate for the probability ratio $\frac{p(x)}{q(x)}$
         label
             An array labelling samples in p_over_q from p with 'False' and samples from q are identified with the label
             'True'

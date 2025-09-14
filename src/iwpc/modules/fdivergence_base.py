@@ -30,8 +30,8 @@ class FDivergenceEstimator(LightningModule, ABC):
         Parameters
         ----------
         model
-            The function approximator to be used in the training process to regress the log likelihood ratio
-            $\log\left(\frac{p}{q}\right)$. Should output scalar value
+            The function approximator to be used in the training process to regress the log probability ratio
+            $\log\left(\frac{p}{q}\right)$. Should output a scalar value
         divergence
             A DifferentiableFDivergence implementation which determines which f-divergence is calculated
         initial_learning_rate
@@ -173,6 +173,6 @@ class FDivergenceEstimator(LightningModule, ABC):
         Returns
         -------
         Tensor
-            The log likelihood that a given sample was drawn from either category, $\log(\frac{p(x)}{q(x)})$
+            The log probability that a given sample was drawn from either category, $\log(\frac{p(x)}{q(x)})$
         """
         return self.model(x[0])
