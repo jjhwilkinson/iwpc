@@ -1,6 +1,6 @@
 [project]
 name = "iwpc"
-version = "0.5.3"
+version = "0.6.0"
 authors = [
   { name="Jeremy J. H. Wilkinson", email="jero.wilkinson@gmail.com" },
 ]
