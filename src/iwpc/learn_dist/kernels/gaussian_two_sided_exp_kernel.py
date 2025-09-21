@@ -1,4 +1,4 @@
-from iwpc.learn_dist.trainable_kernel.trainable_kernel_base import TrainableKernelBase
+from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
 
 class GaussianTwoSidedExponentialKernel(TrainableKernelBase):

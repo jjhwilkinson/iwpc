@@ -1,6 +1,7 @@
-from typing import Any, Callable, Tuple, Union
+from typing import Any, Callable
 
 import torch
+from numpy._typing import ArrayLike
 from torch import Tensor
 from torch.nn import Module
 
@@ -185,4 +186,32 @@ class RunningDeNormLayer(Module):
                 self._update(x)
         self.prev_training = self.training
 
+        return x
+
+
+class ConstantScaleLayer(Module):
+    @staticmethod
+    def standardize(x: Tensor) -> Tensor:
+        if x is None:
+            return torch.tensor(torch.nan, dtype=torch.float32)
+        else:
+            x = torch.tensor(x, dtype=torch.float32)
+
+        if x.ndim == 0:
+            return x[None, None]
+        if x.ndim == 1:
+            return x[None, :]
+
+        raise ValueError(f"{x} has more than one dimension")
+
+    def __init__(self, shift: ArrayLike | None = None, scale: ArrayLike | None = None):
+        super().__init__()
+        self.register_buffer('shift', ConstantScaleLayer.standardize(shift))
+        self.register_buffer('scale', ConstantScaleLayer.standardize(scale))
+
+    def forward(self, x: Tensor) -> Tensor:
+        if not self.scale.isnan().all():
+            x = x * self.scale
+        if not self.shift.isnan().all():
+            x = x + self.shift
         return x

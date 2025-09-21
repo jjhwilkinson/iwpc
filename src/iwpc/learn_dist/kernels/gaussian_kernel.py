@@ -1,0 +1,43 @@
+from typing import Tuple
+
+import numpy as np
+import torch
+from torch import Tensor
+
+from iwpc.encodings.encoding_base import Encoding
+from iwpc.encodings.exponential_encoding import ExponentialEncoding
+from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
+from iwpc.models.utils import basic_model_factory
+
+
+class GaussianKernel(TrainableKernelBase):
+    def __init__(
+        self,
+        cond: Encoding | int,
+        loc_model = None,
+        scale_model = None,
+    ):
+        super().__init__(1, cond)
+        self.register_buffer('log_two_pi', torch.tensor(0.5 * np.log(2 * np.pi), dtype=torch.float32))
+        self.loc_model = basic_model_factory(cond, 1) if loc_model is None else loc_model
+        self.scale_model = basic_model_factory(cond, ExponentialEncoding(1)) if scale_model is None else scale_model
+
+    def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
+        mean = self.loc_model(cond)
+        sigma = self.scale_model(cond)
+        chisq = ((samples - mean) / sigma) ** 2
+        return - 0.5 * (self.log_two_pi + 2 * torch.log(sigma) + chisq)[:, 0]
+
+    def _draw(self, cond: Tensor) -> Tensor:
+        mean = self.loc_model(cond)
+        sigma = self.scale_model(cond)
+        return torch.normal(0, 1, size=(cond.shape[0], 1), dtype=torch.float32, device=cond.device) * sigma + mean
+
+    def draw_with_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tensor]:
+        mean = self.loc_model(cond)
+        sigma = self.scale_model(cond)
+        noise = torch.normal(0, 1, size=(cond.shape[0], 1), dtype=torch.float32, device=cond.device)
+        with torch.no_grad():
+            samples = noise * sigma + mean
+        log_probs = -(0.5 * self.log_two_pi + 0.5 * ((samples - mean) / sigma)**2 + torch.log(sigma))[:, 0]
+        return samples, log_probs

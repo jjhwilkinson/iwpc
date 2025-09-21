@@ -236,7 +236,7 @@ def latest_ckpt(dir_: PathLike) -> Path:
     Path
         The path to the latest checkpoint within the given checkpoints directory based on epoch number
     """
-    epochs = [(int(ckpt.stem.split('=')[-1].split('-')[0]), ckpt) for ckpt in Path(dir_).glob('*/*.ckpt')]
+    epochs = [(int(ckpt.stem.split('=')[-1].split('-')[0]), ckpt) for ckpt in Path(dir_).glob('*/epoch*.ckpt')]
     return epochs[np.argmax([e[0] for e in epochs])][1]
 
 

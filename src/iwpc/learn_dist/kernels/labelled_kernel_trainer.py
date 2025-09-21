@@ -1,15 +1,22 @@
 from pathlib import Path
 
+import numpy as np
 from lightning import Trainer, LightningModule
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from torch import optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from iwpc.data_modules.pandas_directory_data_module import PandasDirDataModule
-from iwpc.learn_dist.trainable_kernel.gaussian_kernel import GaussianKernel
-from iwpc.learn_dist.trainable_kernel.mixture_kernel import MixtureKernel
-from iwpc.learn_dist.trainable_kernel.trainable_kernel_base import TrainableKernelBase
-from iwpc.learn_dist.trainable_kernel.two_sided_exponential_kernel import TwoSidedExponentialKernel
+from iwpc.encodings.continuous_periodic_encoding import ContinuousPeriodicEncoding
+from iwpc.encodings.discrete_log_prob_encoding import DiscreteLogProbEncoding
+from iwpc.encodings.exponential_encoding import ExponentialEncoding
+from iwpc.encodings.trivial_encoding import TrivialEncoding
+from iwpc.learn_dist.kernels.gaussian_kernel import GaussianKernel
+from iwpc.learn_dist.kernels.mixture_kernel import MixtureKernel
+from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
+from iwpc.learn_dist.kernels.two_sided_exponential_kernel import TwoSidedExponentialKernel
+from iwpc.models.layers import ConstantScaleLayer
+from iwpc.models.utils import basic_model_factory
 
 
 class LabelledKernelTrainer(LightningModule):
@@ -59,18 +66,43 @@ if __name__ == '__main__':
         dataloader_kwargs={'num_workers': 5},
     )
 
+    cond_encoding = TrivialEncoding(2) & ContinuousPeriodicEncoding()
+    loc_model = basic_model_factory(
+        cond_encoding,
+        1,
+        final_layers=[ConstantScaleLayer(scale=5e-7)]
+    )
+    std_model = basic_model_factory(
+        cond_encoding,
+        ExponentialEncoding(1),
+        final_layers=[ConstantScaleLayer(shift=np.log(5e-7)),]
+    )
+    scale_model = basic_model_factory(
+        cond_encoding,
+        ExponentialEncoding(1),
+        final_layers=[ConstantScaleLayer(shift=np.log(3 * 5e-7)),]
+    )
+    log_weight_model = basic_model_factory(
+        cond_encoding,
+        DiscreteLogProbEncoding(2),
+        final_layers=[ConstantScaleLayer(shift=np.log([0.9, 0.1]))]
+    )
+
     norm_kernel = GaussianKernel(
-        3,
-        0.,
-        5e-7,
+        cond_encoding,
+        loc_model,
+        std_model,
     )
     exp_kernel = TwoSidedExponentialKernel(
-        3,
-        0,
-        5e-7,
-        loc_model=norm_kernel.mean_model,
+        cond_encoding,
+        loc_model,
+        scale_model,
     )
-    kernel = MixtureKernel([norm_kernel, exp_kernel], [0.9, 0.1])
+    kernel = MixtureKernel(
+        cond_encoding,
+        [norm_kernel, exp_kernel],
+        log_weight_model,
+    )
     module = LabelledKernelTrainer(kernel)
 
     checkpoint_callback = ModelCheckpoint(
