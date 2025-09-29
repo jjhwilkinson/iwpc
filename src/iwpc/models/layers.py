@@ -1,6 +1,7 @@
-from typing import Any, Callable, Tuple, Union
+from typing import Any, Callable, Optional
 
 import torch
+from numpy._typing import ArrayLike
 from torch import Tensor
 from torch.nn import Module
 
@@ -185,4 +186,69 @@ class RunningDeNormLayer(Module):
                 self._update(x)
         self.prev_training = self.training
 
+        return x
+
+
+class ConstantScaleLayer(Module):
+    """
+    A utility layer that scales and shifts the output by a constant value
+    """
+    @staticmethod
+    def standardize(x: Optional[Tensor]) -> Tensor:
+        """
+        Ensures the given Tensor has the right shape and dtype
+
+        Parameters
+        ----------
+        x
+            A 0D or 1D Tensor or None
+
+        Returns
+        -------
+        Tensor
+            A 2D float Tensor. If x is None, the value is torch.nan
+        """
+        if x is None:
+            return torch.tensor(torch.nan, dtype=torch.float32)
+        else:
+            x = torch.tensor(x, dtype=torch.float32)
+
+        if x.ndim == 0:
+            return x[None, None]
+        if x.ndim == 1:
+            return x[None, :]
+
+        raise ValueError(f"{x} has more than one dimension")
+
+    def __init__(self, shift: ArrayLike | None = None, scale: ArrayLike | None = None):
+        """
+        Parameters
+        ----------
+        shift
+            A 0D or 1D Tensor or None used to shift the input by a constant value
+        scale
+            A 0D or 1D Tensor or None used to scale the input by a constant value
+        """
+        super().__init__()
+        self.register_buffer('shift', ConstantScaleLayer.standardize(shift))
+        self.register_buffer('scale', ConstantScaleLayer.standardize(scale))
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Scales and shifts the input tensor by self.scale and self.shift
+
+        Parameters
+        ----------
+        x
+            A Tensor
+
+        Returns
+        -------
+        Tensor
+            The input tensor with each component scaled and shifted by self.scale and self.shift
+        """
+        if not self.scale.isnan().all():
+            x = x * self.scale
+        if not self.shift.isnan().all():
+            x = x + self.shift
         return x
