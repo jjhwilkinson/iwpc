@@ -38,6 +38,14 @@ class BinnedStatAccumulator:
 
         assert all(is_regular_bins(b) for b in self.bins)
 
+    def reset(self) -> None:
+        """
+        Resets internal state variables
+        """
+        self.count_hist *= 0
+        self.sum_hist *= 0
+        self.sq_sum_hist *= 0
+
     def update(
         self,
         samples: NDArray,
