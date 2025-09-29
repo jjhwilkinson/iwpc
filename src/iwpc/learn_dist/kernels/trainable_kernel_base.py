@@ -16,7 +16,7 @@ class TrainableKernelBase(ABC, nn.Module):
     def __init__(
         self,
         sample_dimension: int,
-        cond_dimension: Encoding | int
+        cond_dimension: Encoding | int,
     ):
         """
         Parameters
@@ -93,6 +93,7 @@ class TrainableKernelBase(ABC, nn.Module):
 
         Returns
         -------
+        Tuple[Tensor, Tensor]
             A sample for each row of conditioning information with shape (N, self.sample_dimension) and the log
             probability of each samples given the conditioning information with shape (N,)
         """
