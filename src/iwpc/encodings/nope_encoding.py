@@ -8,7 +8,13 @@ class NopeEncoding(Encoding):
     """
     An encoding that returns no output features. Useful for masking inputs
     """
-    def __init__(self, dimension) -> None:
+    def __init__(self, dimension: int) -> None:
+        """
+        Parameters
+        ----------
+        dimension
+            The number of features to expect
+        """
         super().__init__(dimension, 0)
 
     def _encode(self, x) -> Tensor:
