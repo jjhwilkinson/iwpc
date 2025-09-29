@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Tuple, Optional
 
 import torch
 from lightning import LightningModule
@@ -45,12 +45,12 @@ class KernelKLDivergenceGradientLoss:
         """
         weights = torch.ones(cond.shape[0], dtype=torch.float32, device=cond.device) if weights is None else weights
         samples, log_prob = kernel.draw_with_log_prob(cond)
-        samples = cond + samples
 
         with torch.no_grad():
             p_over_q = torch.exp(log_p_over_q_model(samples))[:, 0]
 
         return -(weights * log_prob * p_over_q).mean()
+
 
 
 class UnLabelledKernelTrainer(LightningModule):
