@@ -16,17 +16,22 @@ class GaussianKernel(TrainableKernelBase):
         cond: Encoding | int,
         loc_model = None,
         scale_model = None,
+        max_chi = None,
     ):
         super().__init__(1, cond)
         self.register_buffer('log_two_pi', torch.tensor(0.5 * np.log(2 * np.pi), dtype=torch.float32))
         self.loc_model = basic_model_factory(cond, 1) if loc_model is None else loc_model
         self.scale_model = basic_model_factory(cond, ExponentialEncoding(1)) if scale_model is None else scale_model
+        self.max_chi = max_chi
 
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
         mean = self.loc_model(cond)
         sigma = self.scale_model(cond)
         chisq = ((samples - mean) / sigma) ** 2
-        return - 0.5 * (self.log_two_pi + 2 * torch.log(sigma) + chisq)[:, 0]
+        log_prob = - 0.5 * (self.log_two_pi + 2 * torch.log(sigma) + chisq)[:, 0]
+        if self.max_chi is not None:
+            log_prob[chisq[:, 0] > (self.max_chi ** 2)] = - torch.tensor(torch.inf)
+        return log_prob
 
     def _draw(self, cond: Tensor) -> Tensor:
         mean = self.loc_model(cond)

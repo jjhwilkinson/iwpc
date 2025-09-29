@@ -27,7 +27,7 @@ class LabelledKernelTrainer(LightningModule):
     def calculate_loss(self, batch):
         cond, targets, _ = batch
         log_prob = self.kernel.log_prob(targets, cond)
-        return - log_prob.mean()
+        return - log_prob[log_prob.isfinite()].mean()
 
     def training_step(self, batch):
         loss = self.calculate_loss(batch)
