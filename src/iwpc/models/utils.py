@@ -1,8 +1,7 @@
 from typing import List, Callable, Iterable, Optional, Union, Dict
 
-import numpy as np
 import torch
-from torch import Tensor, nn
+from torch import nn
 from torch.nn import BatchNorm1d, LeakyReLU, Linear, Dropout, Module, Sequential, Flatten
 
 from .layers import RunningNormLayer, LambdaLayer
@@ -60,7 +59,6 @@ def basic_model_factory(
     batch_norm: bool = False,
     initial_layers: Optional[Iterable[nn.Module]] = None,
     final_layers: Optional[Iterable[nn.Module]] = None,
-    running_norm_one_epoch_only: bool = True,
     symmetries: Union[GroupAction, Iterable[GroupAction]] = tuple(),
     complement_symmetries: Union[GroupAction, Iterable[GroupAction]] = tuple(),
     activation: Callable = LeakyReLU,
@@ -87,10 +85,6 @@ def basic_model_factory(
         An optional list of any additional layers to insert at the start of the sequential model sequence
     final_layers
         An optional list of any additional layers to insert at the end of the sequential model sequence
-    running_norm_one_epoch_only
-        Models are equipped with a RunningNormLayer that tracks and normalises its input data.
-        running_norm_one_epoch_only=True ensures this normalization only occurs during the first epoch of training and
-        is subsequently constant
     symmetries
         A series of symmetry group actions under which the network should be invariant
     complement_symmetries
@@ -130,7 +124,7 @@ def basic_model_factory(
     out_size = int(torch.prod(torch.tensor(output_shape)))
     shape = (input_size,) + tuple(hidden_layer_sizes) + (out_size,)
 
-    norm_layer = RunningNormLayer(input_size, one_epoch_only=running_norm_one_epoch_only)
+    norm_layer = RunningNormLayer(input_size)
     layers = [
         *list(initial_layers),
         Flatten(),

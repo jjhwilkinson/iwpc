@@ -24,27 +24,25 @@ class RunningNormLayer(Module):
     Custom normalisation layer that tracks a running average of the mean and standard deviation of each input
     component during training. During both validation and training, the current rolling mean is subtracted off each
     component and divided by the current value of the rolling standard deviation. Used to automatically handle the
-    normalisation of a NN's input.
+    normalisation of a NN's input. The running mean/std are only updated during training and if the number of samples
+    seen is less than self.max_samples.
     """
-    def __init__(self, input_shape: Shape, one_epoch_only: bool = False):
+    def __init__(self, input_shape: Shape, max_samples: int = 100000):
         """
         Parameters
         ----------
         input_shape
             The shape of the input tensors excluding the batch dimension. The batch dimension is assumed to be the first
             dimension
-        one_epoch_only
-            If true, the running mean and standard deviations will only be tracked for the first training epoch, then
-            fixed to the attained value.
+        max_samples
+            The number of samples to record before the running average and std deviations are frozen
         """
         super(RunningNormLayer, self).__init__()
 
         self.register_buffer('sum_', torch.zeros(input_shape))
         self.register_buffer('sq_sum_', torch.zeros(input_shape))
         self.register_buffer('N_', torch.tensor(0.))
-        self.prev_training = False
-        self.current_epoch = 0
-        self.one_epoch_only = one_epoch_only
+        self.max_samples = max_samples
 
     @property
     def shift(self) -> Tensor:
@@ -105,12 +103,8 @@ class RunningNormLayer(Module):
         Tensor
             The input tensor with each component normalised by the running mean and standard deviation
         """
-        if self.training:
-            if not self.prev_training:
-                self.current_epoch += 1
-            if self.current_epoch < 2 or not self.one_epoch_only:
-                self._update(x)
-        self.prev_training = self.training
+        if self.training and self.N_ < self.max_samples:
+            self._update(x)
 
         return (x - self.shift) / self.scale
 
