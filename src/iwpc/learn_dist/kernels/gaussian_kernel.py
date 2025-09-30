@@ -78,8 +78,10 @@ class GaussianKernel(TrainableKernelBase):
         """
         mean = self.loc_model(cond)
         sigma = self.scale_model(cond)
+        # sigma.retain_grad()
         noise = torch.normal(0, 1, size=(cond.shape[0], 1), dtype=torch.float32, device=cond.device)
         with torch.no_grad():
             samples = noise * sigma + mean
         log_probs = -(0.5 * self.log_two_pi + 0.5 * ((samples - mean) / sigma)**2 + torch.log(sigma))[:, 0]
+        # self.last_stds = sigma
         return samples, log_probs

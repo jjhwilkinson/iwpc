@@ -125,7 +125,7 @@ class UnlabelledMultiKernelTrainer(LightningModule):
         mask = labels == 1
         return self.loss(cond[mask], self.combined_kernel, self.log_p_over_q_models, weights[mask])
 
-    def training_step(self, batch: Tuple[Tensor, Tensor, Tensor]) -> None:
+    def training_step(self, batch: Tuple[Tensor, Tensor, Tensor], batch_idx) -> None:
         """
         Optimizes log_p_over_q_model and the parameters in self.kernel to maximise the probability of the p samples
         in q. Logs the current learned divergence between p and q
@@ -135,9 +135,10 @@ class UnlabelledMultiKernelTrainer(LightningModule):
         if self.current_epoch >= self.start_kernel_training_epoch:
             kernel_loss = self.calculate_kernel_loss(batch)
             self.log('train_kernel_loss', kernel_loss, on_step=True, on_epoch=True, prog_bar=False)
-            kernel_optimizer.zero_grad()
             kernel_loss.backward()
-            kernel_optimizer.step()
+            if batch_idx % 10 == 9:
+                kernel_optimizer.step()
+                kernel_optimizer.zero_grad()
 
         bce_losses = self.calculate_cross_entropies(batch, 'train')
         for i, bce in enumerate(bce_losses):
@@ -167,5 +168,5 @@ class UnlabelledMultiKernelTrainer(LightningModule):
             The classifier's and kernel's optimizer
         """
         discriminator_optimizer = Adam(list(chain(*[log_p_over_q_model.parameters() for log_p_over_q_model in self.log_p_over_q_models])), lr=1e-3)
-        kernel_optimizer = Adam(list(chain(*[kernel.parameters() for kernel in self.kernels])), lr=1e-4)
+        kernel_optimizer = Adam(self.combined_kernel.parameters(), lr=1e-4)
         return discriminator_optimizer, kernel_optimizer
