@@ -11,7 +11,7 @@ def to_shape_tensor(x: ArrayLike) -> Tensor:
     """
     Converts the given object to a tensor that is a valid shape.
     """
-    x = torch.tensor(x)
+    x = torch.as_tensor(x)
     if x.dim() == 0:
         x = x.unsqueeze(0)
     return x
