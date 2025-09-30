@@ -15,7 +15,6 @@ from torch.utils.data import DataLoader
 from torchmetrics import MeanMetric
 from tqdm import tqdm
 
-from .pandas_directory_data_module_builder import PandasDirDataModuleBuilder
 from ..datasets.pandas_file_list_dataset import PandasFileListDataset
 from ..types import PathLike, TensorOrNDArray
 from ..utils import read_yaml, temp_directory, dump_yaml
@@ -699,6 +698,8 @@ class PandasDirDataModule(LightningDataModule):
         PandasDirDataModule
             The merged dataset
         """
+        from .pandas_directory_data_module_builder import PandasDirDataModuleBuilder
+
         others = others if isinstance(others, Iterable) else [others]
         if labels is None:
             assert label_col is None

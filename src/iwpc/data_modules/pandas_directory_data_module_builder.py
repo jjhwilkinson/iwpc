@@ -6,7 +6,7 @@ from typing import Optional, Union, Iterable
 import pandas as pd
 from pandas import DataFrame
 
-from iwpc.data_modules.pandas_directory_data_module import PandasDirDataModule
+from .pandas_directory_data_module import PandasDirDataModule
 from iwpc.types import PathLike
 from iwpc.utils import dump_yaml
 
