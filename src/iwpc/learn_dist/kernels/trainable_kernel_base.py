@@ -232,6 +232,28 @@ class ConcatenatedKernel(TrainableKernelBase):
             sum(log_probs, torch.tensor(0.)),
         )
 
+    def draw_with_separate_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tuple[Tensor, ...]]:
+        """
+        Utility method to draw samples but return the log-likelihoods of each independent sub-kernel's samples
+        separately it is unlikely the end user ever needs to use this function, but its helpful for the implementation of
+        UnlabelledMultiKernelTrainer.
+
+        Parameters
+        ----------
+        cond
+            The conditioning information for each sample. Should have shape (N, self.cond_dimension)
+
+        Returns
+        -------
+            A sample for each row of conditioning information with shape (N, self.sample_dimension) and a tuple of length
+            len(self.sub_kernels) containing the log probability of each sample from each sub-kernel
+        """
+        samples, log_probs = zip(*[k.draw_with_log_prob(cond[:, c]) for k, c in zip(self.sub_kernels, self.cond_edges)])
+        return (
+            torch.cat(samples, dim=-1),
+            log_probs,
+        )
+
     @classmethod
     def merge(cls, a: TrainableKernelBase, b: TrainableKernelBase, concatenate_cond) -> 'ConcatenatedKernel':
         """

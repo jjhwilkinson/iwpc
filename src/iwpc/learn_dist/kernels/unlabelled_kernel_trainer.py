@@ -52,7 +52,6 @@ class KernelKLDivergenceGradientLoss:
         return -(weights * log_prob * p_over_q).mean()
 
 
-
 class UnLabelledKernelTrainer(LightningModule):
     def __init__(
         self,
