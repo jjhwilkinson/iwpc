@@ -8,7 +8,7 @@ from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.models.utils import basic_model_factory
 
 
-class MultivariateNormalKernel(TrainableKernelBase):
+class MultivariateGaussianKernel(TrainableKernelBase):
     """
     A multidimentional Normal kernel with trainable mean and std deviations
     """
