@@ -14,7 +14,8 @@ class MultivariateGaussianKernel(TrainableKernelBase):
     def __init__(
         self,
         cond,
-        sample_dim
+        sample_dim,
+        max_chi: float = 5.,
     ):
         """
         Parameters
@@ -34,7 +35,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self.mean_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim))
         self.log_diag_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim))
         self.log_rot_model = basic_model_factory(TrivialEncoding(cond), MatrixEncoding(sample_dim))
-
+        self.max_chi = max_chi
     def _draw(self, cond: torch.Tensor) -> torch.Tensor:
         """
         Returns
@@ -59,7 +60,8 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         normed_diffs = torch.exp(- 0.5 * log_diags) * normed_diffs
         chi_sqs_M = torch.sum(normed_diffs ** 2, dim=-1)
         log_prob = - 0.5 * (chi_sqs_M + log_diags.sum(dim=-1) + self.sample_dimension*np.log(2 * np.pi))
-        return log_prob
+        mask = (chi_sqs_M < self.max_chi ** 2) & torch.isfinite(log_prob)
+        return log_prob[mask]
 
     def construct_cov(self, cond: torch.Tensor):
         """
