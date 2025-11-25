@@ -4,11 +4,13 @@ from typing import Tuple, List
 import numpy as np
 from sympy.printing.pytorch import torch
 from torch import Tensor, nn
+from lightning import LightningModule
 
 from iwpc.encodings.encoding_base import Encoding
+from torch import optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-
-class TrainableKernelBase(ABC, nn.Module):
+class TrainableKernelBase(LightningModule, ABC):
     """
     Abstract base class for all trainable kernels. A kernel is defined as a conditional likelihood distribution that is
     convolved against some base distribution, like a detector response
@@ -17,6 +19,7 @@ class TrainableKernelBase(ABC, nn.Module):
         self,
         sample_dimension: int,
         cond_dimension: Encoding | int,
+
     ):
         """
         Parameters
@@ -30,7 +33,7 @@ class TrainableKernelBase(ABC, nn.Module):
         self.sample_dimension = sample_dimension
         self.cond_dimension = int(cond_dimension.input_shape) if isinstance(cond_dimension, Encoding) else cond_dimension
 
-    @abstractmethod
+    # @abstractmethod
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
         """
         The log probability of the samples given the conditioning information. Must be differentiable
@@ -47,7 +50,7 @@ class TrainableKernelBase(ABC, nn.Module):
             The log probability of each samples given the conditioning information with shape (N,)
         """
 
-    @abstractmethod
+    # @abstractmethod
     def _draw(self, cond: Tensor) -> Tensor:
         """
         Draw a sample from the conditional distribution for each row of conditioning information. Does not need to be
@@ -137,6 +140,36 @@ class TrainableKernelBase(ABC, nn.Module):
         """
         return ConcatenatedKernel.merge(self, other, True)
 
+    def calculate_loss(self, batch):
+        cond, targets, _ = batch
+        log_prob = self.log_prob(targets, cond)
+        return - log_prob[log_prob.isfinite()].mean()
+
+    def training_step(self, batch):
+        loss = self.calculate_loss(batch)
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch):
+        loss = self.calculate_loss(batch)
+        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = optim.Adam(self.parameters(), lr=1e-3)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": ReduceLROnPlateau(
+                    optimizer,
+                    mode="min",
+                    patience=10,
+                    factor=0.1,
+                ),
+                "monitor": "val_loss",
+                "frequency": 1,
+            },
+        }
 
 class ConcatenatedKernel(TrainableKernelBase):
     """

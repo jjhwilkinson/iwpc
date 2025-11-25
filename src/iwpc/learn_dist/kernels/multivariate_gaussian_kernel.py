@@ -3,7 +3,6 @@ import torch
 from iwpc.data_modules.pandas_directory_data_module import PandasDirDataModule
 from iwpc.encodings.matrix_encoding import MatrixEncoding
 from iwpc.encodings.trivial_encoding import TrivialEncoding
-from iwpc.learn_dist.kernels.labelled_kernel_trainer import LabelledKernelTrainer
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.models.utils import basic_model_factory
 
@@ -30,6 +29,8 @@ class MultivariateGaussianKernel(TrainableKernelBase):
             Optional model that constructs the log rotational matrix of the distribution for the given conditioning information.
         """
         super().__init__(sample_dim, cond)
+        self.cond = cond
+        self.sample_dim = sample_dim
         self.mean_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim))
         self.log_diag_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim))
         self.log_rot_model = basic_model_factory(TrivialEncoding(cond), MatrixEncoding(sample_dim))
