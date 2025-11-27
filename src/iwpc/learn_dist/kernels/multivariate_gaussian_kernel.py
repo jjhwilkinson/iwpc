@@ -9,13 +9,16 @@ from iwpc.models.utils import basic_model_factory
 
 class MultivariateGaussianKernel(TrainableKernelBase):
     """
-    A multidimentional Normal kernel with trainable mean and std deviations
+    A multidimensional Normal kernel with trainable mean and std deviations
     """
     def __init__(
         self,
         cond,
         sample_dim,
         max_chi: float = 5.,
+        mean_model = basic_model_factory,
+        log_diag_model = basic_model_factory,
+        log_rot_model = basic_model_factory,
     ):
         """
         Parameters
@@ -32,10 +35,11 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         super().__init__(sample_dim, cond)
         self.cond = cond
         self.sample_dim = sample_dim
-        self.mean_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim))
-        self.log_diag_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim))
-        self.log_rot_model = basic_model_factory(TrivialEncoding(cond), MatrixEncoding(sample_dim))
+        self.mean_model = mean_model(TrivialEncoding(cond), TrivialEncoding(sample_dim))
+        self.log_diag_model = log_diag_model(TrivialEncoding(cond), TrivialEncoding(sample_dim))
+        self.log_rot_model = log_rot_model(TrivialEncoding(cond), MatrixEncoding(sample_dim))
         self.max_chi = max_chi
+
     def _draw(self, cond: torch.Tensor) -> torch.Tensor:
         """
         Returns
