@@ -5,6 +5,7 @@ from iwpc.encodings.matrix_encoding import MatrixEncoding
 from iwpc.encodings.trivial_encoding import TrivialEncoding
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.models.utils import basic_model_factory
+from torch.nn import Sequential
 
 
 class MultivariateGaussianKernel(TrainableKernelBase):
@@ -13,12 +14,12 @@ class MultivariateGaussianKernel(TrainableKernelBase):
     """
     def __init__(
         self,
-        cond,
-        sample_dim,
+        cond: int | torch.Tensor,
+        sample_dim: int | torch.Tensor,
         max_chi: float = 5.,
-        mean_model = basic_model_factory,
-        log_diag_model = basic_model_factory,
-        log_rot_model = basic_model_factory,
+        mean_model: Sequential = basic_model_factory,
+        log_diag_model: Sequential = basic_model_factory,
+        log_rot_model: Sequential = basic_model_factory,
     ):
         """
         Parameters
@@ -67,7 +68,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         mask = (chi_sqs_M < self.max_chi ** 2) & torch.isfinite(log_prob)
         return log_prob[mask]
 
-    def construct_cov(self, cond: torch.Tensor):
+    def construct_cov(self, cond: torch.Tensor) -> torch.Tensor:
         """
         Returns
         -------
