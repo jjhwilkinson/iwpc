@@ -50,7 +50,12 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         """
         raise NotImplementedError()
 
-    def log_prob(self, samples: torch.Tensor, cond: torch.Tensor) -> torch.Tensor:
+    def log_prob(self,
+                 samples:
+                 torch.Tensor,
+                 cond: torch.Tensor,
+                 return_chi_sqs: bool = False) -> torch.Tensor:
+
         """
         Returns
         -------
@@ -65,8 +70,27 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         normed_diffs = torch.exp(- 0.5 * log_diags) * normed_diffs
         chi_sqs_M = torch.sum(normed_diffs ** 2, dim=-1)
         log_prob = - 0.5 * (chi_sqs_M + log_diags.sum(dim=-1) + self.sample_dimension*np.log(2 * np.pi))
+        return (log_prob, chi_sqs_M) if return_chi_sqs else log_prob
+
+    def calculate_loss(self, batch: tuple) -> torch.Tensor:
+        """
+        Calculate the loss of the given batch
+
+        Parameters
+        ----------
+        batch : tuple
+            Training batch
+
+        Returns
+        -------
+        Tensor
+            A tensor containing ``-mean(log_prob)`` over finite entries.
+        """
+        cond, targets, _ = batch
+        log_prob, chi_sqs_M = self.log_prob(targets, cond, return_chi_sqs = True)
         mask = (chi_sqs_M < self.max_chi ** 2) & torch.isfinite(log_prob)
-        return log_prob[mask]
+        log_prob = log_prob[mask]
+        return - log_prob[log_prob.isfinite()].mean()
 
     def construct_cov(self, cond: torch.Tensor) -> torch.Tensor:
         """
