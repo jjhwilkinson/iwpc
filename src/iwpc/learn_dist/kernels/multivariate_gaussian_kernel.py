@@ -1,11 +1,11 @@
 import numpy as np
 import torch
-from iwpc.data_modules.pandas_directory_data_module import PandasDirDataModule
 from iwpc.encodings.matrix_encoding import MatrixEncoding
 from iwpc.encodings.trivial_encoding import TrivialEncoding
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.models.utils import basic_model_factory
-from torch.nn import Sequential
+from torch.nn import Module
+from typing import Optional
 
 
 class MultivariateGaussianKernel(TrainableKernelBase):
@@ -17,9 +17,9 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         cond: int | torch.Tensor,
         sample_dim: int | torch.Tensor,
         max_chi: float = 5.,
-        mean_model: Sequential = basic_model_factory,
-        log_diag_model: Sequential = basic_model_factory,
-        log_rot_model: Sequential = basic_model_factory,
+        mean_model: Optional[Module] = None,
+        log_diag_model: Optional[Module] = None,
+        log_rot_model: Optional[Module] = None,
     ):
         """
         Parameters
@@ -36,9 +36,9 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         super().__init__(sample_dim, cond)
         self.cond = cond
         self.sample_dim = sample_dim
-        self.mean_model = mean_model(TrivialEncoding(cond), TrivialEncoding(sample_dim))
-        self.log_diag_model = log_diag_model(TrivialEncoding(cond), TrivialEncoding(sample_dim))
-        self.log_rot_model = log_rot_model(TrivialEncoding(cond), MatrixEncoding(sample_dim))
+        self.mean_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if mean_model is None else mean_model
+        self.log_diag_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if log_diag_model is None else log_diag_model
+        self.log_rot_model = basic_model_factory(TrivialEncoding(cond), MatrixEncoding(sample_dim)) if log_rot_model is None else log_rot_model
         self.max_chi = max_chi
 
     def _draw(self, cond: torch.Tensor) -> torch.Tensor:
