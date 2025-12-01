@@ -46,6 +46,9 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self.log_rot_model = basic_model_factory(TrivialEncoding(cond), MatrixEncoding(sample_dim)) if log_rot_model is None else log_rot_model
         self.max_chi = max_chi
 
+        if max_chi is None:
+            raise ValueError("max_chi must be set")
+
     def _draw(self, cond: torch.Tensor) -> torch.Tensor:
         """
         Parameters
