@@ -19,7 +19,6 @@ class TrainableKernelBase(LightningModule, ABC):
         self,
         sample_dimension: int,
         cond_dimension: Encoding | int,
-
     ):
         """
         Parameters
@@ -33,7 +32,7 @@ class TrainableKernelBase(LightningModule, ABC):
         self.sample_dimension = sample_dimension
         self.cond_dimension = int(cond_dimension.input_shape) if isinstance(cond_dimension, Encoding) else cond_dimension
 
-    # @abstractmethod
+    @abstractmethod
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
         """
         The log probability of the samples given the conditioning information. Must be differentiable
@@ -50,7 +49,7 @@ class TrainableKernelBase(LightningModule, ABC):
             The log probability of each samples given the conditioning information with shape (N,)
         """
 
-    # @abstractmethod
+    @abstractmethod
     def _draw(self, cond: Tensor) -> Tensor:
         """
         Draw a sample from the conditional distribution for each row of conditioning information. Does not need to be

@@ -26,12 +26,17 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         ----------
         cond
             The conditioning space encoding or dimension
+        sample_dim
+            The sample space encoding or dimension
+        max_chi
+            The maximum chi value to consider
         mean_model
             Optional model that constructs the mean of the distribution for the given conditioning information
         log_diag_model
             Optional model that constructs the log diagonal matrix of the distribution for the given conditioning information.
         log_rot_model
             Optional model that constructs the log rotational matrix of the distribution for the given conditioning information.
+
         """
         super().__init__(sample_dim, cond)
         self.cond = cond
@@ -43,20 +48,38 @@ class MultivariateGaussianKernel(TrainableKernelBase):
 
     def _draw(self, cond: torch.Tensor) -> torch.Tensor:
         """
+        Parameters
+        ----------
+        cond
+            The conditioning information for each sample
+
         Returns
         -------
         Tensor
             A sample from the gaussian kernel for each row of conditioning information
         """
-        raise NotImplementedError()
+        mean = self.mean_model(cond)
+        cov = self.construct_cov(self.cond)
+        vars = cov[:, range(self.sample_dim), range(self.sample_dim)]
+        sigma = torch.sqrt(vars)
+
+        return torch.normal(0, 1, size=(cond.shape[0], 1), dtype=torch.float32, device=cond.device) * sigma + mean
 
     def log_prob(self,
-                 samples:
-                 torch.Tensor,
-                 cond: torch.Tensor,
-                 return_chi_sqs: bool = False) -> torch.Tensor:
-
+        samples: torch.Tensor,
+        cond: torch.Tensor,
+        return_chi_sqs: bool = False
+    ) -> torch.Tensor:
         """
+        Parameters
+        ----------
+        samples
+            The sampling information for each sample
+        cond
+            The conditioning information for each sample
+        return_chi_sqs
+            Boolean to return the chi-square matrix of the distribution
+
         Returns
         -------
         Tensor
@@ -94,6 +117,11 @@ class MultivariateGaussianKernel(TrainableKernelBase):
 
     def construct_cov(self, cond: torch.Tensor) -> torch.Tensor:
         """
+        Parameters
+        ----------
+        cond
+            The conditioning information for each sample
+
         Returns
         -------
         Tensor
