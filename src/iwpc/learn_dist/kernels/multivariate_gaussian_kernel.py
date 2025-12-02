@@ -16,7 +16,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self,
         cond: int | torch.Tensor,
         sample_dim: int | torch.Tensor,
-        max_chi: float = 5.,
+        max_chi: float = None,
         mean_model: Optional[Module] = None,
         log_diag_model: Optional[Module] = None,
         log_rot_model: Optional[Module] = None,
@@ -46,8 +46,6 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self.log_rot_model = basic_model_factory(TrivialEncoding(cond), MatrixEncoding(sample_dim)) if log_rot_model is None else log_rot_model
         self.max_chi = max_chi
 
-        if max_chi is None:
-            raise ValueError("max_chi must be set")
 
     def _draw(self, cond: torch.Tensor) -> torch.Tensor:
         """
@@ -114,8 +112,9 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         """
         cond, targets, _ = batch
         log_prob, chi_sqs_M = self.log_prob(targets, cond, return_chi_sqs = True)
-        mask = (chi_sqs_M < self.max_chi ** 2) & torch.isfinite(log_prob)
-        log_prob = log_prob[mask]
+        if self.max_chi is not None:
+            mask = (chi_sqs_M < self.max_chi ** 2) & torch.isfinite(log_prob)
+            log_prob = log_prob[mask]
         return - log_prob[log_prob.isfinite()].mean()
 
     def construct_cov(self, cond: torch.Tensor) -> torch.Tensor:
