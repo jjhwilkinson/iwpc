@@ -16,7 +16,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self,
         cond: int | torch.Tensor,
         sample_dim: int | torch.Tensor,
-        max_chi: float = None,
+        max_chi: Optional[float] = None,
         mean_model: Optional[Module] = None,
         log_diag_model: Optional[Module] = None,
         log_rot_model: Optional[Module] = None,
