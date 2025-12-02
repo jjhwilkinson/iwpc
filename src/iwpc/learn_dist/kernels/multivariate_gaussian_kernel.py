@@ -92,9 +92,9 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         diffs = samples - mean
         normed_diffs = torch.einsum('bij,bj->bi', torch.matrix_exp(M - M.transpose(1, 2)), diffs)
         normed_diffs = torch.exp(- 0.5 * log_diags) * normed_diffs
-        chi_sqs_M = torch.sum(normed_diffs ** 2, dim=-1)
-        log_prob = - 0.5 * (chi_sqs_M + log_diags.sum(dim=-1) + self.sample_dimension*np.log(2 * np.pi))
-        return (log_prob, chi_sqs_M) if return_chi_sqs else log_prob
+        chi_sqs = torch.sum(normed_diffs ** 2, dim=-1)
+        log_prob = - 0.5 * (chi_sqs + log_diags.sum(dim=-1) + self.sample_dimension*np.log(2 * np.pi))
+        return (log_prob, chi_sqs) if return_chi_sqs else log_prob
 
     def calculate_loss(self, batch: tuple) -> torch.Tensor:
         """
@@ -111,9 +111,9 @@ class MultivariateGaussianKernel(TrainableKernelBase):
             A tensor containing ``-mean(log_prob)`` over finite entries.
         """
         cond, targets, _ = batch
-        log_prob, chi_sqs_M = self.log_prob(targets, cond, return_chi_sqs = True)
+        log_prob, chi_sqs = self.log_prob(targets, cond, return_chi_sqs = True)
         if self.max_chi is not None:
-            mask = (chi_sqs_M < self.max_chi ** 2) & torch.isfinite(log_prob)
+            mask = (chi_sqs < self.max_chi ** 2) & torch.isfinite(log_prob)
             log_prob = log_prob[mask]
         return - log_prob[log_prob.isfinite()].mean()
 
