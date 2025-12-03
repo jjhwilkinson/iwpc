@@ -2,13 +2,16 @@ from abc import ABC, abstractmethod
 from typing import Tuple, List
 
 import numpy as np
+from lightning import LightningModule
 from sympy.printing.pytorch import torch
-from torch import Tensor, nn
+from torch import Tensor
+from torch import optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from iwpc.encodings.encoding_base import Encoding
 
 
-class TrainableKernelBase(ABC, nn.Module):
+class TrainableKernelBase(LightningModule, ABC):
     """
     Abstract base class for all trainable kernels. A kernel is defined as a conditional likelihood distribution that is
     convolved against some base distribution, like a detector response
@@ -137,6 +140,83 @@ class TrainableKernelBase(ABC, nn.Module):
         """
         return ConcatenatedKernel.merge(self, other, True)
 
+    def calculate_loss(self, batch: tuple) -> Tensor:
+        """
+        Calculate the loss of the given batch
+
+        Parameters
+        ----------
+        batch : tuple
+            Training batch
+
+        Returns
+        -------
+        Tensor
+            A tensor containing ``-mean(log_prob)`` over finite entries.
+        """
+        cond, targets, _ = batch
+        log_prob = self.log_prob(targets, cond)
+        return - log_prob[log_prob.isfinite()].mean()
+
+    def training_step(self, batch: tuple) -> Tensor:
+        """
+        Lightning training step: compute and log the training loss.
+
+        Parameters
+        ----------
+        batch : tuple
+            Training batch
+
+        Returns
+        -------
+        Tensor
+            A tensor representing the training loss for this batch.
+        """
+        loss = self.calculate_loss(batch)
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch: tuple) -> Tensor:
+        """
+        Lightning validation step: compute and log the validation loss.
+
+        Parameters
+        ----------
+        batch : tuple
+            Training batch
+
+        Returns
+        -------
+        Tensor
+            A scalar tensor representing the validation loss for this batch.
+        """
+        loss = self.calculate_loss(batch)
+        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+        return loss
+
+    def configure_optimizers(self) -> dict:
+        """
+        Configure the optimizer and learning-rate scheduler.
+
+        Returns
+        -------
+        dict
+            A Lightning optimizer/scheduler config dictionary
+        """
+        optimizer = optim.Adam(self.parameters(), lr=1e-3)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": ReduceLROnPlateau(
+                    optimizer,
+                    mode="min",
+                    patience=10,
+                    factor=0.1,
+                ),
+                "monitor": "val_loss",
+                "frequency": 1,
+            },
+        }
 
 class ConcatenatedKernel(TrainableKernelBase):
     """
