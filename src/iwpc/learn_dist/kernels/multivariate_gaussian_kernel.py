@@ -29,7 +29,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         sample_dim
             The sample space encoding or dimension
         max_chi
-            The maximum chi value to consider
+            The maximum chi-squared to consider in the negative log-prob when fitting for numerical stability.
         mean_model
             Optional model that constructs the mean of the distribution for the given conditioning information
         log_diag_model
@@ -61,10 +61,10 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         """
         mean = self.mean_model(cond)
         cov = self.construct_cov(self.cond)
-        vars = cov[:, range(self.sample_dim), range(self.sample_dim)]
-        sigma = torch.sqrt(vars)
-
-        return torch.normal(0, 1, size=(cond.shape[0], 1), dtype=torch.float32, device=cond.device) * sigma + mean
+        L = torch.cholesky(cov)
+        noise = np.random.normal(0, 1, size=(cond.shape[0], cond.shape[1]))
+        correlated_noise = np.einsum('bjk,bk->bj', L, noise)
+        return correlated_noise + mean
 
     def log_prob(self,
         samples: torch.Tensor,
@@ -79,7 +79,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         cond
             The conditioning information for each sample
         return_chi_sqs
-            Boolean to return the chi-square matrix of the distribution
+            Boolean to return the chi-square of the distribution
 
         Returns
         -------
@@ -113,7 +113,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         cond, targets, _ = batch
         log_prob, chi_sqs = self.log_prob(targets, cond, return_chi_sqs = True)
         if self.max_chi is not None:
-            mask = (chi_sqs < self.max_chi ** 2) & torch.isfinite(log_prob)
+            mask = chi_sqs < self.max_chi ** 2
             log_prob = log_prob[mask]
         return - log_prob[log_prob.isfinite()].mean()
 
