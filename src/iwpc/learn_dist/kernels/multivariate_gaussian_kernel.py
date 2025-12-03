@@ -1,11 +1,13 @@
+from typing import Optional
+
 import numpy as np
 import torch
+from torch.nn import Module
+
 from iwpc.encodings.matrix_encoding import MatrixEncoding
 from iwpc.encodings.trivial_encoding import TrivialEncoding
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.models.utils import basic_model_factory
-from torch.nn import Module
-from typing import Optional
 
 
 class MultivariateGaussianKernel(TrainableKernelBase):

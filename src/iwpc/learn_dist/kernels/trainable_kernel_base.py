@@ -2,13 +2,14 @@ from abc import ABC, abstractmethod
 from typing import Tuple, List
 
 import numpy as np
-from sympy.printing.pytorch import torch
-from torch import Tensor, nn
 from lightning import LightningModule
-
-from iwpc.encodings.encoding_base import Encoding
+from sympy.printing.pytorch import torch
+from torch import Tensor
 from torch import optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+
+from iwpc.encodings.encoding_base import Encoding
+
 
 class TrainableKernelBase(LightningModule, ABC):
     """
