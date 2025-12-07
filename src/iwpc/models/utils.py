@@ -149,7 +149,11 @@ def basic_model_factory(
     return model
 
 
-def basic_model_factory_sum(specs: Iterable[Dict], **common_spec):
+def basic_model_factory_sum(
+    specs: Iterable[Dict],
+    reduction=None,
+    **common_spec,
+) -> IndependentSumModule:
     """
     Shorthand for creating a model that is the sum of a number of sub models. Useful for when you want submodules with
     different symmetries or input encodings. Models are combined using an IndependentSumModule with the average flag
@@ -159,6 +163,8 @@ def basic_model_factory_sum(specs: Iterable[Dict], **common_spec):
     ----------
     specs
         A list of dictionaries describing the sub-modules to be passed to basic_model_factory
+    reduction
+        The function used to reduce the collection of outputs from each submodule. See IndependentSumModule docstring
     common_spec
         Key word args to serve as the base for each sub-module to be passed basic_model_factory. Options are overridden
         by the specs above
@@ -173,4 +179,7 @@ def basic_model_factory_sum(specs: Iterable[Dict], **common_spec):
         base_spec = common_spec.copy()
         base_spec.update(spec)
         models.append(basic_model_factory(**base_spec))
+
+    if reduction is not None:
+        return IndependentSumModule(models, reduction=reduction)
     return IndependentSumModule(models)
