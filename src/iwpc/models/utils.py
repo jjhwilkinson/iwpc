@@ -1,7 +1,7 @@
 from typing import List, Callable, Iterable, Optional, Union, Dict
 
 import torch
-from torch import nn
+from torch import nn, Tensor
 from torch.nn import BatchNorm1d, LeakyReLU, Linear, Dropout, Module, Sequential, Flatten
 
 from .layers import RunningNormLayer, LambdaLayer
@@ -151,7 +151,7 @@ def basic_model_factory(
 
 def basic_model_factory_sum(
     specs: Iterable[Dict],
-    reduction=None,
+    reduction: Callable[[Tensor], Tensor] | None = None,
     **common_spec,
 ) -> IndependentSumModule:
     """
@@ -181,5 +181,8 @@ def basic_model_factory_sum(
         models.append(basic_model_factory(**base_spec))
 
     if reduction is not None:
-        return IndependentSumModule(models, reduction=reduction)
+        return IndependentSumModule(
+            models,
+            reduction=reduction,
+        )
     return IndependentSumModule(models)
