@@ -395,7 +395,7 @@ class PandasDirDataModule(LightningDataModule):
             raise Exception(f"{out_dir} already exists. Use `force' to overwrite.")
 
         old_file_sizes = self.file_sizes
-        with temp_directory(out_dir.parent) as tmpdir:
+        with temp_directory() as tmpdir:
             new_file_sizes = []
             for file, df in tqdm(self.file_iter(), desc=desc, total=self.num_files):
                 new_df = transformation(df.copy())
