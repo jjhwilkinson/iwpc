@@ -614,7 +614,7 @@ class PandasDirDataModule(LightningDataModule):
         file. The size of each file is not changed
         """
         rng = np.random.Generator(np.random.PCG64())
-        in_files = list(self.dataset_dir.glob('file_*.pkl'))
+        in_files = [f'file_{i}.pkl_' for i in range(self.num_files)]
         shuffled_sizes = np.zeros(len(in_files), dtype=int)
         new_ds_info = self.ds_info
         batch_sizes = np.asarray(self.ds_info["file_sizes"])
