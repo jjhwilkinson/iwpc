@@ -130,7 +130,10 @@ def temp_directory(dir_: Optional[PathLike] = None):
     """
     if dir_ is None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            yield Path(tmpdir)
+            try:
+                yield Path(tmpdir)
+            finally:
+                shutil.rmtree(tmpdir)
         return
 
     dir_ = Path(dir_)
