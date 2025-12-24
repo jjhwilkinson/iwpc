@@ -1,3 +1,5 @@
+from typing import Callable
+
 from torch import Tensor
 from torch.nn import Module
 
@@ -9,21 +11,21 @@ class ComplementModel(Module):
     """
     Group actions, G, define a projection operator S_G where S_Gf(x) = E_G[gf(x)] and expectation is taken with
     respect to the Haar measure on G. This wrapper module implements the complement projection operator on the
-    base_model, 1 - S_G. Note that the averaging procedure can significantly increase model evaluation time.
+    base_function, 1 - S_G. Note that the averaging procedure can significantly increase model evaluation time.
     """
-    def __init__(self, group: GroupAction, base_model: Module):
+    def __init__(self, group: GroupAction, base_function: Callable[[...], Tensor]):
         """
         Parameters
         ----------
         group
             A group action for which the resulting module should live in the symmetrized complement
-        base_model
-            A module
+        base_function
+            A function
         """
         super().__init__()
         self.group = group
-        self.base_model = base_model
-        self.symmetrized_model = SymmetrizedModel(group, base_model)
+        self.base_model = base_function
+        self.symmetrized_model = SymmetrizedModel(group, base_function)
 
     def forward(self, input: Tensor) -> Tensor:
         """

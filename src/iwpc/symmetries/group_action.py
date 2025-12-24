@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Tuple, Callable
 
+from torch import Tensor
 from torch.nn import Module
 
 from .group_action_element import GroupActionElement
@@ -25,38 +26,38 @@ class GroupAction(ABC, Module):
         Tuple[GroupActionElement]
         """
 
-    def symmetrize(self, base_model: Module) -> "SymmetrizedModel":
+    def symmetrize(self, base_function: Callable[[...], Tensor]) -> "SymmetrizedModel":
         """
-        Helper function to wrap a model in a SymmetrizedModel resulting in a model symmetric with respect to this group
+        Helper function to wrap a function in a SymmetrizedModel resulting in a function symmetric with respect to this group
         action
 
         Parameters
         ----------
-        base_model
-            A base model to symmetrize
+        base_function
+            A function to symmetrize
 
         Returns
         -------
         SymmetrizedModel
-            A symmetrized model
+            A symmetrized function
         """
         from .symmetrized_model import SymmetrizedModel
-        return SymmetrizedModel(self, base_model)
+        return SymmetrizedModel(self, base_function)
 
-    def complement(self, base_model: Module) -> "ComplementModel":
+    def complement(self, base_function: Callable[[...], Tensor]) -> "ComplementModel":
         """
-        Helper function to wrap a model in a ComplementModel resulting in a model in the complement of the symmetrization
+        Helper function to wrap a function in a ComplementModel resulting in a function in the complement of the symmetrization
         projection of this group action
 
         Parameters
         ----------
-        base_model
-            A base model to symmetrize
+        base_function
+            A function to symmetrize
 
         Returns
         -------
         SymmetrizedModel
-            A symmetrized model
+            A function in the complement of the symmetrization projection of this group action
         """
         from .complement_model import ComplementModel
-        return ComplementModel(self, base_model)
+        return ComplementModel(self, base_function)

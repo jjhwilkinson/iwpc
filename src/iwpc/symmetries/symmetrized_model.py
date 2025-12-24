@@ -1,3 +1,5 @@
+from typing import Callable
+
 import torch
 from torch import Tensor
 from torch.nn import Module
@@ -10,21 +12,21 @@ class SymmetrizedModel(Module):
     """
     Group actions, G, define a projection operator S_G where S_Gf(x) = E_G[gf(x)] and expectation is taken with
     respect to the Haar measure on G. This wrapper module implements the complement projection operator on the
-    base_model. The resulting module is invariant under the action of G. Note that the averaging procedure can
+    base_function. The resulting module is invariant under the action of G. Note that the averaging procedure can
     significantly increase model evaluation time.
     """
-    def __init__(self, group: GroupAction, base_model: Module):
+    def __init__(self, group: GroupAction, base_function: Callable[[...], Tensor]):
         """
         Parameters
         ----------
         group
             A group action over which the base_model should be averaged
-        base_model
-            Some base model
+        base_function
+            Some function
         """
         super().__init__()
         self.group = group
-        self.base_model = base_model
+        self.base_model = base_function
 
     def forward(self, input: Tensor) -> Tensor:
         """
