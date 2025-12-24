@@ -115,7 +115,7 @@ class FDivergenceEstimator(LightningModule, ABC):
             print('Encountered nan. Please drop a breakpoint here to debug and use self.prev_* to diagnose')
 
         self.prev_batch = batch
-        self.log(f"train_loss", loss, prog_bar=True, on_epoch=True, on_step=False)
+        self.log(f"train_loss", loss, prog_bar=True, on_epoch=True, on_step=True)
         return loss
 
     def validation_step(self, batch, batch_idx) -> None:
