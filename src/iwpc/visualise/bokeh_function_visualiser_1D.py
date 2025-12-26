@@ -1,6 +1,7 @@
 import numpy as np
 from bokeh.models import Select, HoverTool, Row
 from bokeh.plotting import figure
+from tqdm import tqdm
 
 from .bokeh_function_visualiser import BokehFunctionVisualiser
 
@@ -83,8 +84,10 @@ class BokehFunctionVisualiser1D(BokehFunctionVisualiser):
             eval_point = np.asarray(list(slider.value for slider in self.sliders))
             input = np.tile(eval_point, (self.xbins.shape[0], 1))
             input[:, self.input_scalar_ind1] = self.xbins
-            self.last_output = self.function(input)
-        self.last_scalar_output = self.output_scalar(self.last_output)
+            self.last_outputs = []
+            for i in tqdm(range(0, input.shape[0], self.batch_eval_size), desc="Evaluating function 1D"):
+                self.last_outputs.append(self.function(input[i:i + self.batch_eval_size]))
+        self.last_scalar_output = np.concat([self.output_scalar(out) for out in self.last_outputs])
         super()._update_output()
 
     def update_output(self, reuse_previous_output: bool = False) -> None:

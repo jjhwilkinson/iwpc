@@ -6,6 +6,7 @@ from bokeh.models import HoverTool, LinearColorMapper, Span, ColorBar, Row, TabP
 from bokeh.palettes import Viridis256
 from bokeh.plotting import figure
 from numpy import ndarray
+from tqdm import tqdm
 
 from .bokeh_function_visualiser import BokehFunctionVisualiser
 from .bokeh_function_visualiser_1D import BokehFunctionVisualiser1D
@@ -212,8 +213,13 @@ class BokehFunctionVisualiser2D(BokehFunctionVisualiser):
             input[..., self.input_scalar_ind1] = self.xbins[:, np.newaxis]
             input[..., self.input_scalar_ind2] = self.ybins[np.newaxis, :]
             input = input.reshape((-1, eval_point.shape[0]))
-            self.last_output = self.function(input)
-        self.last_scalar_output = self.output_scalar(self.last_output).reshape((self.xbins.shape[0], self.ybins.shape[0]))
+
+            self.last_outputs = []
+            for i in tqdm(range(0, input.shape[0], self.batch_eval_size), desc="Evaluating function 2D"):
+                self.last_outputs.append(self.function(input[i:i + self.batch_eval_size]))
+        self.last_scalar_output = np.concat([self.output_scalar(out) for out in self.last_outputs]).reshape(
+            (self.xbins.shape[0], self.ybins.shape[0])
+        )
         super()._update_output()
 
     def update_output(self, reuse_previous_output: bool = False) -> None:

@@ -18,7 +18,8 @@ from iwpc.visualise import Visualisable
 class BokehFunctionVisualiser(ABC):
     """
     Base class for a function visualiser implemented in bokeh that allows for rich interactive web-browser based plots
-    that can be hosted on a server and shared with others
+    that can be hosted on a server and shared with others. Visualised function is evaluated in batched of size
+    self.batch_eval_size
     """
     def __init__(
         self,
@@ -30,6 +31,7 @@ class BokehFunctionVisualiser(ABC):
         label_font_size: str = "13px",
         tick_font_size: str = "13px",
         selected_input_parameter_resolution: int = 256,
+        batch_eval_size: int = 32768,
     ):
         """
         Parameters
@@ -52,6 +54,8 @@ class BokehFunctionVisualiser(ABC):
             Font size of the ticks on the axes Defaults to "13px"
         selected_input_parameter_resolution
             Default resolution of selected input scalars
+        batch_eval_size
+            The batch size to use for function evaluation
         """
         self.function = fn
         self.input_scalars = input_scalars
@@ -64,6 +68,7 @@ class BokehFunctionVisualiser(ABC):
         self.label_font_size = label_font_size
         self.tick_font_size = tick_font_size
         self.selected_input_parameter_resolution = selected_input_parameter_resolution
+        self.batch_eval_size = batch_eval_size
 
         self.input_scalar_menu = OrderedDict([(scalar.label, scalar) for scalar in self.input_scalars])
         self.output_scalar_menu = OrderedDict([(scalar.label, scalar) for scalar in self.output_scalars])
