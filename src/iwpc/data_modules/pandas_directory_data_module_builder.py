@@ -45,7 +45,7 @@ class PandasDirDataModuleBuilder:
         """
         self.dataset_dir = Path(dataset_dir)
         self.force = force
-        self.file_size = int(file_size) if file_size is not None else None
+        self.file_size = file_size
         self.shuffle = shuffle
         if tags is None:
             self.tags = []
