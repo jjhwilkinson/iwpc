@@ -122,7 +122,7 @@ class TrainableKernelBase(LightningModule, ABC):
         """
         return ConcatenatedKernel.merge(self, other, False)
 
-    def __or__(self, other: 'TrainableKernelBase') -> 'ConcatenatedKernel':
+    def __add__(self, other: 'TrainableKernelBase') -> 'ConcatenatedKernel':
         """
         Syntactic sugar to merge two trainable kernels when the conditional information spaces should be concatenated.
         The sample/conditioning dimensions are concatenated and samples are drawn independently
@@ -139,6 +139,24 @@ class TrainableKernelBase(LightningModule, ABC):
             condition dimension equal to self.cond_dimension + other.cond_dimension
         """
         return ConcatenatedKernel.merge(self, other, True)
+
+    def __or__(self, other: 'TrainableKernelBase') -> 'ConditionedKernel':
+        """
+        Syntactic sugar to merge two trainable kernels when the conditional information spaces should be concatenated.
+        The sample/conditioning dimensions are concatenated and samples are drawn independently
+
+        Parameters
+        ----------
+        other
+            Another instance of TrainableKernelBase
+
+        Returns
+        -------
+        ConcatenatedKernel
+            A ConcatenatedKernel with sample dimension equal to self.sample_dimension + other.sample_dimension and
+            condition dimension equal to self.cond_dimension + other.cond_dimension
+        """
+        return ConditionedKernel(self, other)
 
     def calculate_loss(self, batch: tuple) -> Tensor:
         """
@@ -359,3 +377,113 @@ class ConcatenatedKernel(TrainableKernelBase):
         b_kernels = b.sub_kernels if (isinstance(b, ConcatenatedKernel) and b.concatenate_cond==concatenate_cond) else [b]
 
         return ConcatenatedKernel(a_kernels + b_kernels, concatenate_cond=concatenate_cond)
+
+
+class ConditionedKernel(TrainableKernelBase):
+    """
+    Utility kernel that handles the merging of two kernels by concatenating their outputs, and wherein one kernel, the
+    'sample_kernel' is conditioned on the output of the `conditioning_kernel` in addition to the shared conditioning
+    information. Useful for implementing kernels of the form p(x, y | z) = p(y | x, z) p(x | z). The 'or' operation can
+    be used as a shorthand: `sample_kernel | conditioning_kernel`
+    """
+    def __init__(self, sample_kernel: TrainableKernelBase, conditioning_kernel: TrainableKernelBase):
+        """
+        Parameters
+        ----------
+        sample_kernel
+            A kernel that satisfies sample_kernel.cond_dimension == conditioning_kernel.cond_dimension + conditioning_kernel.sample_dimension
+            the kernel should expect the first sample_kernel.cond_dimension components of its conditioning information
+            to originate from the conditioning_kernel
+        conditioning_kernel
+            A kernel that produces samples upon which the sample kernel above is additionally conditioned
+        """
+        assert sample_kernel.cond_dimension == (conditioning_kernel.sample_dimension + conditioning_kernel.cond_dimension)
+        super().__init__(
+            sample_kernel.sample_dimension + conditioning_kernel.sample_dimension,
+            conditioning_kernel.cond_dimension
+        )
+
+        self.sample_kernel = sample_kernel
+        self.conditioning_kernel = conditioning_kernel
+
+    def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
+        """
+        The log probability of the samples given the conditioning information. Calculated using p(x, y | z) = p(y | x, z) p(x | z)
+
+        Parameters
+        ----------
+        samples
+            The samples for which the log probability should be calculated. Should have shape (N, self.sample_dimension)
+        cond
+            The conditioning information for each sample. Should have shape (N, self.cond_dimension)
+
+        Returns
+        -------
+        Tensor
+            The log probability of each samples given the conditioning information with shape (N,)
+        """
+        sample_kernel_samples = samples[:, :self.sample_kernel.sample_dimension]
+        conditioning_kernel_samples = samples[:, self.sample_kernel.sample_dimension:]
+
+        sample_kernel_conditioning_info = torch.concat([
+            conditioning_kernel_samples,
+            cond,
+        ], dim=-1)
+
+        return (
+            self.sample_kernel.log_prob(sample_kernel_samples, sample_kernel_conditioning_info)
+            + self.conditioning_kernel.log_prob(conditioning_kernel_samples, cond)
+        )
+
+    def _draw(self, cond: Tensor) -> Tensor:
+        """
+        Draws samples from sample_kernel and conditioning_kernel and concatenates their output
+
+        Parameters
+        ----------
+        cond
+            The conditioning information for each sample. Should have shape (N, self.cond_dimension)
+
+        Returns
+        -------
+        Tensor
+            A sample for each row of conditioning information with shape (N, self.sample_dimension). The first
+            sample_kernel.sample_dimension components correspond to the samples produced by sample_kernel
+        """
+        conditioning_kernel_samples = self.conditioning_kernel.draw(cond)
+        sample_kernel_conditioning_info = torch.concat([
+            conditioning_kernel_samples,
+            cond,
+        ], dim=-1)
+
+        return torch.cat([
+            self.sample_kernel.draw(sample_kernel_conditioning_info),
+            conditioning_kernel_samples,
+        ], dim=-1)
+
+    def draw_with_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tensor]:
+        """
+        Draws samples from sample_kernel and conditioning_kernel and concatenates their output. Also returns the log
+        probability of said samples, see log_prob docstring
+
+        Parameters
+        ----------
+        cond
+            The conditioning information for each sample. Should have shape (N, self.cond_dimension)
+
+        Returns
+        -------
+            A sample for each row of conditioning information with shape (N, self.sample_dimension) and its
+            corresponding log_probability. See log_prob and _draw docstrings
+        """
+        conditioning_kernel_samples, conditioning_kernel_log_prob = self.conditioning_kernel.draw_with_log_prob(cond)
+        sample_kernel_conditioning_info = torch.concat([
+            conditioning_kernel_samples,
+            cond,
+        ], dim=-1)
+        sample_kernel_samples, sample_kernel_log_prob = self.sample_kernel.draw_with_log_prob(sample_kernel_conditioning_info)
+
+        return torch.cat([
+            sample_kernel_samples,
+            conditioning_kernel_samples,
+        ], dim=-1), sample_kernel_log_prob + sample_kernel_log_prob
