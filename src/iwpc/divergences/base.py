@@ -122,15 +122,15 @@ class DifferentiableFDivergence(ABC):
         pass
 
     @abstractmethod
-    def _f_dash_torch(self, x: Tensor) -> Tensor:
+    def _f_dash_given_log_torch(self, log_x: Tensor) -> Tensor:
         """
-        Implementation of the f-divergence generating function first derivative (https://arxiv.org/abs/2405.06397)
-        in pytorch
+        Implementation of the f-divergence generating function's first derivative given log(x) for numerical stability
+        (https://arxiv.org/abs/2405.06397) in pytorch
 
         Parameters
         ----------
-        x
-            A pytorch tensor
+        log_x
+            A pytorch tensor of the log of x
 
         Returns
         -------
@@ -140,20 +140,20 @@ class DifferentiableFDivergence(ABC):
         pass
 
     @abstractmethod
-    def _f_dash_np(self, x: ndarray) -> ndarray:
+    def _f_dash_given_log_np(self, log_x: ndarray) -> ndarray:
         """
-        Implementation of the f-divergence generating function first derivative (https://arxiv.org/abs/2405.06397)
-        in numpy
+        Implementation of the f-divergence generating function's first derivative given log(x) for numerical stability
+        (https://arxiv.org/abs/2405.06397) in numpy
 
         Parameters
         ----------
-        x
+        log_x
             A numpy array
 
         Returns
         -------
         ndarray
-            The values $f^'(x)$
+            The values $f^'(log(x))$
         """
         pass
 
@@ -168,7 +168,7 @@ class DifferentiableFDivergence(ABC):
 
         Returns
         -------
-        The values of $f(x)$ as a Tensor of ndarray
+        The values of $f(x)$ as a Tensor or ndarray
         """
         return self._np_or_torch(x, self._f_torch, self._f_np)
 
@@ -183,60 +183,60 @@ class DifferentiableFDivergence(ABC):
 
         Returns
         -------
-        The values of $f^*(x)$ as a Tensor of ndarray
+        The values of $f^*(x)$ as a Tensor or ndarray
         """
         return self._np_or_torch(x, self._f_conj_torch, self._f_conj_np)
 
-    def f_dash(self, x: TensorOrNDArray) -> TensorOrNDArray:
+    def f_dash_given_log(self, log_x: TensorOrNDArray) -> TensorOrNDArray:
         """
-        Returns the value of the generating function first derivative evaluated on x. Automatically uses the numpy or
-        pytorch implementation depending on the type of x.
+        Returns the value of the generating function first derivative given the log of x for numerical stability.
+        Automatically uses the numpy or pytorch implementation depending on the type of x
 
         Parameters
         ----------
-        x
+        log_x
 
         Returns
         -------
-        The values of $f^'(x)$ as a Tensor of ndarray
+        The values of $f^'(x)$ as a Tensor or ndarray
         """
-        return self._np_or_torch(x, self._f_dash_torch, self._f_dash_np)
+        return self._np_or_torch(log_x, self._f_dash_given_log_torch, self._f_dash_given_log_np)
 
-    def calculate_naive_p_summands(self, p_over_q: TensorOrNDArray) -> TensorOrNDArray:
+    def calculate_naive_p_summands_given_log(self, log_p_over_q: TensorOrNDArray) -> TensorOrNDArray:
         """
         Evaluates the function in the expectation value over the distribution p in the naive representation of the
         f-divergence (https://arxiv.org/abs/2405.06397)
 
         Parameters
         ----------
-        p_over_q
-            An estimator for the probability ratio of $\frac{p(x)}{q(x)}$
+        log_p_over_q
+            An estimator for the log-probability ratio $\log \frac{p(x)}{q(x)}$
 
         Returns
         -------
         $f^'\left(\frac{p(x)}{q(x)}\right)$ as per the notation in (https://arxiv.org/abs/2405.06397)
         """
-        return self.f_dash(p_over_q)
+        return self.f_dash_given_log(log_p_over_q)
 
-    def calculate_naive_q_summands(self, p_over_q: TensorOrNDArray) -> TensorOrNDArray:
+    def calculate_naive_q_summands_given_log(self, log_p_over_q: TensorOrNDArray) -> TensorOrNDArray:
         """
         Evaluates the function in the expectation value over the distribution q in the naive representation of the
         f-divergence (https://arxiv.org/abs/2405.06397)
 
         Parameters
         ----------
-        p_over_q
-            An estimator for the probability ratio of $\frac{p(x)}{q(x)}$
+        log_p_over_q
+            An estimator for the log-probability ratio $\log \frac{p(x)}{q(x)}$
 
         Returns
         -------
         $f^*\left(f^'\left(\frac{p(x)}{q(x)}\right)\right)$ as per the notation in (https://arxiv.org/abs/2405.06397)
         """
-        return self.f_conj(self.f_dash(p_over_q))
+        return self.f_conj(self.f_dash_given_log(log_p_over_q))
 
-    def calculate_naive_rep_summands_by_label(
+    def calculate_naive_rep_summands_given_log_by_label(
         self,
-        p_over_q: TensorOrNDArray,
+        log_p_over_q: TensorOrNDArray,
         label: TensorOrNDArray,
     ) -> Tuple[TensorOrNDArray, TensorOrNDArray]:
         """
@@ -245,24 +245,26 @@ class DifferentiableFDivergence(ABC):
 
         Parameters
         ----------
-        p_over_q
-            An estimator for the probability ratio of $\frac{p(x)}{q(x)}$
+        log_p_over_q
+            An estimator for the log-probability ratio $\log \frac{p(x)}{q(x)}$
         label
             An array labelling samples in p_over_q from p with 'False' and samples from q are identified with the label
             'True'
-
 
         Returns
         -------
         Tuple[TensorOrNDArray, TensorOrNDArray]
             The list of values to be averaged over in the naive representation of the f-divergence
         """
-        (samples_from_q,), (samples_from_p,) = split_by_mask(label, p_over_q)
-        return self.calculate_naive_p_summands(samples_from_p), self.calculate_naive_q_summands(samples_from_q)
+        (samples_from_q,), (samples_from_p,) = split_by_mask(label, log_p_over_q)
+        return (
+            self.calculate_naive_p_summands_given_log(samples_from_p),
+            self.calculate_naive_q_summands_given_log(samples_from_q)
+        )
 
-    def naive_estimate(
+    def naive_estimate_given_log(
         self,
-        p_over_q: TensorOrNDArray,
+        log_p_over_q: TensorOrNDArray,
         label: TensorOrNDArray,
         weights: TensorOrNDArray
     ) -> TensorOrNDArray:
@@ -273,8 +275,8 @@ class DifferentiableFDivergence(ABC):
 
         Parameters
         ----------
-        p_over_q
-            An estimate for the probability ratio $\frac{p(x)}{q(x)}$
+        log_p_over_q
+            An estimate for the log-probability ratio $\frac{p(x)}{q(x)}$
         label
             An array labelling samples in p_over_q from p with 'False' and samples from q are identified with the label
             'True'
@@ -287,7 +289,7 @@ class DifferentiableFDivergence(ABC):
         TensorOrNDArray
             A scalar value providing an estimate of a lower bound of $D_f(p, q)$
         """
-        p_summands, q_summands = self.calculate_naive_rep_summands_by_label(p_over_q, label)
+        p_summands, q_summands = self.calculate_naive_rep_summands_given_log_by_label(log_p_over_q, label)
         (q_weights,), (p_weights,) = split_by_mask(label, weights)
 
         Df_hat = 0.0

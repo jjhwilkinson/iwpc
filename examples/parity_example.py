@@ -100,8 +100,8 @@ def calculate_mag_x_binned_Dfs(mag_x_bins: NDArray, result: DivergenceResult) ->
         for samples, labels, weights in dataloader:
             scalar_values = [scalar(samples.numpy())]
             with torch.no_grad():
-                p_over_q = np.exp(result.best_module.model(samples)[:, 0]).numpy()
-            update_fn(scalar_values, labels.numpy(), weights.numpy(), p_over_q)
+                log_p_over_q = result.best_module.model(samples)[:, 0].numpy()
+            update_fn(scalar_values, labels.numpy(), weights.numpy(), log_p_over_q)
 
     return df_accumulator
 

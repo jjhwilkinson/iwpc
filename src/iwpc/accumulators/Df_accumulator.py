@@ -140,7 +140,7 @@ class LabeledBinaryNaiveDfAccumulator(DfAccumulator):
         if self.clip_log_p_over_q:
             p_over_q = np.exp(np.clip(np.log(p_over_q), *self.clip_log_p_over_q))
 
-        p_summands, q_summands = self.divergence.calculate_naive_rep_summands_by_label(
+        p_summands, q_summands = self.divergence.calculate_naive_rep_summands_given_log_by_label(
             p_over_q,
             labels,
         )

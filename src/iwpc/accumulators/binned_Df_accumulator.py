@@ -163,7 +163,7 @@ class BinnedDfAccumulator:
         samples: Union[NDArray, List[NDArray]],
         labels: NDArray,
         weights: NDArray,
-        p_over_q: NDArray,
+        log_p_over_q: NDArray,
     ):
         """
         Updates various internal states with validation data that allow for the estimation of the divergence between p
@@ -200,12 +200,12 @@ class BinnedDfAccumulator:
         else:
             marginalised_p = self.train_p_hist.normalised_weight_sum_hist.__getitem__(tuple(binnumber.T[:, mask]))
             marginalised_q = self.train_q_hist.normalised_weight_sum_hist.__getitem__(tuple(binnumber.T[:, mask]))
-        marginalised_p_over_q = marginalised_p / marginalised_q
-        marginalised_p_over_q[(marginalised_p == 0) & (marginalised_q == 0)] = 1.
-        cond_p_over_q = p_over_q[mask] / marginalised_p_over_q
+        marginalised_log_p_over_q = np.log(marginalised_p) - np.log(marginalised_q)
+        marginalised_log_p_over_q[(marginalised_p == 0) & (marginalised_q == 0)] = 0.
+        cond_log_p_over_q = log_p_over_q[mask] - marginalised_log_p_over_q
 
-        learned_p_summands = self.divergence.calculate_naive_p_summands(cond_p_over_q[is_p[mask]])
-        learned_q_summands = self.divergence.calculate_naive_q_summands(cond_p_over_q[is_q[mask]])
+        learned_p_summands = self.divergence.calculate_naive_p_summands_given_log(cond_log_p_over_q[is_p[mask]])
+        learned_q_summands = self.divergence.calculate_naive_q_summands_given_log(cond_log_p_over_q[is_q[mask]])
         p_result = self.perp_p_accumulator.update(
             samples[is_p],
             learned_p_summands,
@@ -453,7 +453,7 @@ class BinnedDfAccumulator:
                 self.val_learned_dists.sum_hist[1] / self.val_learned_dists.sum_hist[1].sum(),
                 yerr=normalised_weight_sum_uncertainty(
                     self.val_learned_dists.sum_hist[1],
-                    np.sqrt(self.val_learned_dists.sq_sum_hist[1, 1])
+                    np.sqrt(self.val_learned_dists.outer_product_sum_hist[1, 1])
                 ),
                 markersize=0,
                 capsize=3,
@@ -465,7 +465,7 @@ class BinnedDfAccumulator:
                 self.val_learned_dists.sum_hist[2] / self.val_learned_dists.sum_hist[2].sum(),
                 yerr=normalised_weight_sum_uncertainty(
                     self.val_learned_dists.sum_hist[2],
-                    np.sqrt(self.val_learned_dists.sq_sum_hist[2, 2])
+                    np.sqrt(self.val_learned_dists.outer_product_sum_hist[2, 2])
                 ),
                 markersize=0,
                 capsize=3,
@@ -493,7 +493,7 @@ class BinnedDfAccumulator:
                 yerr=propagate_uncertainty_through_ratio(
                     self.val_learned_dists.sum_hist[1],
                     self.val_learned_dists.sum_hist[2],
-                    self.val_learned_dists.sq_sum_hist[1:, 1:]
+                    self.val_learned_dists.outer_product_sum_hist[1:, 1:]
                 ),
                 markersize=0,
                 capsize=3,
@@ -635,5 +635,5 @@ class BinnedDfAccumulator:
                 scalar_values = [scalar(df) for scalar in self.scalars]
                 labels = df[datamodule.target_cols[0]].values.astype(bool)
                 weights = df[datamodule.weight_col].values if datamodule.weight_col else np.ones_like(labels, dtype=float)
-                p_over_q = construct_p_over_q(df, p_over_q_cols)
-                update_fn(scalar_values, labels, weights, p_over_q)
+                log_p_over_q = np.log(construct_p_over_q(df, p_over_q_cols))
+                update_fn(scalar_values, labels, weights, log_p_over_q)

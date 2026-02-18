@@ -24,8 +24,8 @@ class KLDivergence(DifferentiableFDivergence):
     def _f_conj_np(self, x):
         return np.exp(x - 1)
 
-    def _f_dash_torch(self, x):
-        return 1 + torch.log(x)
+    def _f_dash_given_log_torch(self, log_x):
+        return 1 + torch.log(log_x)
 
-    def _f_dash_np(self, x):
-        return 1 + np.log(x)
+    def _f_dash_given_log_np(self, log_x):
+        return 1 + np.log(log_x)
