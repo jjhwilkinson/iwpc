@@ -154,6 +154,16 @@ class PandasDirDataModule(LightningDataModule):
         return int(np.ceil(len(self.all_files) * self.split))
 
     @property
+    def num_validation_files(self) -> int:
+        """
+        Returns
+        -------
+        int
+            The number of validation files in this dataset
+        """
+        return self.num_files - self.num_train_files
+
+    @property
     def train_files(self):
         """
         Returns
@@ -577,7 +587,7 @@ class PandasDirDataModule(LightningDataModule):
             force=True,
         )
 
-    def rebatch_files(self, new_file_size: int) -> None:
+    def rebatch_files(self, new_file_size: int | float) -> None:
         """
         Re-arranges the data contained in dataset_dir, merging or splitting the constituent pandas dataframes so that
         all but the last dataframe has size new_file_size. Operation maintains order. Be careful not to accidentally mix
@@ -586,9 +596,16 @@ class PandasDirDataModule(LightningDataModule):
         Parameters
         ----------
         new_file_size
-            The desired new file size
+            The desired new file size. If set to -1 the dataset is placed into a single file. If given a fraction
+            between 0 and 1 then each file will contain said fraction of the total data. If given an integer >= 1 then
+            each file will contain said number of rows
         """
-        new_file_size = int(new_file_size)
+        if new_file_size == -1:
+            new_file_size = sum(self.file_sizes)
+        elif 0 < new_file_size < 1:
+            new_file_size = int(np.ceil(sum(self.file_sizes) * new_file_size))
+        else:
+            new_file_size = int(new_file_size)
         assert new_file_size > 0
         logger.info(f"Original file sizes {self.ds_info['file_sizes']}")
 
