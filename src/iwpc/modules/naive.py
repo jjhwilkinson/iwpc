@@ -45,7 +45,7 @@ class NaiveVariationalFDivergenceEstimator(FDivergenceEstimator):
 
         log_p_over_q_hat = self.model(x)[:, 0]
         clipped_p_over_q = torch.exp(torch.clip(log_p_over_q_hat, -14, 14))
-        return - self.divergence.naive_estimate(clipped_p_over_q, labels, weights)
+        return - self.divergence.naive_estimate_given_log(clipped_p_over_q, labels, weights)
 
     def _accumulate_validation_Df(self, batch: Tuple[Tensor, Tensor, Tensor]) -> None:
         """
@@ -61,7 +61,7 @@ class NaiveVariationalFDivergenceEstimator(FDivergenceEstimator):
 
         log_p_over_q_hat = self.model(x)[:, 0]
         clipped_p_over_q = torch.exp(torch.clip(log_p_over_q_hat, -14, 14))
-        p_summands, q_summands = self.divergence.calculate_naive_rep_summands_by_label(clipped_p_over_q, labels)
+        p_summands, q_summands = self.divergence.calculate_naive_rep_summands_given_log_by_label(clipped_p_over_q, labels)
         (p_weights,), (q_weights,) = split_by_mask(labels == 0, weights)
 
         self.val_p_accumulator(p_weights, p_summands)
