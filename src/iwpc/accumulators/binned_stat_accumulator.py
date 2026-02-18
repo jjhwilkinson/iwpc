@@ -1,8 +1,8 @@
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Iterable
 
 import numpy as np
 from numpy._typing import NDArray
-from scipy.stats._binned_statistic import BinnedStatisticddResult
+from scipy.stats._binned_statistic import BinnedStatisticddResult, binned_statistic_dd
 
 from .utils import (
     construct_binned_statistic_result_regular_bins,
@@ -15,7 +15,7 @@ class BinnedStatAccumulator:
     """
     Metric that tracks the sum and outer product sum of a list of features within a set of bins
     """
-    def __init__(self, num_statistics: int, bins: List[NDArray]):
+    def __init__(self, num_statistics: int, bins: Iterable[NDArray]):
         """
         Parameters
         ----------
@@ -26,17 +26,16 @@ class BinnedStatAccumulator:
             A list containing the bins in each binned dimension. The binned features are unrelated to the statistic
             features mentioned above
         """
-        if not (isinstance(bins, list) or isinstance(bins, tuple)):
-            bins = [bins]
         super().__init__()
-        self.num_statistics = num_statistics
-        self.bins = bins
-        self.hist_shape = tuple(x.shape[0]-1 for x in self.bins)
-        self.count_hist = np.zeros((self.num_statistics,) + self.hist_shape)
-        self.sum_hist = np.zeros((self.num_statistics,) + self.hist_shape)
-        self.sq_sum_hist = np.zeros((self.num_statistics, self.num_statistics) + self.hist_shape)
+        if isinstance(bins, np.ndarray):
+            bins = [bins]
 
-        assert all(is_regular_bins(b) for b in self.bins)
+        self.num_statistics = num_statistics
+        self.bins = list(bins)
+        self.hist_shape = tuple(x.shape[0]-1 for x in self.bins)
+        self.count_hist = np.zeros(self.hist_shape)
+        self.sum_hist = np.zeros((self.num_statistics,) + self.hist_shape)
+        self.outer_product_sum_hist = np.zeros((self.num_statistics, self.num_statistics) + self.hist_shape)
 
     def reset(self) -> None:
         """
@@ -44,7 +43,7 @@ class BinnedStatAccumulator:
         """
         self.count_hist *= 0
         self.sum_hist *= 0
-        self.sq_sum_hist *= 0
+        self.outer_product_sum_hist *= 0
 
     def update(
         self,
@@ -88,7 +87,7 @@ class BinnedStatAccumulator:
 
         self.count_hist += faster_binned_statistic_dd_without_overflow(
             samples,
-            values,
+            None,
             statistic='count',
             binned_statistic_result=prev_binned_statistic_result,
         )[0]
@@ -107,7 +106,7 @@ class BinnedStatAccumulator:
             statistic='sum',
             binned_statistic_result=prev_binned_statistic_result,
         )
-        self.sq_sum_hist += sq_mat_result[0].reshape(self.sq_sum_hist.shape)
+        self.outer_product_sum_hist += sq_mat_result[0].reshape(self.outer_product_sum_hist.shape)
         return prev_binned_statistic_result
 
     @property
@@ -119,7 +118,7 @@ class BinnedStatAccumulator:
             An array of shape (F, len(bins[0]) - 1, len(bins[1]) - 1, ...) containing the F average values for each
             statistic feature in each bin
         """
-        return self.sum_hist / self.count_hist
+        return self.sum_hist / self.count_hist[None]
 
     @property
     def cov_hist(self) -> NDArray:
@@ -131,7 +130,7 @@ class BinnedStatAccumulator:
             statistic features in each bin
         """
         mean_hist = self.mean_hist
-        return self.sq_sum_hist / self.count_hist - mean_hist[:, np.newaxis] * mean_hist[np.newaxis, :]
+        return self.outer_product_sum_hist / self.count_hist[None] - mean_hist[:, np.newaxis] * mean_hist[np.newaxis, :]
 
     @property
     def corr_hist(self) -> NDArray:

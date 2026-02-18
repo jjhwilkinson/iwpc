@@ -18,7 +18,7 @@ class BinnedWeightedStatAccumulator(BinnedStatAccumulator):
         Parameters
         ----------
         bins
-            A list containing a number of regularly spaced bin arrays, one for each binned feature
+            A list containing a number of bin arrays, one for each binned feature
         """
         super().__init__(2, bins)
 
@@ -92,7 +92,7 @@ class BinnedWeightedStatAccumulator(BinnedStatAccumulator):
         NDArray
             an array of shape (len(bins[0]) - 1, len(bins[1]) - 1, ...) containing the sum-of-(weights^2) in each bin
         """
-        return self.sq_sum_hist[0, 0]
+        return self.outer_product_sum_hist[0, 0]
 
     @property
     def weighted_mean_hist(self) -> NDArray:

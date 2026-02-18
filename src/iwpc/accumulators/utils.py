@@ -1,8 +1,40 @@
-from typing import List
+from typing import List, Optional, Any
 
 import numpy as np
 from numpy._typing import NDArray
 from scipy.stats._binned_statistic import BinnedStatisticddResult, binned_statistic_dd
+
+
+def construct_bin_number(
+    samples: np.ndarray,
+    bins: List[NDArray]
+) -> NDArray:
+    """
+    Constructs the bin number of the samples within the specified bins. If the bins are regular a faster implementation
+    is used but irregular bins are supported
+
+    Parameters
+    ----------
+    samples
+        A numpy array of (N, F)
+    bins
+        A list of F numpy array containing the bins in each dimension
+
+    Returns
+    -------
+    NDArray
+        A numpy array of shape (N, F) containing the bin index in each dimension
+    """
+    bin_indices = []
+    for s, b in zip(samples.T, bins):
+        if is_regular_bins(b):
+            binds = np.ceil((s - b[0]) / (b[1] - b[0])).astype(int)
+        else:
+            binds = np.searchsorted(b, s)
+
+        bin_indices.append(binds)
+
+    return np.stack(bin_indices, axis=1)
 
 
 def construct_bin_number_regular_bins(
@@ -42,15 +74,14 @@ def construct_binned_statistic_result_regular_bins(
     The scipy implementation of binned_statistic_dd does not seem to exploit regular bin sizing for faster bin indexing.
     This function constructs an instance of BinnedStatisticddResult containing the bin indices of each sample calculated
     rapidly assuming regular bin sizes. This object may be passed to binned_statistic_dd calls so the function may
-    re-use these indices
+    re-use these indices. If the provided bins are irregular, binned_statistic_dd is used directly
 
     Parameters
     ----------
     samples
         A list of samples of shape (N, F) where N denotes the batch dimension and F the feature dimension
     bins
-        A list of F arrays denoting the bins in each dimension. Bins are assumed to be regular and an error is raised
-        if they are not
+        A list of F arrays denoting the bins in each dimension.
 
     Returns
     -------
@@ -58,9 +89,8 @@ def construct_binned_statistic_result_regular_bins(
         BinnedStatisticddResult instance containing the bin indices of each sample in the format expected by
         binned_statistic_dd
     """
-    assert all(is_regular_bins(b) for b in bins)
     bins_with_overflow = [np.concatenate([[2*b[0] - b[1]], b, [2*b[-1] - b[-2]]]) for b in bins]
-    bin_numbers = np.ceil(construct_bin_number_regular_bins(samples, bins_with_overflow).T).astype(int)
+    bin_numbers = np.ceil(construct_bin_number(samples, bins_with_overflow).T).astype(int)
     bin_numbers = np.clip(bin_numbers, 0, np.asarray([b.shape[0] for b in bins_with_overflow])[:, None])
     return BinnedStatisticddResult(
         None,
@@ -72,7 +102,33 @@ def construct_binned_statistic_result_regular_bins(
     )
 
 
-def faster_binned_statistic_dd_without_overflow(samples, values, bins=None, statistic=None, binned_statistic_result=None):
+def faster_binned_statistic_dd_without_overflow(
+    samples: np.ndarray,
+    values: np.ndarray | List[np.ndarray],
+    bins: Optional[List[np.ndarray]] = None,
+    statistic: Optional[str, Any] =None,
+    binned_statistic_result: BinnedStatisticddResult | None = None,
+):
+    """
+    A slightly faster implementation of binned_statistic_dd when using regular bins
+
+    Parameters
+    ----------
+    samples
+        A numpy array of samples with shape (N, F)
+    values
+        A numpy array of samples with shape (N, D) or a list of length D containing numpy arrays of shape (N,)
+    bins
+        See the binned_statistic_dd docstring
+    statistic
+        See the binned_statistic_dd docstring
+    binned_statistic_result
+        A previous binned_statistic_dd result that can be used to re-use indices
+
+    Returns
+    -------
+    BinnedStatisticddResult
+    """
     if binned_statistic_result is None:
         binned_statistic_result = construct_binned_statistic_result_regular_bins(samples, bins)
 
@@ -83,7 +139,9 @@ def faster_binned_statistic_dd_without_overflow(samples, values, bins=None, stat
         binned_statistic_result=binned_statistic_result,
     )
 
-    slices = (slice(0, values.shape[0]),) + (( slice(1, -1),) * len(binned_statistic_result.bin_edges))
+    slices = (( slice(1, -1),) * len(binned_statistic_result.bin_edges))
+    if values is not None:
+        slices = (slice(0, values.shape[0]),) + slices
     return result.statistic[slices], result
 
 
