@@ -2,6 +2,7 @@ import torch
 from numpy._typing import ArrayLike
 from torch import Tensor
 
+from iwpc.encodings.encoding_base import Encoding
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
 
@@ -11,7 +12,7 @@ class ConstantKernel(TrainableKernelBase):
     """
     def __init__(
         self,
-        cond_dimension: int,
+        cond_dimension: int | Encoding,
         constant_value: ArrayLike,
     ):
         """

@@ -142,8 +142,8 @@ class TrainableKernelBase(LightningModule, ABC):
 
     def __or__(self, other: 'TrainableKernelBase') -> 'ConditionedKernel':
         """
-        Syntactic sugar to merge two trainable kernels when the conditional information spaces should be concatenated.
-        The sample/conditioning dimensions are concatenated and samples are drawn independently
+        Syntactic sugar to merge two trainable kernels when the samples of 'other' should be prepended to the
+        conditioning information of self. See ConditionedKernel
 
         Parameters
         ----------
@@ -152,9 +152,9 @@ class TrainableKernelBase(LightningModule, ABC):
 
         Returns
         -------
-        ConcatenatedKernel
-            A ConcatenatedKernel with sample dimension equal to self.sample_dimension + other.sample_dimension and
-            condition dimension equal to self.cond_dimension + other.cond_dimension
+        ConditionedKernel
+            A ConditionedKernel with sample dimension equal to self.sample_dimension + other.sample_dimension and
+            condition dimension equal to other.cond_dimension
         """
         return ConditionedKernel(self, other)
 
@@ -293,7 +293,7 @@ class ConcatenatedKernel(TrainableKernelBase):
 
     def _draw(self, cond: Tensor) -> Tensor:
         """
-        Draws samples from each sub-kernel and concatenates the them
+        Draws samples from each sub-kernel and concatenates them
 
         Parameters
         ----------
