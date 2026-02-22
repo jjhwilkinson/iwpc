@@ -16,6 +16,7 @@ class TrainableKernelBase(LightningModule, ABC):
     Abstract base class for all trainable kernels. A kernel is defined as a conditional likelihood distribution that is
     convolved against some base distribution, like a detector response
     """
+
     def __init__(
         self,
         sample_dimension: int,
@@ -31,7 +32,8 @@ class TrainableKernelBase(LightningModule, ABC):
         """
         super().__init__()
         self.sample_dimension = sample_dimension
-        self.cond_dimension = int(cond_dimension.input_shape) if isinstance(cond_dimension, Encoding) else cond_dimension
+        self.cond_dimension = int(cond_dimension.input_shape) if isinstance(cond_dimension,
+                                                                            Encoding) else cond_dimension
 
     @abstractmethod
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
@@ -236,12 +238,14 @@ class TrainableKernelBase(LightningModule, ABC):
             },
         }
 
+
 class ConcatenatedKernel(TrainableKernelBase):
     """
     Utility kernel that merges any number of sub-kernels to produce samples that are concatenations of samples drawn
     from the sub-kernels. Since samples are drawn independently, the log probability of each sample can be calculated
     automatically as an independent sum
     """
+
     def __init__(self, sub_kernels: List[TrainableKernelBase], concatenate_cond=False):
         """
         Parameters
@@ -252,7 +256,8 @@ class ConcatenatedKernel(TrainableKernelBase):
             Whether the conditioning information spaced should be concatenated, or are the same for all sub-kernels
         """
         assert concatenate_cond or all(k.cond_dimension == sub_kernels[0].cond_dimension for k in sub_kernels)
-        cond_dimension = sum(k.cond_dimension for k in sub_kernels) if concatenate_cond else sub_kernels[0].cond_dimension
+        cond_dimension = sum(k.cond_dimension for k in sub_kernels) if concatenate_cond else sub_kernels[
+            0].cond_dimension
         super().__init__(sum(k.sample_dimension for k in sub_kernels), cond_dimension)
 
         for i, sub_kernel in enumerate(sub_kernels):
@@ -260,10 +265,10 @@ class ConcatenatedKernel(TrainableKernelBase):
         self.sub_kernels = sub_kernels
         self.concatenate_cond = concatenate_cond
         cum_sample_sizes = np.cumsum([0] + [k.sample_dimension for k in sub_kernels])
-        self.sample_edges = [slice(cum_sample_sizes[i], cum_sample_sizes[i+1]) for i in range(len(sub_kernels))]
+        self.sample_edges = [slice(cum_sample_sizes[i], cum_sample_sizes[i + 1]) for i in range(len(sub_kernels))]
         if self.concatenate_cond:
             cum_cond_sizes = np.cumsum([0] + [k.cond_dimension for k in sub_kernels])
-            self.cond_edges = [slice(cum_cond_sizes[i], cum_cond_sizes[i+1]) for i in range(len(sub_kernels))]
+            self.cond_edges = [slice(cum_cond_sizes[i], cum_cond_sizes[i + 1]) for i in range(len(sub_kernels))]
         else:
             self.cond_edges = [slice(0, self.cond_dimension) for _ in range(len(sub_kernels))]
 
@@ -357,7 +362,7 @@ class ConcatenatedKernel(TrainableKernelBase):
         """
         Merges two trainable kernels into a single ConcatenatedKernel. If either sub-kernel is itself a
         ConcatenatedKernel with the same value of concatenate_cond, the sub-kernels are uncurried
-        
+
         Parameters
         ----------
         a
@@ -367,14 +372,16 @@ class ConcatenatedKernel(TrainableKernelBase):
         concatenate_cond
             Whether the conditioning information for each sample-kernel should be concatenated or assume they're the
             same
-        
+
         Returns
         -------
         ConcatenatedKernel
             Containing the sub-kernels
         """
-        a_kernels = a.sub_kernels if (isinstance(a, ConcatenatedKernel) and a.concatenate_cond==concatenate_cond) else [a]
-        b_kernels = b.sub_kernels if (isinstance(b, ConcatenatedKernel) and b.concatenate_cond==concatenate_cond) else [b]
+        a_kernels = a.sub_kernels if (
+                isinstance(a, ConcatenatedKernel) and a.concatenate_cond == concatenate_cond) else [a]
+        b_kernels = b.sub_kernels if (
+                isinstance(b, ConcatenatedKernel) and b.concatenate_cond == concatenate_cond) else [b]
 
         return ConcatenatedKernel(a_kernels + b_kernels, concatenate_cond=concatenate_cond)
 
