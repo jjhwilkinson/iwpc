@@ -12,7 +12,32 @@ from iwpc.models.utils import basic_model_factory
 
 class MultivariateGaussianKernel(TrainableKernelBase):
     """
-    A multidimensional Normal kernel with trainable mean and std deviations
+    Multivariate normal kernel with mean and covariance conditioned on `cond`. The
+    mean is predicted by `mean_model(cond)`. The covariance is parameterised as
+    “std-dev × correlation × std-dev”.
+
+    
+    An explanation of the covariance matrix's parameterisation is as follows:
+
+    The std-dev is produced by `log_std_model(cond)` and exponentiated so it stays 
+    positive. The correlation matrix is built in a way that guarantees it is 
+    well-defined; we start from a positive diagonal spectrum, given by 
+    `exp(log_diag_model(cond))`.
+    
+    We then rotate it using an orthogonal mixing matrix derived from 
+    `log_rot_model(cond)`, via the antisymmetric part and a matrix exponential, 
+    to introduce correlations while preserving positive definiteness.
+    
+    We then re-enforce normalisation so the diagonal entries are 1 by dividing by 
+    the square root of the diagonal entries, giving a pure correlation matrix. 
+    Finally, the std-dev scales are applied on both axes, to give the final 
+    covariance matrix.
+
+    We use this parameterisation because it lets the networks output unconstrained 
+    values while still producing a valid covariance; symmetric and positive definite. 
+    It also separates standard deviations from correlations, which is typically easier 
+    to learn and tends to be more numerically stable than learning an arbitrary full 
+    matrix directly.
     """
     def __init__(
         self,
@@ -22,6 +47,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         mean_model: Optional[Module] = None,
         log_diag_model: Optional[Module] = None,
         log_rot_model: Optional[Module] = None,
+        log_std_model: Optional[Module] = None,
     ):
         """
         Parameters
@@ -38,7 +64,8 @@ class MultivariateGaussianKernel(TrainableKernelBase):
             Optional model that constructs the log diagonal matrix of the distribution for the given conditioning information.
         log_rot_model
             Optional model that constructs the log rotational matrix of the distribution for the given conditioning information.
-
+        log_std_model
+            Optional model that constructs the log standard deviation of the distribution for the given conditioning information.
         """
         super().__init__(sample_dim, cond)
         self.cond = cond
@@ -46,7 +73,9 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self.mean_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if mean_model is None else mean_model
         self.log_diag_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if log_diag_model is None else log_diag_model
         self.log_rot_model = basic_model_factory(TrivialEncoding(cond), MatrixEncoding(sample_dim)) if log_rot_model is None else log_rot_model
+        self.log_std_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if log_std_model is None else log_std_model
         self.max_chi = max_chi
+
 
 
     def _draw(self, cond: torch.Tensor) -> torch.Tensor:
@@ -68,10 +97,12 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         correlated_noise = np.einsum('bjk,bk->bj', L, noise)
         return correlated_noise + mean
 
+
     def log_prob(self,
         samples: torch.Tensor,
         cond: torch.Tensor,
-        return_chi_sqs: bool = False
+        return_chi_sqs: bool = False,
+        batch_idx: Optional[int] = None
     ) -> torch.Tensor:
         """
         Parameters
@@ -90,13 +121,22 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         """
         M = self.log_rot_model(cond)
         mean = self.mean_model(cond)
+        log_std = self.log_std_model(cond)
         log_diags = self.log_diag_model(cond)
-        diffs = samples - mean
-        normed_diffs = torch.einsum('bij,bj->bi', torch.matrix_exp(M - M.transpose(1, 2)), diffs)
+
+        diffs = (samples - mean) / torch.exp(log_std)
+
+        rot = torch.matrix_exp(M - M.transpose(1, 2))
+        diags = torch.exp(log_diags)
+        cov_tilda = torch.einsum('bij,bj,bjk->bik', rot.transpose(1, 2), diags, rot)
+        S = torch.sqrt(torch.diagonal(cov_tilda, dim1=1, dim2=2))
+
+        normed_diffs = torch.einsum('bij,bj->bi', torch.matrix_exp(M - M.transpose(1, 2)), diffs*S)
         normed_diffs = torch.exp(- 0.5 * log_diags) * normed_diffs
         chi_sqs = torch.sum(normed_diffs ** 2, dim=-1)
-        log_prob = - 0.5 * (chi_sqs + log_diags.sum(dim=-1) + self.sample_dimension*np.log(2 * np.pi))
+        log_prob = - 0.5 * (chi_sqs +  2*log_std.sum(dim=-1) - 2*torch.log(S).sum(dim=-1) + log_diags.sum(dim=-1) + self.sample_dimension*np.log(2 * np.pi))
         return (log_prob, chi_sqs) if return_chi_sqs else log_prob
+
 
     def calculate_loss(self, batch: tuple) -> torch.Tensor:
         """
@@ -117,7 +157,8 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         if self.max_chi is not None:
             mask = chi_sqs < self.max_chi ** 2
             log_prob = log_prob[mask]
-        return - log_prob[log_prob.isfinite()].mean()
+        return  - log_prob[log_prob.isfinite()].mean()
+
 
     def construct_cov(self, cond: torch.Tensor) -> torch.Tensor:
         """
@@ -133,7 +174,13 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         """
         M = self.log_rot_model(cond)
         log_diags = self.log_diag_model(cond)
+        log_std = self.log_std_model(cond)
+
         rot = torch.matrix_exp(M - M.transpose(1, 2))
         diags = torch.exp(log_diags)
-        cov = torch.einsum('bij,bj,bjk->bik', rot.transpose(1, 2), diags, rot)
+        cov_tilda = torch.einsum('bij,bj,bjk->bik', rot.transpose(1, 2), diags, rot)
+        S = torch.sqrt(torch.diagonal(cov_tilda, dim1=1, dim2=2))  # (B,d)
+
+        std = torch.exp(log_std)
+        cov = cov_tilda * (std*S).unsqueeze(-2) * (std*S).unsqueeze(-1)
         return cov
