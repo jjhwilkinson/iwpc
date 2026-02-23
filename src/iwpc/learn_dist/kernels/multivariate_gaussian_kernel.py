@@ -11,8 +11,6 @@ from iwpc.encodings.trivial_encoding import TrivialEncoding
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.models.utils import basic_model_factory
 
-from iwpc.models.layers import ConstantScaleLayer
-
 
 class MultivariateGaussianKernel(TrainableKernelBase):
     """
@@ -43,6 +41,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
     to learn and tends to be more numerically stable than learning an arbitrary full 
     matrix directly.
     """
+
     def __init__(
         self,
         cond: int | torch.Tensor,
@@ -84,8 +83,6 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self.log_std_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if log_std_model is None else log_std_model
         self.max_chi = max_chi
         self.initial_guess(data) if data is not None else None
-
-
 
     def _draw(self, cond: torch.Tensor) -> torch.Tensor:
         """
@@ -150,7 +147,6 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         samples: torch.Tensor,
         cond: torch.Tensor,
         return_chi_sqs: bool = False,
-        batch_idx: Optional[int] = None
     ) -> torch.Tensor:
         """
         Parameters
@@ -185,7 +181,6 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         log_prob = - 0.5 * (chi_sqs +  2*log_std.sum(dim=-1) - 2*torch.log(S).sum(dim=-1) + log_diags.sum(dim=-1) + self.sample_dimension*np.log(2 * np.pi))
         return (log_prob, chi_sqs) if return_chi_sqs else log_prob
 
-
     def calculate_loss(self, batch: tuple) -> torch.Tensor:
         """
         Calculate the loss of the given batch
@@ -206,7 +201,6 @@ class MultivariateGaussianKernel(TrainableKernelBase):
             mask = chi_sqs < self.max_chi ** 2
             log_prob = log_prob[mask]
         return  - log_prob[log_prob.isfinite()].mean()
-
 
     def construct_cov(self, cond: torch.Tensor) -> torch.Tensor:
         """
