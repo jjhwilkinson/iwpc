@@ -51,7 +51,7 @@ def initial_guess(
 
     mean_scale = np.sqrt(np.diag(cov))
     log_diag_shift = np.log(corr_diagonal)
-    log_rot_shift = 0.5 * logm(corr_rotation).reshape(-1)
+    log_rot_shift = logm(corr_rotation).reshape(-1)
     log_std_shift = np.log(np.sqrt(np.diag(cov)))
 
     return mean_scale, log_diag_shift, log_rot_shift, log_std_shift
