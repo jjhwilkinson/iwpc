@@ -1,15 +1,60 @@
 from typing import Optional
 
 import numpy as np
-from numpy import ndarray
 import torch
-from torch.nn import Module
+from numpy import ndarray
 from scipy.linalg import logm
+from torch.nn import Module
 
 from iwpc.encodings.matrix_encoding import MatrixEncoding
 from iwpc.encodings.trivial_encoding import TrivialEncoding
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
+from iwpc.models.layers import ConstantScaleLayer
 from iwpc.models.utils import basic_model_factory
+
+
+def initial_guess(
+    cov: Optional[ndarray] = None,
+    data: Optional[ndarray] = None,
+) -> tuple[ndarray, ndarray, ndarray, ndarray]:
+    """
+    Compute initialisation parameters for the smearing kernel.
+
+    Parameters
+    ----------
+    data : PandasDirDataModule
+        The data to compute the initialisation parameters for.
+    cov: ndarray | None
+        The covariance matrix to compute the initialisation parameters for.
+
+    Returns
+    -------
+    mean_scale : numpy.ndarray
+        The square roots of the diagonal entries of the covariance matrix, i.e. the
+        per-parameter standard deviations, used to scale the mean model outputs.
+
+    log_diag_shift : numpy.ndarray
+        The logarithm of the eigenvalues of the correlation matrix, used as an initial
+        shift for the log-diagonal covariance model.
+
+    log_rot_shift : numpy.ndarray
+        Half of the matrix logarithm of the eigenvector matrix of the correlation
+        (flattened to 1D), used as an initial shift for the rotation model.
+
+    log_std_shift : numpy.ndarray
+        The logarithm of the standard deviations (square roots of the covariance
+        diagonal), used as an initial shift for the log-standard-deviation model.
+    """
+    cov = np.cov(data) if data is not None else cov
+    corr = cov / np.sqrt(np.diag(cov))[:, None] / np.sqrt(np.diag(cov))[None, :]
+    corr_diagonal, corr_rotation = np.linalg.eigh(corr)
+
+    mean_scale = np.sqrt(np.diag(cov))
+    log_diag_shift = np.log(corr_diagonal)
+    log_rot_shift = 0.5 * logm(corr_rotation).reshape(-1)
+    log_std_shift = np.log(np.sqrt(np.diag(cov)))
+
+    return mean_scale, log_diag_shift, log_rot_shift, log_std_shift
 
 
 class MultivariateGaussianKernel(TrainableKernelBase):
@@ -51,7 +96,6 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         log_diag_model: Optional[Module] = None,
         log_rot_model: Optional[Module] = None,
         log_std_model: Optional[Module] = None,
-        data: Optional[ndarray] = None,
     ):
         """
         Parameters
@@ -70,9 +114,6 @@ class MultivariateGaussianKernel(TrainableKernelBase):
             Optional model that constructs the log rotational matrix of the distribution for the given conditioning information.
         log_std_model
             Optional model that constructs the log standard deviation of the distribution for the given conditioning information.
-        data
-            Optional data array used to initialise the sub-model output shifts/scales via `initial_guess`. If provided, `initial_guess` 
-            is called automatically during construction.
         """
         super().__init__(sample_dim, cond)
         self.cond = cond
@@ -82,7 +123,6 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self.log_rot_model = basic_model_factory(TrivialEncoding(cond), MatrixEncoding(sample_dim)) if log_rot_model is None else log_rot_model
         self.log_std_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if log_std_model is None else log_std_model
         self.max_chi = max_chi
-        self.initial_guess(data) if data is not None else None
 
     def _draw(self, cond: torch.Tensor) -> torch.Tensor:
         """
@@ -103,9 +143,13 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         correlated_noise = np.einsum('bjk,bk->bj', L, noise)
         return correlated_noise + mean
 
-    def initial_guess(self,
-        data: ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    @classmethod
+    def initialise(
+        cls,
+        data: ndarray,
+        cond: int | torch.Tensor,
+        **kwargs,
+    ) -> "MultivariateGaussianKernel":
         """
         Compute initialisation parameters for the smearing kernel.
 
@@ -113,35 +157,87 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         ----------
         data : ndarray
             The data to compute the initialisation parameters for.
+        cond: int | torch.Tensor
+            The conditioning information for each sample
 
         Returns
         -------
-        mean_scale : numpy.ndarray
-            The square roots of the diagonal entries of the covariance matrix, i.e. the
-            per-parameter standard deviations, used to scale the mean model outputs.
-
-        log_diag_shift : numpy.ndarray
-            The logarithm of the eigenvalues of the correlation matrix, used as an initial
-            shift for the log-diagonal covariance model.
-
-        log_rot_shift : numpy.ndarray
-            Half of the matrix logarithm of the eigenvector matrix of the correlation
-            (flattened to 1D), used as an initial shift for the rotation model.
-
-        log_std_shift : numpy.ndarray
-            The logarithm of the standard deviations (square roots of the covariance
-            diagonal), used as an initial shift for the log-standard-deviation model.
+        MultivariateGaussianKernel
+            An initialized instance of the `MultivariateGaussianKernel` class with models
+            and parameters derived from the input data or user-provided models.
         """
         cov = np.cov(data)
-        corr = cov / np.sqrt(np.diag(cov))[:, None] / np.sqrt(np.diag(cov))[None, :]
-        corr_diagonal, corr_rotation = np.linalg.eigh(corr)
+        mean = np.mean(data, axis=0)
+        return cls.initialise_cov(cov, mean, cond, **kwargs)
 
-        mean_scale = np.sqrt(np.diag(cov))
-        log_diag_shift =np.log(corr_diagonal)
-        log_rot_shift = 0.5 * logm(corr_rotation).reshape(-1)
-        log_std_shift = np.log(np.sqrt(np.diag(cov)))
+    @classmethod
+    def initialise_cov(
+        cls,
+        cov: ndarray,
+        mean: ndarray,
+        cond: int | torch.Tensor,
+        mean_model: Optional[Module] = None,
+        log_diag_model: Optional[Module] = None,
+        log_rot_model: Optional[Module] = None,
+        log_std_model: Optional[Module] = None,
+        **kwargs,
+    ) -> "MultivariateGaussianKernel":
 
-        return mean_scale, log_diag_shift, log_rot_shift, log_std_shift
+        """
+        Initializes a multivariate Gaussian kernel with optional user-defined models for
+        mean, log diagonal, log rotation, and log standard deviation.
+
+        Parameters
+        ----------
+        cov : ndarray
+            Covariance matrix. Its shape should be (sample_dim, sample_dim).
+        mean: ndarray | None
+            Mean vector. Its shape should be (sample_dim,).
+        cond: int | torch.Tensor
+            The conditioning information for each sample.
+
+        Returns
+        -------
+        MultivariateGaussianKernel
+            An initialized instance of the `MultivariateGaussianKernel` class with models
+            and parameters derived from the input data or user-provided models.
+        """
+        sample_dim = cov.shape[0]
+        mean_scale, log_diag_shift, log_rot_shift, log_std_shift = initial_guess(cov)
+
+        mean_model = basic_model_factory(
+            TrivialEncoding(cond),
+            TrivialEncoding(sample_dim),
+            final_layers=[ConstantScaleLayer(scale=mean_scale, shift=mean)],
+        ) if mean_model is None else mean_model
+
+        log_diag_model = basic_model_factory(
+            TrivialEncoding(cond),
+            TrivialEncoding(sample_dim),
+            final_layers=[ConstantScaleLayer(shift=log_diag_shift)],
+        ) if log_diag_model is None else log_diag_model
+
+        log_rot_model = basic_model_factory(
+            TrivialEncoding(cond),
+            MatrixEncoding(sample_dim),
+            final_layers=[ConstantScaleLayer(shift=log_rot_shift)],
+        ) if log_rot_model is None else log_rot_model
+
+        log_std_model = basic_model_factory(
+            TrivialEncoding(cond),
+            TrivialEncoding(sample_dim),
+            final_layers=[ConstantScaleLayer(shift=log_std_shift)],
+        ) if log_std_model is None else log_std_model
+
+        return cls(
+            cond=cond,
+            sample_dim=sample_dim,
+            mean_model=mean_model,
+            log_diag_model=log_diag_model,
+            log_rot_model=log_rot_model,
+            log_std_model=log_std_model,
+            **kwargs,
+        )
 
     def log_prob(self,
         samples: torch.Tensor,
