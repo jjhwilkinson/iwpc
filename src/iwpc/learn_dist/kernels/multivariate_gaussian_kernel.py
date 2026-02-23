@@ -6,7 +6,7 @@ from numpy import ndarray
 from scipy.linalg import logm
 from torch.nn import Module
 
-from iwpc.encodings.matrix_encoding import MatrixEncoding
+from iwpc.encodings.antisymmetric_matrix_encoding import AntisymMatrixEncoding
 from iwpc.encodings.trivial_encoding import TrivialEncoding
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.models.layers import ConstantScaleLayer
@@ -120,7 +120,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self.sample_dim = sample_dim
         self.mean_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if mean_model is None else mean_model
         self.log_diag_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if log_diag_model is None else log_diag_model
-        self.log_rot_model = basic_model_factory(TrivialEncoding(cond), MatrixEncoding(sample_dim)) if log_rot_model is None else log_rot_model
+        self.log_rot_model = basic_model_factory(TrivialEncoding(cond), AntisymMatrixEncoding(sample_dim)) if log_rot_model is None else log_rot_model
         self.log_std_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if log_std_model is None else log_std_model
         self.max_chi = max_chi
 
@@ -219,7 +219,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
 
         log_rot_model = basic_model_factory(
             TrivialEncoding(cond),
-            MatrixEncoding(sample_dim),
+            AntisymMatrixEncoding(sample_dim),
             final_layers=[ConstantScaleLayer(shift=log_rot_shift)],
         ) if log_rot_model is None else log_rot_model
 
@@ -266,13 +266,13 @@ class MultivariateGaussianKernel(TrainableKernelBase):
 
         diffs = (samples - mean) / torch.exp(log_std)
 
-        rot = torch.matrix_exp(M - M.transpose(1, 2))
+        rot = torch.matrix_exp(M)
         diags = torch.exp(log_diags)
         cov_tilda = torch.einsum('bij,bj,bjk->bik', rot.transpose(1, 2), diags, rot)
         S = torch.sqrt(torch.diagonal(cov_tilda, dim1=1, dim2=2))
 
-        normed_diffs = torch.einsum('bij,bj->bi', torch.matrix_exp(M - M.transpose(1, 2)), diffs*S)
-        normed_diffs = torch.exp(- 0.5 * log_diags) * normed_diffs
+        normed_diffs = torch.einsum('bij,bj->bi', torch.matrix_exp(M), diffs*S)
+        normed_diffs = torch.exp(log_diags) * normed_diffs
         chi_sqs = torch.sum(normed_diffs ** 2, dim=-1)
         log_prob = - 0.5 * (chi_sqs +  2*log_std.sum(dim=-1) - 2*torch.log(S).sum(dim=-1) + log_diags.sum(dim=-1) + self.sample_dimension*np.log(2 * np.pi))
         return (log_prob, chi_sqs) if return_chi_sqs else log_prob
@@ -314,7 +314,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         log_diags = self.log_diag_model(cond)
         log_std = self.log_std_model(cond)
 
-        rot = torch.matrix_exp(M - M.transpose(1, 2))
+        rot = torch.matrix_exp(M)
         diags = torch.exp(log_diags)
         cov_tilda = torch.einsum('bij,bj,bjk->bik', rot.transpose(1, 2), diags, rot)
         S = torch.sqrt(torch.diagonal(cov_tilda, dim1=1, dim2=2))  # (B,d)
