@@ -4,17 +4,19 @@ from typing import List, Optional, Callable
 import torch
 from torch import nn
 
+from iwpc.encodings.encoding_base import Encoding
+
 
 class IndependentSumModule(nn.Module):
     """
     Utility module that wraps a list of submodules. At evaluation time, each submodule is evaluated on a configurable
-    subset of the input features, and the submodule output sum is returned
+    subset of the input features, and an encoded average of the submodule outputs is returned
     """
     def __init__(
         self,
         sub_modules: List[nn.Module],
         feature_indices: Optional[List[List[int]]] = None,
-        reduction: Callable[[torch.Tensor], torch.Tensor] = partial(torch.mean, dim=-1),
+        output_encoding: Encoding | None = None,
     ):
         """
         Parameters
@@ -26,9 +28,8 @@ class IndependentSumModule(nn.Module):
             sub_modules and each entry must correspond to the list of indices within the set of overall input features
             that each submodule expects to be evaluated on. Each entry may also be None in which case the corresponding
             model is evaluated on all input features
-        reduction
-            The function used to reduce the collection of outputs from each submodule. Is passed a Tensor where the last
-            dimension indexes the submodules. Defaults to a mean over the submodules
+        output_encoding
+            An optional encoding to apply to the resulting average over sub_module outputs
         """
         super().__init__()
         assert feature_indices is None or len(sub_modules) == len(feature_indices)
@@ -37,7 +38,6 @@ class IndependentSumModule(nn.Module):
 
         self.models = sub_modules
         self.training_indices = []
-        self.reduction = reduction
         for i, (indices, model) in enumerate(zip(feature_indices, self.models)):
             if indices is not None:
                 self.register_buffer(f"indices_{i}", torch.tensor(indices, dtype=torch.long))
@@ -45,6 +45,7 @@ class IndependentSumModule(nn.Module):
             else:
                 self.training_indices.append(None)
             self.register_module(f"model_{i}", model)
+        self.output_encoding = output_encoding
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -64,5 +65,7 @@ class IndependentSumModule(nn.Module):
                 outs.append(model(x[:, indices]))
             else:
                 outs.append(model(x))
-        outs = torch.stack(outs, dim=-1)
-        return self.reduction(outs)
+        outs = torch.mean(torch.stack(outs, dim=-1), dim=-1)
+        if self.output_encoding is not None:
+            outs = self.output_encoding(outs)
+        return outs

@@ -1,3 +1,4 @@
+from functools import partial
 from typing import List, Callable, Iterable, Optional, Union, Dict
 
 import torch
@@ -6,6 +7,7 @@ from torch.nn import BatchNorm1d, LeakyReLU, Linear, Dropout, Module, Sequential
 
 from .layers import RunningNormLayer, LambdaLayer
 from ..encodings.encoding_base import Encoding
+from ..encodings.trivial_encoding import TrivialEncoding
 from ..modules.utility_modules.independent_sum_module import IndependentSumModule
 from ..symmetries.group_action import GroupAction
 from ..types import Shape
@@ -151,20 +153,20 @@ def basic_model_factory(
 
 def basic_model_factory_sum(
     specs: Iterable[Dict],
-    reduction: Callable[[Tensor], Tensor] | None = None,
+    output: Encoding | int,
     **common_spec,
 ) -> IndependentSumModule:
     """
     Shorthand for creating a model that is the sum of a number of sub models. Useful for when you want submodules with
-    different symmetries or input encodings. Models are combined using an IndependentSumModule with the average flag
-    set to True
+    different symmetries or input encodings. Models are combined using an IndependentSumModule, and the final output is
+    encoded using the 'output' parameter
 
     Parameters
     ----------
     specs
         A list of dictionaries describing the sub-modules to be passed to basic_model_factory
-    reduction
-        The function used to reduce the collection of outputs from each submodule. See IndependentSumModule docstring
+    output
+        The output encoding of the resulting model. Defaults to a TrivialEncoding if an integer is provided
     common_spec
         Key word args to serve as the base for each sub-module to be passed basic_model_factory. Options are overridden
         by the specs above
@@ -174,15 +176,16 @@ def basic_model_factory_sum(
     -------
     IndependentSumModule
     """
-    models = []
-    for spec in specs:
-        base_spec = common_spec.copy()
-        base_spec.update(spec)
-        models.append(basic_model_factory(**base_spec))
+    output = TrivialEncoding(output) if isinstance(output, int) else output
 
-    if reduction is not None:
-        return IndependentSumModule(
-            models,
-            reduction=reduction,
-        )
-    return IndependentSumModule(models)
+    models = []
+    for spec_mods in specs:
+        spec = common_spec.copy()
+        spec.update(spec_mods)
+        spec['output'] = output.input_shape
+        models.append(basic_model_factory(**spec))
+
+    return IndependentSumModule(
+        models,
+        output_encoding=output,
+    )
