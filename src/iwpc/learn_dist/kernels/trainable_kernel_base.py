@@ -32,8 +32,7 @@ class TrainableKernelBase(LightningModule, ABC):
         """
         super().__init__()
         self.sample_dimension = sample_dimension
-        self.cond_dimension = int(cond_dimension.input_shape) if isinstance(cond_dimension,
-                                                                            Encoding) else cond_dimension
+        self.cond_dimension = int(cond_dimension.input_shape) if isinstance(cond_dimension, Encoding) else cond_dimension
 
     @abstractmethod
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
@@ -238,8 +237,7 @@ class ConcatenatedKernel(TrainableKernelBase):
             Whether the conditioning information spaced should be concatenated, or are the same for all sub-kernels
         """
         assert concatenate_cond or all(k.cond_dimension == sub_kernels[0].cond_dimension for k in sub_kernels)
-        cond_dimension = sum(k.cond_dimension for k in sub_kernels) if concatenate_cond else sub_kernels[
-            0].cond_dimension
+        cond_dimension = sum(k.cond_dimension for k in sub_kernels) if concatenate_cond else sub_kernels[0].cond_dimension
         super().__init__(sum(k.sample_dimension for k in sub_kernels), cond_dimension)
 
         for i, sub_kernel in enumerate(sub_kernels):
@@ -360,9 +358,7 @@ class ConcatenatedKernel(TrainableKernelBase):
         ConcatenatedKernel
             Containing the sub-kernels
         """
-        a_kernels = a.sub_kernels if (
-                isinstance(a, ConcatenatedKernel) and a.concatenate_cond == concatenate_cond) else [a]
-        b_kernels = b.sub_kernels if (
-                isinstance(b, ConcatenatedKernel) and b.concatenate_cond == concatenate_cond) else [b]
+        a_kernels = a.sub_kernels if (isinstance(a, ConcatenatedKernel) and a.concatenate_cond == concatenate_cond) else [a]
+        b_kernels = b.sub_kernels if (isinstance(b, ConcatenatedKernel) and b.concatenate_cond == concatenate_cond) else [b]
 
         return ConcatenatedKernel(a_kernels + b_kernels, concatenate_cond=concatenate_cond)
