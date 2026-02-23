@@ -8,7 +8,7 @@ from iwpc.encodings.encoding_base import Encoding
 
 class AntisymMatrixEncoding(Encoding):
     """
-    An encoding that reshapes its input vector into a matrix of the specified shape.
+    An encoding that reshapes its input vector into a antisymmetric matrix of the specified shape.
     """
     def __init__(self, dimension: int, dimension2: Optional[int] = None):
         """
@@ -36,7 +36,7 @@ class AntisymMatrixEncoding(Encoding):
         Returns
         -------
         Tensor
-            A tensor of shape (..., dimension, dimension2)
+            A antisymmetrised tensor of shape (..., dimension, dimension2)
         """
         mat = x.reshape((*x.shape[:-1], self.dimension, self.dimension2))
         return 0.5 * (mat - mat.transpose(1, 2))
