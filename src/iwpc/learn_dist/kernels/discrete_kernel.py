@@ -16,7 +16,7 @@ class DiscreteKernel(TrainableKernelBase):
     variables. For example, consider the variables A, B, C that can either be true or false. There are 8 possible
     outcomes corresponding to {(not A and not B and not C), (not A and not B and C) , etc}. The sample space of this
     kernel is an integer vector of length equal to the number of distinct variables with each entry between 0 and the
-    number of values said variables can take less one. In the above ABC example, samples are vectrs of length three
+    number of values said variables can take less one. In the above ABC example, samples are vectors of length three
     and entries equal to 0 or 1
     """
     def __init__(
