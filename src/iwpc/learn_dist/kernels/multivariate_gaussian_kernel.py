@@ -1,13 +1,17 @@
 from typing import Optional
 
 import numpy as np
+from numpy import ndarray
 import torch
 from torch.nn import Module
+from scipy.linalg import logm
 
 from iwpc.encodings.matrix_encoding import MatrixEncoding
 from iwpc.encodings.trivial_encoding import TrivialEncoding
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.models.utils import basic_model_factory
+
+from iwpc.models.layers import ConstantScaleLayer
 
 
 class MultivariateGaussianKernel(TrainableKernelBase):
@@ -48,6 +52,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         log_diag_model: Optional[Module] = None,
         log_rot_model: Optional[Module] = None,
         log_std_model: Optional[Module] = None,
+        data: Optional[ndarray] = None,
     ):
         """
         Parameters
@@ -66,6 +71,9 @@ class MultivariateGaussianKernel(TrainableKernelBase):
             Optional model that constructs the log rotational matrix of the distribution for the given conditioning information.
         log_std_model
             Optional model that constructs the log standard deviation of the distribution for the given conditioning information.
+        data
+            Optional data array used to initialise the sub-model output shifts/scales via `initial_guess`. If provided, `initial_guess` 
+            is called automatically during construction.
         """
         super().__init__(sample_dim, cond)
         self.cond = cond
@@ -75,6 +83,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self.log_rot_model = basic_model_factory(TrivialEncoding(cond), MatrixEncoding(sample_dim)) if log_rot_model is None else log_rot_model
         self.log_std_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if log_std_model is None else log_std_model
         self.max_chi = max_chi
+        self.initial_guess(data) if data is not None else None
 
 
 
@@ -97,6 +106,45 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         correlated_noise = np.einsum('bjk,bk->bj', L, noise)
         return correlated_noise + mean
 
+    def initial_guess(self,
+        data: ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Compute initialisation parameters for the smearing kernel.
+
+        Parameters
+        ----------
+        data : ndarray
+            The data to compute the initialisation parameters for.
+
+        Returns
+        -------
+        mean_scale : numpy.ndarray
+            The square roots of the diagonal entries of the covariance matrix, i.e. the
+            per-parameter standard deviations, used to scale the mean model outputs.
+
+        log_diag_shift : numpy.ndarray
+            The logarithm of the eigenvalues of the correlation matrix, used as an initial
+            shift for the log-diagonal covariance model.
+
+        log_rot_shift : numpy.ndarray
+            Half of the matrix logarithm of the eigenvector matrix of the correlation
+            (flattened to 1D), used as an initial shift for the rotation model.
+
+        log_std_shift : numpy.ndarray
+            The logarithm of the standard deviations (square roots of the covariance
+            diagonal), used as an initial shift for the log-standard-deviation model.
+        """
+        cov = np.cov(data)
+        corr = cov / np.sqrt(np.diag(cov))[:, None] / np.sqrt(np.diag(cov))[None, :]
+        corr_diagonal, corr_rotation = np.linalg.eigh(corr)
+
+        mean_scale = np.sqrt(np.diag(cov))
+        log_diag_shift =np.log(corr_diagonal)
+        log_rot_shift = 0.5 * logm(corr_rotation).reshape(-1)
+        log_std_shift = np.log(np.sqrt(np.diag(cov)))
+
+        return mean_scale, log_diag_shift, log_rot_shift, log_std_shift
 
     def log_prob(self,
         samples: torch.Tensor,
