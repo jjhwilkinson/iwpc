@@ -31,7 +31,7 @@ class TrainableKernelBase(LightningModule, ABC):
         """
         super().__init__()
         self.sample_dimension = sample_dimension
-        self.cond_dimension = int(cond_dimension.input_shape) if isinstance(cond_dimension, Encoding) else cond_dimension
+        self.cond_dimension = int(cond_dimension.input_shape[0]) if isinstance(cond_dimension, Encoding) else cond_dimension
 
     @abstractmethod
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:

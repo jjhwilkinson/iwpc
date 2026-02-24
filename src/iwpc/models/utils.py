@@ -182,7 +182,7 @@ def basic_model_factory_sum(
     for spec_mods in specs:
         spec = common_spec.copy()
         spec.update(spec_mods)
-        spec['output'] = output.input_shape
+        spec['output'] = tuple(int(dim) for dim in output.input_shape)
         models.append(basic_model_factory(**spec))
 
     return IndependentSumModule(
