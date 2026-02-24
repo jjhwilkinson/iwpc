@@ -8,22 +8,19 @@ from iwpc.encodings.encoding_base import Encoding
 
 class AntisymMatrixEncoding(Encoding):
     """
-    An encoding that reshapes its input vector into a antisymmetric matrix of the specified shape.
+    An encoding that reshapes its input vector into an antisymmetric square matrix of the specified shape.
+
     """
-    def __init__(self, dimension: int, dimension2: Optional[int] = None):
+    def __init__(self, dimension: int):
         """
         Parameters
         ----------
         dimension
-            The first dimension of the output matrix
-        dimension2
-            The second dimension of the output matrix. Defaults to dimension
+            The dimension of the output square matrix
         """
-        dimension2 = dimension if dimension2 is None else dimension2
-        super().__init__(dimension * dimension2, [dimension, dimension2])
+        super().__init__(dimension * dimension, [dimension, dimension])
 
         self.register_buffer('dimension', torch.as_tensor(dimension))
-        self.register_buffer('dimension2', torch.as_tensor(dimension2))
 
 
     def _encode(self, x: Tensor) -> Tensor:
@@ -31,12 +28,12 @@ class AntisymMatrixEncoding(Encoding):
         Parameters
         ----------
         x
-            A tensor of dimension (..., dimension * dimension2)
+            A square tensor of dimension (..., dimension * dimension)
 
         Returns
         -------
         Tensor
-            A antisymmetrised tensor of shape (..., dimension, dimension2)
+            A antisymmetrised square tensor of shape (..., dimension, dimension)
         """
-        mat = x.reshape((*x.shape[:-1], self.dimension, self.dimension2))
-        return 0.5 * (mat - mat.transpose(1, 2))
+        mat = x.reshape((*x.shape[:-1], self.dimension, self.dimension))
+        return 0.5 * (mat - mat.transpose(-1, -2))

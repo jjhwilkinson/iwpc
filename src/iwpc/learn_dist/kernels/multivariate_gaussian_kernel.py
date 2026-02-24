@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Iterable
 
 import numpy as np
 import torch
@@ -13,9 +13,10 @@ from iwpc.models.layers import ConstantScaleLayer
 from iwpc.models.utils import basic_model_factory
 
 
+
 def initial_guess(
     cov: Optional[ndarray] = None,
-    data: Optional[ndarray] = None,
+    data: Optional[ndarray | Iterable[ndarray]] = None,
 ) -> tuple[ndarray, ndarray, ndarray, ndarray]:
     """
     Compute initialisation parameters for the smearing kernel.
@@ -45,7 +46,7 @@ def initial_guess(
         The logarithm of the standard deviations (square roots of the covariance
         diagonal), used as an initial shift for the log-standard-deviation model.
     """
-    cov = np.cov(data) if data is not None else cov
+    cov = np.cov(data.T) if data is not None else cov
     corr = cov / np.sqrt(np.diag(cov))[:, None] / np.sqrt(np.diag(cov))[None, :]
     corr_diagonal, corr_rotation = np.linalg.eigh(corr)
 
@@ -146,7 +147,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
     @classmethod
     def initialise(
         cls,
-        data: ndarray,
+        data: ndarray | Iterable[ndarray],
         cond: int | torch.Tensor,
         **kwargs,
     ) -> "MultivariateGaussianKernel":
@@ -155,8 +156,10 @@ class MultivariateGaussianKernel(TrainableKernelBase):
 
         Parameters
         ----------
-        data : ndarray
-            The data to compute the initialisation parameters for.
+        data : ndarray or Iterable[ndarray]
+            The data to compute the initialisation parameters for. Can be a single
+            array or an iterable of chunks (e.g. a list of arrays, a generator of
+            batches from a DataLoader) to avoid loading everything into memory at once.
         cond: int | torch.Tensor
             The conditioning information for each sample
 
@@ -166,8 +169,9 @@ class MultivariateGaussianKernel(TrainableKernelBase):
             An initialized instance of the `MultivariateGaussianKernel` class with models
             and parameters derived from the input data or user-provided models.
         """
-        cov = np.cov(data)
+        cov = np.cov(data.T)
         mean = np.mean(data, axis=0)
+
         return cls.initialise_cov(cov, mean, cond, **kwargs)
 
     @classmethod
