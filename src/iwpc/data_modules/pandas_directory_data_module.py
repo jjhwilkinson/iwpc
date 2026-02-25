@@ -5,7 +5,7 @@ import shutil
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional, Union, List, Callable, Tuple, Dict, Iterable, Any, Generator
+from typing import Callable, Iterable, Any, Generator
 
 import numpy as np
 import pandas as pd
@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 from torchmetrics import MeanMetric
 from tqdm import tqdm
 
+from ..datasets.pandas_dataset import StructuredDataSpec
 from ..datasets.pandas_file_list_dataset import PandasFileListDataset
 from ..types import PathLike, TensorOrNDArray
 from ..utils import read_yaml, temp_directory, dump_yaml
@@ -22,7 +23,7 @@ from ..utils import read_yaml, temp_directory, dump_yaml
 logger = logging.getLogger(__name__)
 
 
-def batched_df_pickles_iter(in_dir: Path, batch_size: int) -> DataFrame:
+def batched_df_pickles_iter(in_dir: Path, batch_size: int) -> Generator[DataFrame, None, None]:
     """
     Loops over the files in in_dir and yields the data contained therein in batches of size batch_size
 
@@ -86,12 +87,11 @@ class PandasDirDataModule(LightningDataModule):
     def __init__(
         self,
         dataset_dir: PathLike,
-        feature_cols: Optional[List[str]] = None,
-        target_cols: Optional[Union[str, List[str]]] = None,
-        weight_col: Optional[str] = None,
+        feature_spec: StructuredDataSpec | None = None,
+        weight_col: str | None = None,
         split: float = 0.5,
-        limit_files: Optional[int] = None,
-        dataloader_kwargs: Optional[dict] = None,
+        limit_files: int | None = None,
+        dataloader_kwargs: dict | None = None,
         shuffle_in_train_files: bool = True,
     ):
         """
@@ -99,10 +99,10 @@ class PandasDirDataModule(LightningDataModule):
         ----------
         dataset_dir
             A path to a dataset directory structured as described in the class docstring
-        feature_cols
-            A list of the names of feature columns to provide when iterated over
-        target_cols
-            Optional. A list of names of columns to provide as targets when iterated over
+        feature_spec
+            A StructuredDataSpec describing the features to load. See PandasDataset docstring for more details. A
+            previous iteration of PandasDirDataModule allowed the user to specify a list of feature columns and target
+            columns. The new equivalent specification for the same result is feature_spec=[feature_cols, target_cols]
         weight_col
             Optional. The name of a weight column to provide when iterated over
         split
@@ -117,8 +117,7 @@ class PandasDirDataModule(LightningDataModule):
         """
         super().__init__()
         self.dataset_dir = Path(dataset_dir)
-        self.feature_cols = feature_cols if feature_cols is not None else []
-        self.target_cols = [target_cols] if isinstance(target_cols, str) else target_cols
+        self.feature_spec = feature_spec
         self.weight_col = weight_col
         self.split = split
         self.limit_files = limit_files
@@ -131,7 +130,7 @@ class PandasDirDataModule(LightningDataModule):
             self.dataloader_kwargs.setdefault("persistent_workers", True)
 
     @property
-    def all_files(self) -> List[Path]:
+    def all_files(self) -> list[Path]:
         """
         Returns
         -------
@@ -164,7 +163,7 @@ class PandasDirDataModule(LightningDataModule):
         return self.num_files - self.num_train_files
 
     @property
-    def columns(self) -> List[str]:
+    def columns(self) -> list[str]:
         """
         Returns
         -------
@@ -194,7 +193,7 @@ class PandasDirDataModule(LightningDataModule):
         return self.all_files[self.num_train_files:]
 
     @property
-    def ds_info(self) -> Dict:
+    def ds_info(self) -> dict:
         """
         Returns
         -------
@@ -210,8 +209,7 @@ class PandasDirDataModule(LightningDataModule):
         """
         return PandasFileListDataset(
             self.all_files,
-            self.feature_cols,
-            self.target_cols,
+            self.feature_spec,
             self.weight_col,
             file_sizes=self.file_sizes,
             shuffle_in_file=False,
@@ -224,8 +222,7 @@ class PandasDirDataModule(LightningDataModule):
         """
         return PandasFileListDataset(
             self.train_files,
-            self.feature_cols,
-            self.target_cols,
+            self.feature_spec,
             self.weight_col,
             file_sizes=self.file_sizes[:len(self.train_files)],
             shuffle_in_file=self.shuffle_in_train_files,
@@ -238,29 +235,14 @@ class PandasDirDataModule(LightningDataModule):
         """
         return PandasFileListDataset(
             self.validation_files,
-            self.feature_cols,
-            self.target_cols,
+            self.feature_spec,
             self.weight_col,
             file_sizes=self.file_sizes[len(self.train_files):],
             shuffle_in_file=False,
         )
 
     @property
-    def num_features(self) -> int:
-        """
-        The number of dimensions/features in the data
-        """
-        return len(self.feature_cols)
-
-    @property
-    def num_targets(self) -> int:
-        """
-        The number of target dimensions/features in the data
-        """
-        return len(self.target_cols)
-
-    @property
-    def file_sizes(self) -> List[int]:
+    def file_sizes(self) -> list[int]:
         """
         List of the number of samples in each file
         """
@@ -312,7 +294,7 @@ class PandasDirDataModule(LightningDataModule):
         )
 
     @property
-    def tags(self) -> List[str]:
+    def tags(self) -> list[str]:
         """
         Returns
         -------
@@ -321,7 +303,7 @@ class PandasDirDataModule(LightningDataModule):
         """
         return self.ds_info.get('tags', [])
 
-    def add_tag(self, tag: Union[str, List[str]]) -> None:
+    def add_tag(self, tag: str | list[str]) -> None:
         """
         Adds a tag to the dataset
 
@@ -340,7 +322,7 @@ class PandasDirDataModule(LightningDataModule):
         self,
         include_train_files: bool = True,
         include_validation_files: bool = True,
-    ) -> Iterable[Tuple[Path, DataFrame]]:
+    ) -> Iterable[tuple[Path, DataFrame]]:
         """
         Yields the path and presiding dataframe for each file
 
@@ -367,12 +349,12 @@ class PandasDirDataModule(LightningDataModule):
     def transform(
         self,
         transformation: Callable[[DataFrame], DataFrame],
-        out_dir: Optional[PathLike],
+        out_dir: PathLike | None,
         new_ds_info: dict = None,
         update_ds_info: dict = None,
-        desc: Optional[str] = None,
+        desc: str | None = None,
         force: bool = False,
-        tag: Union[str, List[str]] = None,
+        tag: str | list[str] = None,
     ) -> "PandasDirDataModule":
         """
         Centralised function for manipulating the datasets. Ensures the state of ds_info is consistent. All
@@ -447,8 +429,7 @@ class PandasDirDataModule(LightningDataModule):
 
         new_dm = PandasDirDataModule(
             out_dir,
-            self.feature_cols,
-            self.target_cols,
+            self.feature_spec,
             self.weight_col,
             split=self.split,
             dataloader_kwargs=self.dataloader_kwargs,
@@ -492,8 +473,8 @@ class PandasDirDataModule(LightningDataModule):
         reweight_fn: Callable[[DataFrame], TensorOrNDArray],
         out_dir: PathLike,
         force: bool = False,
-        label_col: Optional[str] = None,
-        output_weight_col: Optional[str] = None,
+        label_col: str | None = None,
+        output_weight_col: str | None = None,
     ) -> "PandasDirDataModule":
         """
         Reweight the samples in the dataset according to the values given by reweight_fn
@@ -544,8 +525,7 @@ class PandasDirDataModule(LightningDataModule):
         )
         new_dm = PandasDirDataModule(
             dataset_dir=out_dir,
-            feature_cols=self.feature_cols,
-            target_cols=self.target_cols,
+            feature_spec=self.feature_spec,
             weight_col=output_weight_col,
             split=self.split,
             dataloader_kwargs=self.dataloader_kwargs,
@@ -553,7 +533,11 @@ class PandasDirDataModule(LightningDataModule):
         new_dm.normalise_weights(label_col)
         return self.copy(dataset_dir=out_dir, weight_col=output_weight_col)
 
-    def normalise_weights(self, label_col: Optional[str] = None, output_weight_col: Optional[str] = None) -> None:
+    def normalise_weights(
+        self,
+        label_col: str | None = None,
+        output_weight_col: str | None = None
+    ) -> None:
         """
         Normalises the weights in the dataset so the average weight is normalised to 1.0. If label_col is provided,
         the average weight is normalised to 1.0 within each class
@@ -684,8 +668,7 @@ class PandasDirDataModule(LightningDataModule):
         """
         arguments = {
             'dataset_dir': self.dataset_dir,
-            'feature_cols': self.feature_cols,
-            'target_cols': self.target_cols,
+            'feature_spec': self.feature_spec,
             'weight_col': self.weight_col,
             'split': self.split,
             'limit_files': self.limit_files,
@@ -696,10 +679,10 @@ class PandasDirDataModule(LightningDataModule):
 
     def merge(
         self,
-        others: Union[Iterable["PandasDirDataModule"], "PandasDirDataModule"],
+        others: "Iterable[PandasDirDataModule] | PandasDirDataModule",
         out_dir: PathLike,
-        label_col: Optional[str] = None,
-        labels: Optional[Iterable[Any]] = None,
+        label_col: str | None = None,
+        labels: Iterable[Any] | None = None,
         force: bool = False,
     ) -> "PandasDirDataModule":
         """
@@ -751,8 +734,7 @@ class PandasDirDataModule(LightningDataModule):
 
         new_dm = PandasDirDataModule(
             dataset_dir=out_dir,
-            feature_cols=self.feature_cols,
-            target_cols=self.target_cols,
+            feature_spec=self.feature_spec,
             weight_col=self.weight_col,
             split=self.split,
             limit_files=self.limit_files,

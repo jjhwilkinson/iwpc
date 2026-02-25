@@ -6,7 +6,7 @@ import pandas as pd
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from .pandas_dataset import PandasDataset
+from .pandas_dataset import PandasDataset, StructuredDataSpec, StructuredData
 from ..types import PathLike
 
 logger = logging.getLogger(__name__)
@@ -27,8 +27,7 @@ class PandasFileListDataset(Dataset):
     def __init__(
         self,
         files: List[PathLike],
-        feature_cols: List[str],
-        target_cols: Optional[Union[str, List[str]]] = None,
+        feature_spec: StructuredDataSpec,
         weight_col: Optional[str] = None,
         file_sizes: Optional[List[int]] = None,
         shuffle_in_file: bool = False,
@@ -38,10 +37,8 @@ class PandasFileListDataset(Dataset):
         ----------
         files
             A list of pickled pandas dataframes
-        feature_cols
-            A list of the names of the feature columns to provide when iterated over
-        target_cols
-            Optional. A list of names of columns to provide as targets when iterated over
+        feature_spec
+            A StructuredDataSpec describing the features to load. See PandasDataset docstring for more details
         weight_col
             Optional. The name of a weight column to provide when iterated over
         file_sizes
@@ -57,8 +54,7 @@ class PandasFileListDataset(Dataset):
                 pd.read_pickle(file).shape[0]
                 for file in tqdm(list(files), desc="Calculating file sizes")
             ]
-        self.feature_cols = feature_cols
-        self.target_cols = [target_cols] if isinstance(target_cols, str) else target_cols
+        self.feature_spec = feature_spec
         self.weight_col = weight_col
         self.shuffle_in_file = shuffle_in_file
 
@@ -92,8 +88,7 @@ class PandasFileListDataset(Dataset):
             df = df.sample(frac=1).reset_index(drop=True)
         self._current_ds = PandasDataset(
             df,
-            self.feature_cols,
-            self.target_cols,
+            self.feature_spec,
             self.weight_col,
         )
         return self._current_ds
@@ -122,7 +117,7 @@ class PandasFileListDataset(Dataset):
             file_idx += 1
         return file_idx, in_file_idx
 
-    def __getitem__(self, idx: int) -> Tuple:
+    def __getitem__(self, idx: int) -> StructuredData:
         """
         Returns the sample data, targets and weight for the requested idx. idx may be a number in
         [0, sum(self.file_sizes)]
