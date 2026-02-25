@@ -268,18 +268,27 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         log_std = self.log_std_model(cond)
         log_diags = self.log_diag_model(cond)
 
-        diffs = (samples - mean) / torch.exp(log_std)
-
         rot = torch.matrix_exp(M)
         diags = torch.exp(log_diags)
-        cov_tilda = torch.einsum('bij,bj,bjk->bik', rot.transpose(1, 2), diags, rot)
-        S = torch.sqrt(torch.diagonal(cov_tilda, dim1=1, dim2=2))
+        cov_tilde = torch.einsum('bij,bj,bjk->bik', rot.transpose(1, 2), diags, rot)
+        cov_tilde_diag = torch.sqrt(torch.diagonal(cov_tilde, dim1=1, dim2=2))
 
-        normed_diffs = torch.einsum('bij,bj->bi', torch.matrix_exp(M), diffs*S)
-        normed_diffs = torch.exp(log_diags) * normed_diffs
+        diffs = samples - mean
+        normed_diffs = diffs / torch.exp(log_std)
+        normed_diffs = torch.exp(-0.5 * log_diags) * torch.einsum(
+            'bij,bj->bi',
+            torch.matrix_exp(M),
+            normed_diffs * cov_tilde_diag,
+        )
         chi_sqs = torch.sum(normed_diffs ** 2, dim=-1)
-        log_prob = - 0.5 * (chi_sqs +  2*log_std.sum(dim=-1) - 2*torch.log(S).sum(dim=-1) + log_diags.sum(dim=-1) + self.sample_dimension*np.log(2 * np.pi))
+        log_prob = - 0.5 * (
+            chi_sqs + 2 * log_std.sum(dim=-1)
+            - 2 * torch.log(cov_tilde_diag).sum(dim=-1)
+            + log_diags.sum(dim=-1)
+            + self.sample_dimension * np.log(2 * np.pi)
+        )
         return (log_prob, chi_sqs) if return_chi_sqs else log_prob
+
 
     def calculate_loss(self, batch: tuple) -> torch.Tensor:
         """
