@@ -16,7 +16,6 @@ class TrainableKernelBase(LightningModule, ABC):
     Abstract base class for all trainable kernels. A kernel is defined as a conditional likelihood distribution that is
     convolved against some base distribution, like a detector response
     """
-
     def __init__(
         self,
         sample_dimension: int,
@@ -237,14 +236,12 @@ class TrainableKernelBase(LightningModule, ABC):
             },
         }
 
-
 class ConcatenatedKernel(TrainableKernelBase):
     """
     Utility kernel that merges any number of sub-kernels to produce samples that are concatenations of samples drawn
     from the sub-kernels. Since samples are drawn independently, the log probability of each sample can be calculated
     automatically as an independent sum
     """
-
     def __init__(self, sub_kernels: List[TrainableKernelBase], concatenate_cond=False):
         """
         Parameters
@@ -263,10 +260,10 @@ class ConcatenatedKernel(TrainableKernelBase):
         self.sub_kernels = sub_kernels
         self.concatenate_cond = concatenate_cond
         cum_sample_sizes = np.cumsum([0] + [k.sample_dimension for k in sub_kernels])
-        self.sample_edges = [slice(cum_sample_sizes[i], cum_sample_sizes[i + 1]) for i in range(len(sub_kernels))]
+        self.sample_edges = [slice(cum_sample_sizes[i], cum_sample_sizes[i+1]) for i in range(len(sub_kernels))]
         if self.concatenate_cond:
             cum_cond_sizes = np.cumsum([0] + [k.cond_dimension for k in sub_kernels])
-            self.cond_edges = [slice(cum_cond_sizes[i], cum_cond_sizes[i + 1]) for i in range(len(sub_kernels))]
+            self.cond_edges = [slice(cum_cond_sizes[i], cum_cond_sizes[i+1]) for i in range(len(sub_kernels))]
         else:
             self.cond_edges = [slice(0, self.cond_dimension) for _ in range(len(sub_kernels))]
 
@@ -376,8 +373,8 @@ class ConcatenatedKernel(TrainableKernelBase):
         ConcatenatedKernel
             Containing the sub-kernels
         """
-        a_kernels = a.sub_kernels if (isinstance(a, ConcatenatedKernel) and a.concatenate_cond == concatenate_cond) else [a]
-        b_kernels = b.sub_kernels if (isinstance(b, ConcatenatedKernel) and b.concatenate_cond == concatenate_cond) else [b]
+        a_kernels = a.sub_kernels if (isinstance(a, ConcatenatedKernel) and a.concatenate_cond==concatenate_cond) else [a]
+        b_kernels = b.sub_kernels if (isinstance(b, ConcatenatedKernel) and b.concatenate_cond==concatenate_cond) else [b]
 
         return ConcatenatedKernel(a_kernels + b_kernels, concatenate_cond=concatenate_cond)
 
