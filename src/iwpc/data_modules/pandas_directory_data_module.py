@@ -164,6 +164,16 @@ class PandasDirDataModule(LightningDataModule):
         return self.num_files - self.num_train_files
 
     @property
+    def columns(self) -> List[str]:
+        """
+        Returns
+        -------
+        List[str]
+            The list of data column names in this datamodule
+        """
+        return list(self.open_file(0).columns)
+
+    @property
     def train_files(self):
         """
         Returns

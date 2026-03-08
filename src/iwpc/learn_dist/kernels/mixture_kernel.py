@@ -83,14 +83,12 @@ class MixtureKernel(TrainableKernelBase):
             each sub-kernel being chosen is given by self.log_probability_model. If explicit_mixture_label is True
             then the label of the chosen sub-kernel is included as the first component of the sample
         """
-        sub_samples = torch.cat([k.draw(cond) for k in self.sub_kernels], dim=-1)
+        sub_samples = torch.stack([k.draw(cond) for k in self.sub_kernels], dim=-1)
         cum_probs = torch.cumsum(torch.exp(self.log_probability_model(cond)), dim=-1)
         rand = torch.rand(size=(cond.shape[0], 1), device=cond.device)
         labels = ((cum_probs - rand) > 0).float().argmax(dim=-1)
+        samples = sub_samples[range(cond.shape[0]), ..., labels]
         if self.explicit_mixture_label:
-            return sub_samples[range(cond.shape[0]), labels]
-        else:
-            return torch.cat([
-                labels[:, None],
-                sub_samples[range(cond.shape[0]), labels]
-            ], dim=-1)
+            samples = torch.cat([labels[:, None], samples], dim=-1)
+
+        return samples
