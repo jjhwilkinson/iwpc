@@ -236,6 +236,7 @@ class TrainableKernelBase(LightningModule, ABC):
             },
         }
 
+
 class ConcatenatedKernel(TrainableKernelBase):
     """
     Utility kernel that merges any number of sub-kernels to produce samples that are concatenations of samples drawn
@@ -253,7 +254,7 @@ class ConcatenatedKernel(TrainableKernelBase):
         """
         assert concatenate_cond or all(k.cond_dimension == sub_kernels[0].cond_dimension for k in sub_kernels)
         cond_dimension = sum(k.cond_dimension for k in sub_kernels) if concatenate_cond else sub_kernels[0].cond_dimension
-        super().__init__(sum(k.sample_dimension for k in sub_kernels), cond_dimension)
+        TrainableKernelBase.__init__(self, sum(k.sample_dimension for k in sub_kernels), cond_dimension)
 
         for i, sub_kernel in enumerate(sub_kernels):
             self.register_module(f"sub_kernel_{i}", sub_kernel)
@@ -373,10 +374,10 @@ class ConcatenatedKernel(TrainableKernelBase):
         ConcatenatedKernel
             Containing the sub-kernels
         """
-        a_kernels = a.sub_kernels if (isinstance(a, ConcatenatedKernel) and a.concatenate_cond==concatenate_cond) else [a]
-        b_kernels = b.sub_kernels if (isinstance(b, ConcatenatedKernel) and b.concatenate_cond==concatenate_cond) else [b]
+        a_kernels = a.sub_kernels if (isinstance(a, cls) and a.concatenate_cond==concatenate_cond) else [a]
+        b_kernels = b.sub_kernels if (isinstance(b, cls) and b.concatenate_cond==concatenate_cond) else [b]
 
-        return ConcatenatedKernel(a_kernels + b_kernels, concatenate_cond=concatenate_cond)
+        return cls(a_kernels + b_kernels, concatenate_cond=concatenate_cond)
 
 
 class ConditionedKernel(TrainableKernelBase):
