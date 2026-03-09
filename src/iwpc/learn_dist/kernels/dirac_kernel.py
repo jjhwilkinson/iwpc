@@ -21,8 +21,8 @@ class DiracKernel(TrainableKernelBase):
             The dimension of the conditioning space
         """
         super().__init__(
-            cond_dimension if isinstance(Encoding, int) else cond_dimension.output_shape,
-            cond_dimension
+            cond_dimension if isinstance(cond_dimension, int) else cond_dimension.output_shape,
+            cond_dimension,
         )
 
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
@@ -46,6 +46,6 @@ class DiracKernel(TrainableKernelBase):
         Returns
         -------
         Tensor
-            cond is returned as-is
+            A copy of the conditioning information
         """
-        return cond
+        return cond.detach().clone()
