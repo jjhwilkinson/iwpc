@@ -1,5 +1,7 @@
 from typing import Iterable, Tuple
 
+from torch.nn import ModuleList
+
 from iwpc.symmetries.group_action import GroupAction
 from iwpc.symmetries.group_action_element import GroupActionElement, Identity
 
@@ -16,9 +18,7 @@ class FiniteGroupAction(GroupAction):
             An iterable of the non-identity GroupActionElements in the group action
         """
         super().__init__()
-        self.elements = (Identity(), *non_id_elements)
-        for i, element in enumerate(self.elements):
-            self.register_module(f"non_id_element_{i}", element)
+        self.elements = ModuleList([Identity(), *non_id_elements])
 
     def batch(self) -> Tuple[GroupActionElement, ...]:
         """

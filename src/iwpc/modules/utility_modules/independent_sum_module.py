@@ -3,6 +3,7 @@ from typing import List, Optional, Callable
 
 import torch
 from torch import nn
+from torch.nn import ModuleList
 
 from iwpc.encodings.encoding_base import Encoding
 
@@ -36,7 +37,7 @@ class IndependentSumModule(nn.Module):
         if feature_indices is None:
             feature_indices = [None] * len(sub_modules)
 
-        self.models = sub_modules
+        self.models = ModuleList(sub_modules)
         self.training_indices = []
         for i, (indices, model) in enumerate(zip(feature_indices, self.models)):
             if indices is not None:
@@ -44,7 +45,6 @@ class IndependentSumModule(nn.Module):
                 self.training_indices.append(getattr(self, f"indices_{i}"))
             else:
                 self.training_indices.append(None)
-            self.register_module(f"model_{i}", model)
         self.output_encoding = output_encoding
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

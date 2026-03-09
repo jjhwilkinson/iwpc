@@ -2,7 +2,7 @@ from typing import List, Optional
 
 import torch
 from torch import Tensor
-from torch.nn import Module
+from torch.nn import Module, ModuleList
 
 from iwpc.encodings.encoding_base import Encoding
 from iwpc.encodings.log_softmax_encoding import LogSoftmaxEncoding
@@ -43,9 +43,7 @@ class MixtureKernel(TrainableKernelBase):
         else:
             super().__init__(sub_kernels[0].sample_dimension, cond)
 
-        for i, sub_kernel in enumerate(sub_kernels):
-            self.register_module(f"sub_kernel_{i}", sub_kernel)
-        self.sub_kernels = sub_kernels
+        self.sub_kernels = ModuleList(sub_kernels)
         self.log_probability_model = basic_model_factory(
             cond,
             LogSoftmaxEncoding(len(sub_kernels))

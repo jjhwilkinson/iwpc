@@ -6,6 +6,7 @@ from lightning import LightningModule
 from sympy.printing.pytorch import torch
 from torch import Tensor
 from torch import optim
+from torch.nn import ModuleList
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from iwpc.encodings.encoding_base import Encoding
@@ -256,9 +257,7 @@ class ConcatenatedKernel(TrainableKernelBase):
         cond_dimension = sum(k.cond_dimension for k in sub_kernels) if concatenate_cond else sub_kernels[0].cond_dimension
         TrainableKernelBase.__init__(self, sum(k.sample_dimension for k in sub_kernels), cond_dimension)
 
-        for i, sub_kernel in enumerate(sub_kernels):
-            self.register_module(f"sub_kernel_{i}", sub_kernel)
-        self.sub_kernels = sub_kernels
+        self.sub_kernels = ModuleList(sub_kernels)
         self.concatenate_cond = concatenate_cond
         cum_sample_sizes = np.cumsum([0] + [k.sample_dimension for k in sub_kernels])
         self.sample_edges = [slice(cum_sample_sizes[i], cum_sample_sizes[i+1]) for i in range(len(sub_kernels))]
