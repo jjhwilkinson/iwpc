@@ -6,6 +6,7 @@ from torch.nn import Module
 
 from iwpc.encodings.encoding_base import Encoding
 from iwpc.encodings.log_softmax_encoding import LogSoftmaxEncoding
+from iwpc.learn_dist.kernels.discrete_kernel import sample_idx_from_logits
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.models.utils import basic_model_factory
 
@@ -84,9 +85,7 @@ class MixtureKernel(TrainableKernelBase):
             then the label of the chosen sub-kernel is included as the first component of the sample
         """
         sub_samples = torch.stack([k.draw(cond) for k in self.sub_kernels], dim=-1)
-        cum_probs = torch.cumsum(torch.exp(self.log_probability_model(cond)), dim=-1)
-        rand = torch.rand(size=(cond.shape[0], 1), device=cond.device)
-        labels = ((cum_probs - rand) > 0).float().argmax(dim=-1)
+        labels = sample_idx_from_logits(self.log_probability_model(cond)).argmax(dim=-1)
         samples = sub_samples[range(cond.shape[0]), ..., labels]
         if self.explicit_mixture_label:
             samples = torch.cat([labels[:, None], samples], dim=-1)
