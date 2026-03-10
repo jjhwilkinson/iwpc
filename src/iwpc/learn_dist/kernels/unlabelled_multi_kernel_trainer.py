@@ -4,7 +4,7 @@ from typing import List, Tuple, Optional
 import torch
 from lightning import LightningModule
 from torch import Tensor
-from torch.nn import Module
+from torch.nn import Module, ModuleList
 from torch.nn.functional import logsigmoid
 from torch.optim import Optimizer, Adam
 
@@ -61,18 +61,13 @@ class UnlabelledMultiKernelTrainer(LightningModule):
         start_kernel_training_epoch: int = 10,
     ):
         super().__init__()
-        self.kernels = kernels
+        self.kernels = ModuleList(kernels)
         self.combined_kernel = ConcatenatedKernel(kernels, concatenate_cond=True)
-        self.log_p_over_q_models = log_p_over_q_models
+        self.log_p_over_q_models = ModuleList(log_p_over_q_models)
         self.start_kernel_training_epoch = start_kernel_training_epoch
         self.automatic_optimization = False
         self.register_buffer('log_two', torch.log(torch.tensor(2.)))
         self.loss = MultiKernelKLDivergenceGradientLoss()
-
-        for i, kernel in enumerate(kernels):
-            self.register_module(f'kernel_{i}', kernel)
-        for i, model in enumerate(log_p_over_q_models):
-            self.register_module(f'log_p_over_q_model_{i}', model)
 
     def calculate_cross_entropies(self, batch: Tuple[Tensor, Tensor, Tensor], stage) -> List[Tensor]:
         """
