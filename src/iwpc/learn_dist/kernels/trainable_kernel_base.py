@@ -173,7 +173,7 @@ class TrainableKernelBase(LightningModule, ABC):
         Returns
         -------
         Tensor
-            A tensor containing ``-mean(log_prob)`` over finite entries.
+            A tensor containing -mean(log_prob) over finite entries.
         """
         cond, targets, _ = batch
         log_prob = self.log_prob(targets, cond)
@@ -359,7 +359,7 @@ class ConcatenatedKernel(TrainableKernelBase):
         """
         Merges two trainable kernels into a single ConcatenatedKernel. If either sub-kernel is itself a
         ConcatenatedKernel with the same value of concatenate_cond, the sub-kernels are uncurried
-        
+
         Parameters
         ----------
         a
@@ -369,7 +369,7 @@ class ConcatenatedKernel(TrainableKernelBase):
         concatenate_cond
             Whether the conditioning information for each sample-kernel should be concatenated or assume they're the
             same
-        
+
         Returns
         -------
         ConcatenatedKernel
