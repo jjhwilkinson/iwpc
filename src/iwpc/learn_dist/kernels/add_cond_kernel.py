@@ -65,7 +65,7 @@ class AddCondKernel(TrainableKernelBase):
         Returns
         -------
         Tensor
-            A tensor containing ``-mean(log_prob)`` over finite entries.
+            A tensor containing -mean(log_prob) over finite entries.
         """
         cond, targets, weights = batch
         return self.base_kernel.calculate_loss((cond, targets - cond, weights))

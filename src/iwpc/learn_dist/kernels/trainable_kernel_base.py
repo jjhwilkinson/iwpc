@@ -170,7 +170,7 @@ class TrainableKernelBase(LightningModule, ABC):
         Returns
         -------
         Tensor
-            A tensor containing ``-mean(log_prob)`` over finite entries.
+            A tensor containing -mean(log_prob) over finite entries.
         """
         cond, targets, _ = batch
         log_prob = self.log_prob(targets, cond)
