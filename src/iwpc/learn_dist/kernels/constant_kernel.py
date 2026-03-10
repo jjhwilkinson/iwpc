@@ -12,16 +12,16 @@ class ConstantKernel(TrainableKernelBase):
     """
     def __init__(
         self,
-        cond_dimension: int | Encoding,
         constant_value: ArrayLike,
+        cond_dimension: int | Encoding,
     ):
         """
         Parameters
         ----------
-        cond_dimension
-            The dimension of the conditioning space
         constant_value
             The constant value. Must be a scalar, or 1D ArrayLike
+        cond_dimension
+            The dimension of the conditioning space
         """
         constant_value = torch.as_tensor(constant_value, dtype=torch.float32)
         if constant_value.ndim == 0:
@@ -31,7 +31,7 @@ class ConstantKernel(TrainableKernelBase):
         else:
             raise ValueError("Constant value must be a scalar or 1D array")
 
-        super().__init__(constant_value.shape[0], cond_dimension)
+        super().__init__(constant_value.shape[1], cond_dimension)
         self.register_buffer("constant_value", constant_value)
 
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:

@@ -82,6 +82,8 @@ class TrainableKernelBase(LightningModule, ABC):
             A sample for each row of conditioning information with shape (N, self.sample_dimension)
         """
         with torch.no_grad():
+            if cond.shape[0] == 0:
+                return torch.zeros((cond.shape[0], self.sample_dimension))
             return self._draw(cond)
 
     def draw_with_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tensor]:
