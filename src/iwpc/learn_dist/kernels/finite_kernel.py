@@ -440,7 +440,10 @@ class FiniteConcatenatedKernel(FiniteKernelInterface, ConcatenatedKernel):
         """
         FiniteKernelInterface.__init__(self, np.prod([k.num_outcomes for k in sub_kernels]))
         super(FiniteKernelInterface, self).__init__(sub_kernels, concatenate_cond)
-        self.register_buffer('outcomes', torch.tensor(list(product(*(k.outcomes_iter() for k in sub_kernels)))))
+        self.register_buffer(
+            'outcomes',
+            torch.stack(list(map(torch.concat, product(*(k.outcomes_iter() for k in sub_kernels)))), dim=0)
+        )
 
     def outcomes_iter(self) -> Iterator[Tensor]:
         """
@@ -771,11 +774,11 @@ class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
         super(FiniteKernelInterface, self).__init__(sample_kernel, conditioning_kernel)
         self.register_buffer(
             'outcomes',
-            torch.tensor([
-                [s2, s1]
+            torch.stack([
+                torch.concat([s2, s1], dim=0)
                 for s1 in self.conditioning_kernel.outcomes_iter()
                 for s2 in self.sample_kernel.outcomes_iter()
-            ]),
+            ], dim=0)
         )
 
     def construct_logits(self, cond: Tensor) -> Tensor:

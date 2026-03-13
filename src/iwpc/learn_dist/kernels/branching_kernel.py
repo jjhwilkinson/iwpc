@@ -68,7 +68,7 @@ def branched_evaluation(
         mask = function_indices == idx
         branch_size = mask.sum()
         outputs_by_label.append(functions[idx](*map_indexing(inputs, mask)))
-        output_indices[mask] = torch.arange(cum_cnt, cum_cnt + branch_size, dtype=torch.int)
+        output_indices[mask] = torch.arange(cum_cnt, cum_cnt + branch_size, dtype=torch.int, device=output_indices.device)
         cum_cnt += branch_size
 
     if isinstance(outputs_by_label[0], Tensor):
@@ -161,9 +161,9 @@ class BranchingKernel(TrainableKernelBase):
         Tensor
             A tensor of shape (N,)
         """
-        branching_cond = cond[self.sub_kernel_conditioning_indices]
+        branching_cond = cond[:, self.branching_indices]
         branching_idxs = self.outcome_to_idx_fn(branching_cond)
-        sub_kernel_cond = cond[self.branching_indices]
+        sub_kernel_cond = cond[:, self.sub_kernel_conditioning_indices]
 
         return branched_evaluation(
             branching_idxs,
