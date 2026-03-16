@@ -120,10 +120,10 @@ class MultivariateGaussianKernel(TrainableKernelBase):
             A sample from the gaussian kernel for each row of conditioning information
         """
         mean = self.mean_model(cond)
-        cov = self.construct_cov(self.cond)
-        L = torch.cholesky(cov)
-        noise = np.random.normal(0, 1, size=(cond.shape[0], cond.shape[1]))
-        correlated_noise = np.einsum('bjk,bk->bj', L, noise)
+        cov = self.construct_cov(cond)
+        L = torch.linalg.cholesky(cov)
+        noise = torch.randn_like(mean)
+        correlated_noise = torch.einsum('bjk,bk->bj', L, noise)
         return correlated_noise + mean
 
     @classmethod
