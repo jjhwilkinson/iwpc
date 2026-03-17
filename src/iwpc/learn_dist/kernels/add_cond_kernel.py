@@ -53,6 +53,23 @@ class AddCondKernel(TrainableKernelBase):
         """
         return self.base_kernel.log_prob(samples - cond, cond)
 
+    def calculate_loss(self, batch: tuple) -> Tensor:
+        """
+        Calculate the loss of the given batch
+
+        Parameters
+        ----------
+        batch : tuple
+            Training batch
+
+        Returns
+        -------
+        Tensor
+            A tensor containing -mean(log_prob) over finite entries.
+        """
+        cond, targets, weights = batch
+        return self.base_kernel.calculate_loss((cond, targets - cond, weights))
+
     def draw_with_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tensor]:
         """
         Parameters

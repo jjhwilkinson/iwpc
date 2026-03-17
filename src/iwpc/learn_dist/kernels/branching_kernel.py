@@ -1,11 +1,9 @@
-from typing import Callable, Iterable, Iterator
+from typing import Callable, Iterable
 
 import torch
 from torch import Tensor
 from torch.nn import ModuleList
 
-from iwpc.encodings.trivial_encoding import TrivialEncoding
-from iwpc.learn_dist.kernels.constant_kernel import ConstantKernel
 from iwpc.learn_dist.kernels.finite_kernel import FiniteKernelInterface
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
@@ -68,7 +66,7 @@ def branched_evaluation(
         mask = function_indices == idx
         branch_size = mask.sum()
         outputs_by_label.append(functions[idx](*map_indexing(inputs, mask)))
-        output_indices[mask] = torch.arange(cum_cnt, cum_cnt + branch_size, dtype=torch.int)
+        output_indices[mask] = torch.arange(cum_cnt, cum_cnt + branch_size, dtype=torch.int, device=output_indices.device)
         cum_cnt += branch_size
 
     if isinstance(outputs_by_label[0], Tensor):
@@ -161,9 +159,9 @@ class BranchingKernel(TrainableKernelBase):
         Tensor
             A tensor of shape (N,)
         """
-        branching_cond = cond[self.sub_kernel_conditioning_indices]
+        branching_cond = cond[:, self.branching_indices]
         branching_idxs = self.outcome_to_idx_fn(branching_cond)
-        sub_kernel_cond = cond[self.branching_indices]
+        sub_kernel_cond = cond[:, self.sub_kernel_conditioning_indices]
 
         return branched_evaluation(
             branching_idxs,
@@ -238,9 +236,13 @@ class FiniteBranchingKernel(FiniteKernelInterface, BranchingKernel):
             Function that accepts a tensor of shape (N, len(branch_sample_indices)) and returns an integer tensor of
             shape (N,)
         """
-        assert all(s.num_outcomes == sub_kernels[0].num_outcomes for s in sub_kernels)
-        FiniteKernelInterface.__init__(self, sub_kernels[0].num_outcomes)
-        super(FiniteKernelInterface, self).__init__(sub_kernels, branch_sample_indices, outcome_to_idx_fn)
+        assert all(s.sample_space == sub_kernels[0].sample_space for s in sub_kernels)
+        super().__init__(
+            sub_kernels[0].sample_space,
+            sub_kernels,
+            branch_sample_indices,
+            outcome_to_idx_fn
+        )
 
     def construct_logits(self, cond: Tensor) -> Tensor:
         """
@@ -265,40 +267,3 @@ class FiniteBranchingKernel(FiniteKernelInterface, BranchingKernel):
             [k.construct_logits for k in self.sub_kernels],
             sub_kernel_cond,
         )[0]
-
-    def outcomes_iter(self) -> Iterator[Tensor]:
-        """
-        Returns
-        -------
-        Iterator[Tensor]
-            Iterator over the possible outcomes. Outcomes have shape (self.sample_dimension,)
-        """
-        return self.sub_kernels[0].outcomes_iter()
-
-    def outcome_to_idx(self, samples: Tensor) -> Tensor:
-        """
-        Parameters
-        ----------
-        samples
-            A tensor of size (N, self.sample_dimension) of integers
-
-        Returns
-        -------
-        Tensor
-            An integer tensor of shape (N,)
-        """
-        return self.sub_kernels[0].outcome_to_idx(samples)
-
-    def idx_to_outcome(self, idxs: Tensor) -> Tensor:
-        """
-        Parameters
-        ----------
-        idxs
-            An integer tensor of shape (N,)
-
-        Returns
-        -------
-        Tensor
-            A tensor of size (N, self.sample_dimension) of integers
-        """
-        return self.sub_kernels[0].idx_to_outcome(idxs)

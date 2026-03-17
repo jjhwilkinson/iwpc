@@ -3,13 +3,16 @@ from numpy._typing import ArrayLike
 from torch import Tensor
 
 from iwpc.encodings.encoding_base import Encoding
+from iwpc.learn_dist.kernels.finite_kernel import FiniteKernelInterface
+from iwpc.learn_dist.kernels.finite_sample_space import ExplicitFiniteSampleSpace
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
 
-class ConstantKernel(TrainableKernelBase):
+class ConstantKernel(FiniteKernelInterface, TrainableKernelBase):
     """
     A constant kernel that only returns a single value
     """
+
     def __init__(
         self,
         constant_value: ArrayLike,
@@ -31,7 +34,14 @@ class ConstantKernel(TrainableKernelBase):
         else:
             raise ValueError("Constant value must be a scalar or 1D array")
 
-        super().__init__(constant_value.shape[1], cond_dimension)
+        super().__init__(
+            ExplicitFiniteSampleSpace(
+                constant_value,
+                lambda s: torch.zeros(s.shape[0], dtype=torch.int, device=s.device)
+            ),
+            constant_value.shape[1],
+            cond_dimension,
+        )
         self.register_buffer("constant_value", constant_value)
 
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
@@ -58,3 +68,17 @@ class ConstantKernel(TrainableKernelBase):
             cond.shape[0] copies of self.constant_value
         """
         return self.constant_value.repeat(cond.shape[0], 1)
+
+    def construct_logits(self, cond: Tensor) -> Tensor:
+        """
+        Parameters
+        ----------
+        cond
+            A tensor of conditioning information
+
+        Returns
+        -------
+        Tensor
+            A tensor of shape (N, 1) of zeros
+        """
+        return torch.zeros((cond.shape[0], 1), dtype=torch.float32, device=cond.device)
