@@ -192,7 +192,7 @@ class ConcatenatedFiniteSampleSpace(FiniteSampleSpace):
         Tensor
             A tensor of shape (N, self.dimension) using the idx_to_outcome of the sub-spaces
         """
-        sub_idxs = torch.unravel_index(idxs, [int(s.dimension) for s in self.sub_spaces])
+        sub_idxs = torch.unravel_index(idxs, [int(s.num_outcomes) for s in self.sub_spaces])
         sub_samples = [s.idx_to_outcome(sub_idx) for s, sub_idx in zip(self.sub_spaces, sub_idxs)]
         return torch.concat(sub_samples, dim=1)
 
