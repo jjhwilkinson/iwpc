@@ -14,6 +14,7 @@ class RestructuringKernel(TrainableKernelBase):
     """
     def __init__(
         self,
+        base_kernel: TrainableKernelBase,
         indices: Iterable[int],
         cond_dimension: int | Encoding,
     ):
@@ -27,6 +28,7 @@ class RestructuringKernel(TrainableKernelBase):
         """
         self.indices = list(indices)
         super().__init__(sample_dimension=len(self.indices), cond_dimension=cond_dimension)
+        self.base_kernel = base_kernel
 
     def _draw(self, cond: Tensor) -> Tensor:
         """
@@ -40,7 +42,7 @@ class RestructuringKernel(TrainableKernelBase):
         Tensor
             cond[:, self.reorder_indices]
         """
-        return cond[:, self.indices]
+        return self.base_kernel._draw(cond[:, self.indices])
 
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
         """
@@ -59,4 +61,7 @@ class RestructuringKernel(TrainableKernelBase):
         Tensor
             A Tensor of zeros
         """
-        return torch.zeros(samples.shape[0], dtype=torch.float32)
+        return self.base_kernel.log_prob(samples, cond[:, self.indices])
+
+    def draw_with_log_prob(self, cond: Tensor) -> tuple[Tensor, Tensor]:
+        return self.base_kernel.draw_with_log_prob(cond[:, self.indices])

@@ -101,6 +101,7 @@ class BranchingKernel(TrainableKernelBase):
             shape (N,)
         """
         sub_kernels = list(sub_kernels)
+        branch_sample_indices = [branch_sample_indices,] if isinstance(branch_sample_indices, int) else branch_sample_indices
         assert all(k.sample_dimension == sub_kernels[0].sample_dimension for k in sub_kernels)
         assert all(k.cond_dimension == sub_kernels[0].cond_dimension for k in sub_kernels)
         super().__init__(
@@ -108,7 +109,7 @@ class BranchingKernel(TrainableKernelBase):
             len(branch_sample_indices) + sub_kernels[0].cond_dimension,
         )
         
-        self.branching_indices = [branch_sample_indices,] if isinstance(branch_sample_indices, int) else branch_sample_indices
+        self.branching_indices = branch_sample_indices
         self.sub_kernel_conditioning_indices = [i for i in range(self.cond_dimension) if i not in self.branching_indices]
         self.sub_kernels = ModuleList(sub_kernels)
         self.outcome_to_idx_fn = outcome_to_idx_fn
