@@ -3,6 +3,7 @@ from typing import Tuple, Optional
 import numpy as np
 import torch
 from lightning import LightningModule
+from matplotlib import pyplot as plt
 from torch import optim, Tensor
 from torch.nn import Module
 from torch.nn.functional import logsigmoid
@@ -10,6 +11,8 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torchmetrics import MeanMetric
 
+from calibration_chapter.unidirectional_cross_calibration.train_invmass import calculate_invmass_sq
+from iwpc.divergences import JensenShannonDivergence
 from iwpc.learn_dist.kernels.finite_kernel import FiniteKernel, FiniteKernelInterface
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.learn_dist.kernels.unlabelled_kernel_trainer import KernelLRAdjustor
@@ -32,11 +35,12 @@ class PartiallyExactKernelKLDivergenceGradientLoss:
             gradient calculation, but this hasn't been careful explored
         """
         self.kernel_resample_rate = kernel_resample_rate
+        self.jsd = JensenShannonDivergence()
 
     def __call__(
         self,
         base_samples: Tensor,
-        exact_kernel: FiniteKernel,
+        exact_kernel: FiniteKernelInterface,
         sampled_kernel: TrainableKernelBase,
         log_p_over_q_model: Module,
         weights: Optional[Tensor] = None,
@@ -61,7 +65,7 @@ class PartiallyExactKernelKLDivergenceGradientLoss:
         if weights is None:
             weights = torch.ones(base_samples.shape[0], dtype=torch.float32, device=base_samples.device)
 
-        loss = 0
+        loss = torch.tensor(0., requires_grad=True, device=base_samples.device)
         for outcome, outcome_log_prob in exact_kernel.outcomes_with_log_prob_iter(base_samples):
             repeated_outcome = outcome[None, :].repeat((base_samples.shape[0], 1))
             cond = torch.concat([
@@ -71,10 +75,11 @@ class PartiallyExactKernelKLDivergenceGradientLoss:
 
             for i in range(self.kernel_resample_rate):
                 samples, log_prob = sampled_kernel.draw_with_log_prob(cond)
-                all_samples = torch.cat([samples, repeated_outcome], dim=1)
                 with torch.no_grad():
-                    p_over_q = torch.exp(log_p_over_q_model(all_samples) - exact_kernel.log_prob(all_samples[:, -exact_kernel.sample_dimension:], all_samples[:, :-exact_kernel.sample_dimension]).detach()[:, None])[:, 0]
-                loss += - (weights * outcome_log_prob.detach().exp() * p_over_q.detach() * (outcome_log_prob + log_prob)).mean()
+                    log_p_over_q = log_p_over_q_model(samples)[:, 0]
+
+                loss = loss + (weights * outcome_log_prob.detach().exp() * self.jsd._f_dash_given_log_torch(-log_p_over_q) * (outcome_log_prob + log_prob)).mean()
+                # loss = - (weights * outcome_log_prob.detach().exp() * p_over_q.detach() * (outcome_log_prob + log_prob)).mean()
 
         return loss / self.kernel_resample_rate
 
@@ -93,7 +98,10 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         drop_cooldown: int = 5,
         discriminator_lr: float = 1e-3,
         kernel_lr: float = 1e-4,
-        start_kernel_train_epoch: int = 0,
+        start_kernel_train_epoch: int = 1,
+        kernel_resample_rate: int = 1,
+        q_base = None,
+        p = None,
     ):
         """
         A LightningModule that
@@ -123,9 +131,8 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         super().__init__()
         self.exact_kernel = exact_kernel
         self.sampled_kernel = sampled_kernel
-        self.conditioned_kernel = sampled_kernel | exact_kernel
         self.log_p_over_q_model = log_p_over_q_model
-        self.loss = PartiallyExactKernelKLDivergenceGradientLoss(kernel_resample_rate=1)
+        self.loss = PartiallyExactKernelKLDivergenceGradientLoss(kernel_resample_rate=kernel_resample_rate)
         self.automatic_optimization = False
         self.register_buffer('log_two', torch.log(torch.tensor(2.)))
         self.discriminator_lr = discriminator_lr
@@ -139,6 +146,10 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         self.last_drop_epoch = 0
         self.drop_cooldown = drop_cooldown
         self.start_kernel_train_epoch = start_kernel_train_epoch
+
+        if q_base is not None:
+            self.q_base = torch.tensor(q_base, dtype=torch.float, device=self.device)
+            self.p = torch.tensor(p, dtype=torch.float, device=self.device)
 
     def should_drop_min_train_divergence(self) -> bool:
         """
@@ -173,9 +184,10 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
             than min_train_divergence
         """
         return (
-            (len(self.train_divergence_record) > 0)
-            and (self.train_divergence_record[-1] > self.min_train_divergence)
-            and (self.current_epoch > self.start_kernel_train_epoch)
+            # (len(self.train_divergence_record) > 0)
+            # and (self.train_divergence_record[-1] > self.min_train_divergence)
+            (self.current_epoch >= self.start_kernel_train_epoch)
+            # and (np.random.random() < 0.2)
         )
 
     def calculate_cross_entropy(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> Tensor:
@@ -199,12 +211,22 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         base_samples, data_samples, labels, weights = batch
         mask = labels == 1
         p = data_samples[~mask]
-        q = self.conditioned_kernel.draw(base_samples[mask]).detach()
+        # exact_samples = self.exact_kernel.draw(base_samples[mask])
+        # q = self.sampled_kernel.draw(torch.cat([exact_samples, base_samples[mask]], dim=1))
+        base_samples = base_samples[mask]
 
-        return -(
-            logsigmoid(self.log_p_over_q_model(p) - self.exact_kernel.log_prob(p[:, -self.exact_kernel.sample_dimension:], p[:, :-self.exact_kernel.sample_dimension]).detach()[:, None]).mean()
-            + logsigmoid(-self.log_p_over_q_model(q) + self.exact_kernel.log_prob(q[:, -self.exact_kernel.sample_dimension:], q[:, :-self.exact_kernel.sample_dimension]).detach()[:, None]).mean()
-        ) / 2
+        p_loss = - logsigmoid(self.log_p_over_q_model(p)).mean()
+        q_loss = torch.tensor(0.)
+        for outcome, outcome_log_prob in self.exact_kernel.outcomes_with_log_prob_iter(base_samples):
+            repeated_outcome = outcome[None, :].repeat((base_samples.shape[0], 1))
+            cond = torch.concat([
+                repeated_outcome,
+                base_samples,
+            ], dim=1)
+            q = self.sampled_kernel.draw(cond)
+            q_loss = q_loss - (outcome_log_prob.detach().exp() * logsigmoid(-self.log_p_over_q_model(q)[:, 0])).mean()
+
+        return (p_loss + q_loss) / 2
 
     def calculate_kernel_loss(self, batch: Tuple[Tensor, Tensor, Tensor]) -> Tensor:
         """
@@ -230,10 +252,10 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
             self.exact_kernel,
             self.sampled_kernel,
             self.log_p_over_q_model,
-            weights[mask]
+            weights[mask],
         )
 
-    def training_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> None:
+    def training_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor], batch_idx) -> None:
         """
         Optimizes log_p_over_q_model and the parameters in self.kernel to maximise the probability of the p samples
         in q. Logs the current learned divergence between p and q
@@ -249,8 +271,8 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         discriminator_optimizer, kernel_optimizer = self.optimizers()
 
         if self.is_kernel_training():
-            kernel_loss = self.calculate_kernel_loss(batch)
             kernel_optimizer.zero_grad()
+            kernel_loss = self.calculate_kernel_loss(batch)
             kernel_loss.backward()
             self.log('train_kernel_loss', kernel_loss, on_step=True, on_epoch=True, prog_bar=False)
             kernel_optimizer.step()
@@ -259,13 +281,35 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         train_divergence = 1 - bce / self.log_two
         self.log('train_divergence', train_divergence, on_step=True, on_epoch=True, prog_bar=True)
         self.log('epoch_train_divergence', self.train_divergence, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('is_kernel_training', int(self.is_kernel_training()), on_step=False, on_epoch=True, prog_bar=True)
+        self.log('is_kernel_training', int(self.is_kernel_training()), on_step=True, on_epoch=False, prog_bar=True)
         self.log('min_train_divergence', self.min_train_divergence, on_step=False, on_epoch=True, prog_bar=True)
+        # if not self.is_kernel_training():
         discriminator_optimizer.zero_grad()
         bce.backward()
         discriminator_optimizer.step()
 
         self.train_divergence(train_divergence)
+
+        # if batch_idx % 10 == 0:
+        # self.make_plot(batch_idx)
+
+    def make_plot(self, batch_idx):
+        with torch.no_grad():
+            q = self.sampled_kernel.draw(torch.concat([self.exact_kernel.draw(self.q_base), self.q_base], dim=1))
+            log_p_over_q = self.log_p_over_q_model(q)[:, 0]
+        q_mass = torch.sqrt(calculate_invmass_sq(q[:, [2, 1, 3]], q[:, [6, 5, 7]]))
+        p_mass = torch.sqrt(calculate_invmass_sq(self.p[:, [2, 1, 3]], self.p[:, [6, 5, 7]]))
+        base_mass = torch.sqrt(calculate_invmass_sq(self.q_base[:, [1, 0, 2]], self.q_base[:, [4, 3, 5]]))
+
+        plt.figure(figsize=(6, 5), layout='constrained')
+        vals, bins, _ = plt.hist(p_mass, range=(61e3, 121e3), bins=100, histtype='step', label='Benchmark', linewidth='2', color='red')
+        plt.hist(base_mass, bins=bins, histtype='step', label='Truth')
+        plt.hist(q_mass, bins=bins, histtype='step', label='Learned')
+        plt.hist(q_mass, bins=bins, weights=torch.exp(log_p_over_q), histtype='step', label='Learned Reweighted', color='k')
+        plt.xlabel('mll')
+        plt.legend()
+        plt.savefig(f'/Users/jeremywilkinson/PycharmProjects/Thesis/minKL/benchmark/anim/{self.current_epoch}_{batch_idx}.png')
+        plt.close()
 
     def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> None:
         """
@@ -282,7 +326,7 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
             The classifier's and kernel's optimizer
         """
         discriminator_optimizer = optim.Adam(self.log_p_over_q_model.parameters(), lr=self.discriminator_lr)
-        kernel_optimizer = optim.Adam(self.conditioned_kernel.parameters(), lr=self.kernel_lr)
+        kernel_optimizer = optim.Adam([*self.exact_kernel.parameters(), *self.sampled_kernel.parameters()], lr=self.kernel_lr)
 
         return [
             {'optimizer': discriminator_optimizer},
