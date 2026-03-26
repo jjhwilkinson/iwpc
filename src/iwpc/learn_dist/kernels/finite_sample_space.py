@@ -69,7 +69,7 @@ class FiniteSampleSpace(ABC, Module):
             Iterator over all possible outcomes in the sample space. Tensor is of shape (self.dimension,)
         """
         for idx in torch.arange(self.num_outcomes):
-            yield self.idx_to_outcome(idx)
+            yield self.idx_to_outcome(idx[None])[0]
 
     def __eq__(self, other: Any) -> bool:
         """
@@ -243,7 +243,7 @@ class CutFiniteSampleSpace(FiniteSampleSpace):
             torch.tensor(cut_idx_to_base_idx_map, dtype=torch.int),
         )
 
-    def outcome_to_idx(self, outcomes) -> Tensor:
+    def outcome_to_idx(self, outcomes: Tensor) -> Tensor:
         """
         Parameters
         ----------
@@ -258,7 +258,7 @@ class CutFiniteSampleSpace(FiniteSampleSpace):
         """
         return self.base_idx_to_cut_idx_map[self.base_space.outcome_to_idx(outcomes)]
 
-    def idx_to_outcome(self, idxs) -> Tensor:
+    def idx_to_outcome(self, idxs: Tensor) -> Tensor:
         """
         Mapping from an integer index to the set of possible outcomes
 
@@ -288,10 +288,10 @@ class ExplicitFiniteSampleSpace(FiniteSampleSpace):
         Parameters
         ----------
         outcomes
-            Either a tensor of shape (N, self.dimension) or a list of tensors of shape (self.dimension,)
+            Either a tensor of shape (num_outcomes, self.dimension) or a list of num_outcomes tensors of shape (self.dimension,)
         outcome_to_idx_fn
             A callable that accepts a Tensor of shape (N, self.dimension) containing outcomes, and returns their
-            respective indices
+            respective indices within the outcomes tensor
         """
         outcomes = torch.stack(list(outcomes), dim=0).float()
         super().__init__(len(outcomes), outcomes.shape[1])
@@ -305,7 +305,7 @@ class ExplicitFiniteSampleSpace(FiniteSampleSpace):
         Parameters
         ----------
         idxs
-            An integer tensor of shape (N,) with entries in the range [0, K-1]
+            An integer tensor of shape (N,) with entries in the range [0, num_outcomes-1]
 
         Returns
         -------

@@ -126,7 +126,7 @@ class FiniteKernelInterface(ABC):
         """
         logits = self.construct_logits(cond)
         log_probs = logits.log_softmax(dim=-1)
-        for outcome, logit in zip(self.outcomes_iter(), log_probs.T):
+        for outcome, logit in zip(self.sample_space.outcomes_iter(), log_probs.T):
             yield outcome, logit
 
     def __and__(self, other: TrainableKernelBase) -> 'FiniteConcatenatedKernel | ConcatenatedKernel':
@@ -306,22 +306,6 @@ class FiniteKernel(FiniteKernelInterface, TrainableKernelBase):
         """
         return self.logit_model(cond)
 
-    # def _draw(self, cond: Tensor) -> Tensor:
-    #     """
-    #     Parameters
-    #     ----------
-    #     cond
-    #         A Tensor of conditioning vectors
-    #
-    #     Returns
-    #     -------
-    #     Tensor
-    #         A tensor of shape (cond.shape[0], len(self.sample_dimension)) of dtype int. Each entry is between 0 and the
-    #         number of outcomes for the variable of said column minus one
-    #     """
-    #     samples = sample_idx_from_logits(self.construct_logits(cond))
-    #     return torch.stack(torch.unravel_index(samples, self.num_variable_outcomes), dim=-1)
-
     def draw_with_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tensor]:
         """
         Parameters
@@ -420,7 +404,11 @@ class FiniteConcatenatedKernel(FiniteKernelInterface, ConcatenatedKernel):
         Iterator[tuple[Tensor, Tensor]]
             Iterator over the set of possible outcomes alongside the associated log-probability
         """
-        for outcome_idx, sub_outcomes in enumerate(product(*(k.outcomes_with_log_prob_iter(cond) for k in self.sub_kernels))):
+        outcomes_iters = [
+            k.outcomes_with_log_prob_iter(cond[:, cond_edges])
+            for cond_edges, k in zip(self.cond_edges, self.sub_kernels)
+        ]
+        for outcome_idx, sub_outcomes in enumerate(product(*outcomes_iters)):
             sub_samples, log_probs = zip(*sub_outcomes)
             yield (
                 torch.concat(sub_samples, dim=0),

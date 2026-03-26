@@ -83,7 +83,7 @@ class TrainableKernelBase(LightningModule, ABC):
         """
         with torch.no_grad():
             if cond.shape[0] == 0:
-                return torch.zeros((cond.shape[0], self.sample_dimension))
+                return torch.zeros((cond.shape[0], self.sample_dimension), dtype=cond.dtype, device=cond.device)
             return self._draw(cond)
 
     def draw_with_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tensor]:
@@ -378,7 +378,7 @@ class ConcatenatedKernel(TrainableKernelBase):
         a_kernels = a.sub_kernels if (isinstance(a, cls) and a.concatenate_cond==concatenate_cond) else [a]
         b_kernels = b.sub_kernels if (isinstance(b, cls) and b.concatenate_cond==concatenate_cond) else [b]
 
-        return cls(a_kernels + b_kernels, concatenate_cond=concatenate_cond)
+        return cls(list(a_kernels) + list(b_kernels), concatenate_cond=concatenate_cond)
 
 
 class ConditionedKernel(TrainableKernelBase):
