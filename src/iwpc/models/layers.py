@@ -28,7 +28,7 @@ class RunningNormLayer(Module):
     normalisation of a NN's input. The running mean/std are only updated during training and if the number of samples
     seen is less than self.max_samples.
     """
-    def __init__(self, input_shape: Shape, max_samples: int = 100000):
+    def __init__(self, input_shape: Shape, max_samples: int = 1000000):
         """
         Parameters
         ----------
