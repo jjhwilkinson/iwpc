@@ -77,6 +77,9 @@ class PartiallyExactKernelKLDivergenceGradientLoss:
                 samples, log_prob = sampled_kernel.draw_with_log_prob(cond)
                 with torch.no_grad():
                     log_p_over_q = log_p_over_q_model(samples)[:, 0]
+                    log_p_over_q = log_p_over_q - exact_kernel.log_prob(
+                        outcome.repeat((samples.shape[0], 1)), samples[:, [1, 2, 3, 5, 6, 7]]
+                    )
 
                 loss = loss + (weights * outcome_log_prob.detach().exp() * self.jsd._f_dash_given_log_torch(-log_p_over_q) * (outcome_log_prob + log_prob)).mean()
                 # loss = - (weights * outcome_log_prob.detach().exp() * p_over_q.detach() * (outcome_log_prob + log_prob)).mean()
@@ -215,7 +218,8 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         # q = self.sampled_kernel.draw(torch.cat([exact_samples, base_samples[mask]], dim=1))
         base_samples = base_samples[mask]
 
-        p_loss = - logsigmoid(self.log_p_over_q_model(p)).mean()
+
+        p_loss = - logsigmoid(self.log_p_over_q_model(p) - self.exact_kernel.log_prob(p[:, [0, 4]], p[:, [1, 2, 3, 5, 6, 7]])).mean()
         q_loss = torch.tensor(0.)
         for outcome, outcome_log_prob in self.exact_kernel.outcomes_with_log_prob_iter(base_samples):
             repeated_outcome = outcome[None, :].repeat((base_samples.shape[0], 1))
@@ -224,7 +228,8 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
                 base_samples,
             ], dim=1)
             q = self.sampled_kernel.draw(cond)
-            q_loss = q_loss - (outcome_log_prob.detach().exp() * logsigmoid(-self.log_p_over_q_model(q)[:, 0])).mean()
+            log_p_over_q = self.log_p_over_q_model(q)[:, 0] - self.exact_kernel.log_prob(outcome.repeat((q.shape[0], 1)), q[:, [1, 2, 3, 5, 6, 7]])
+            q_loss = q_loss - (outcome_log_prob.detach().exp() * logsigmoid(-log_p_over_q)).mean()
 
         return (p_loss + q_loss) / 2
 
