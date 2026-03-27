@@ -14,6 +14,8 @@ class PreBatchedDataset(Dataset):
         self.device = device
         self.batch_size = int(batch_size)
 
+        tensors = [torch.as_tensor(t) for t in tensors]
+
         self.batches = []
         for i in range(0, tensors[0].shape[0], batch_size):
             self.batches.append(tuple(torch.as_tensor(t[i:i+batch_size], device=device, dtype=torch.float32) for t in tensors))
