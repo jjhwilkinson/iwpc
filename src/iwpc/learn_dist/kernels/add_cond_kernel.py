@@ -1,9 +1,6 @@
 from typing import Tuple
 from torch import Tensor
-import numpy as np
-
 from iwpc.encodings.encoding_base import ConcatenatedEncoding
-from iwpc.encodings.periodic_encoding import PeriodicEncoding
 from iwpc.encodings.trivial_encoding import TrivialEncoding
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
