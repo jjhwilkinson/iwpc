@@ -1,9 +1,10 @@
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Tuple
 
 import numpy as np
 import torch
 from numpy import ndarray
 from scipy.linalg import logm
+from torch import Tensor
 from torch.nn import Module
 
 from iwpc.encodings.antisymmetric_matrix_encoding import AntiSymmetricMatrixEncoding
@@ -107,6 +108,52 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self.log_std_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if log_std_model is None else log_std_model
         self.max_chi = max_chi
 
+
+    def construct_variables(self, cond: torch.Tensor):
+        """
+        Parameters
+        ----------
+        cond : torch.Tensor
+            The conditioning information for each sample.
+
+        Returns
+        -------
+        mean : torch.Tensor
+            The computed mean tensor.
+
+        log_std : torch.Tensor
+            Logarithm of the standard deviation tensor.
+
+        unnorm_corr_eigvals : torch.Tensor
+            Unnormalized eigenvalues of the correlation matrix.
+
+        unnorm_corr_rot : torch.Tensor
+            Unnormalized rotation matrix for the correlation matrix.
+
+        unnorm_corr_diag : torch.Tensor
+            Diagonal values of the unnormalized correlation matrix, representing its standard deviations.
+
+        std : torch.Tensor
+            Standard deviation tensor, computed as the exponential of the log standard deviations.
+
+        log_unnorm_corr_eigvals : torch.Tensor
+            Logarithm of the unnormalized eigenvalues of the correlation matrix.
+        """
+        log_unnorm_corr_rot = self.log_rot_model(cond)
+        mean = self.mean_model(cond)
+        log_std = self.log_std_model(cond)
+        log_unnorm_corr_eigvals = self.log_diag_model(cond)
+
+        unnorm_corr_eigvals = torch.exp(log_unnorm_corr_eigvals)
+        unnorm_corr_rot = torch.matrix_exp(log_unnorm_corr_rot)
+        unnorm_corr = torch.einsum('bji,bj,bjk->bik', unnorm_corr_rot, unnorm_corr_eigvals, unnorm_corr_rot)
+        unnorm_corr_diag = torch.sqrt(torch.diagonal(unnorm_corr, dim1=1, dim2=2))
+        std = torch.exp(log_std)
+
+
+        return mean, log_std, unnorm_corr_eigvals, unnorm_corr_rot, unnorm_corr_diag, std, log_unnorm_corr_eigvals
+
+
     def _draw(self, cond: torch.Tensor) -> torch.Tensor:
         """
         Parameters
@@ -119,12 +166,63 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         Tensor
             A sample from the gaussian kernel for each row of conditioning information
         """
-        mean = self.mean_model(cond)
-        cov = self.construct_cov(cond)
-        L = torch.linalg.cholesky(cov)
+        mean, log_std, unnorm_corr_eigvals, unnorm_corr_rot, unnorm_corr_diag, std, _ = self.construct_variables(cond)
+
+        root_cov = torch.einsum(
+            'bi,bij,bj,bjk->bik',
+            std / unnorm_corr_diag,
+            unnorm_corr_rot.transpose(-1, -2),
+            torch.sqrt(unnorm_corr_eigvals),
+            unnorm_corr_rot,
+        )
         noise = torch.randn_like(mean)
-        correlated_noise = torch.einsum('bjk,bk->bj', L, noise)
+        correlated_noise = torch.einsum('bjk,bk->bj', root_cov, noise)
         return correlated_noise + mean
+
+
+    def draw_with_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tensor]:
+        """
+        Parameters
+        ----------
+        cond
+            The conditioning information for each sample
+
+        Returns
+        -------
+        Tuple[Tensor, Tensor]
+            A sample from the gaussian kernel for each row of conditioning information and its corresponding log
+            probability efficiently implemented
+        """
+        mean, log_std, unnorm_corr_eigvals, unnorm_corr_rot, unnorm_corr_diag, std, log_unnorm_corr_eigvals = self.construct_variables(cond)
+
+        root_cov = torch.einsum(
+            'bi,bij,bj,bjk->bik',
+            std / unnorm_corr_diag,
+            unnorm_corr_rot.transpose(-1, -2),
+            torch.sqrt(unnorm_corr_eigvals),
+            unnorm_corr_rot,
+        )
+        noise = torch.randn_like(mean)
+        correlated_noise = torch.einsum('bjk,bk->bj', root_cov, noise)
+        samples = correlated_noise + mean
+
+        diffs = samples - mean
+        normed_diffs = diffs / std
+        normed_diffs = torch.exp(-0.5 * log_unnorm_corr_eigvals) * torch.einsum(
+            'bij,bj->bi',
+            unnorm_corr_rot,
+            normed_diffs * unnorm_corr_diag,
+        )
+        chi_sqs = torch.sum(normed_diffs ** 2, dim=-1)
+        log_probs = - 0.5 * (
+            chi_sqs + 2 * log_std.sum(dim=-1)
+            - 2 * torch.log(unnorm_corr_diag).sum(dim=-1)
+            + log_unnorm_corr_eigvals.sum(dim=-1)
+            + self.sample_dimension * np.log(2 * np.pi)
+        )
+
+        return samples, log_probs
+
 
     @classmethod
     def initialise(
@@ -252,28 +350,21 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         Tensor
             Log probability of samples given the conditioning information
         """
-        log_unnormalised_corr_rot = self.log_rot_model(cond)
-        mean = self.mean_model(cond)
-        log_std = self.log_std_model(cond)
-        log_unnormalised_corr_eigvals = self.log_diag_model(cond)
+        mean, log_std, unnorm_corr_eigvals, unnorm_corr_rot, unnorm_corr_diag, std, log_unnorm_corr_eigvals = self.construct_variables(cond)
 
-        unnormalised_corr_rot = torch.matrix_exp(log_unnormalised_corr_rot)
-        unnormalised_corr_eigvals = torch.exp(log_unnormalised_corr_eigvals)
-        unnormalised_corr = torch.einsum('bji,bj,bjk->bik', unnormalised_corr_rot, unnormalised_corr_eigvals, unnormalised_corr_rot)
-        unnormalised_corr_diag = torch.sqrt(torch.diagonal(unnormalised_corr, dim1=1, dim2=2))
 
         diffs = samples - mean
         normed_diffs = diffs / torch.exp(log_std)
-        normed_diffs = torch.exp(-0.5 * log_unnormalised_corr_eigvals) * torch.einsum(
+        normed_diffs = torch.exp(-0.5 * log_unnorm_corr_eigvals) * torch.einsum(
             'bij,bj->bi',
-            torch.matrix_exp(log_unnormalised_corr_rot),
-            normed_diffs * unnormalised_corr_diag,
+            unnorm_corr_rot,
+            normed_diffs * unnorm_corr_diag,
         )
         chi_sqs = torch.sum(normed_diffs ** 2, dim=-1)
         log_prob = - 0.5 * (
             chi_sqs + 2 * log_std.sum(dim=-1)
-            - 2 * torch.log(unnormalised_corr_diag).sum(dim=-1)
-            + log_unnormalised_corr_eigvals.sum(dim=-1)
+            - 2 * torch.log(unnorm_corr_diag).sum(dim=-1)
+            + log_unnorm_corr_eigvals.sum(dim=-1)
             + self.sample_dimension * np.log(2 * np.pi)
         )
         return (log_prob, chi_sqs) if return_chi_sqs else log_prob
@@ -312,22 +403,22 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         Tensor
             Covariance matrix of the distribution for the given conditioning information.
         """
-        log_unnormalised_corr_rot = self.log_rot_model(cond)
-        log_unnormalised_corr_eigvals = self.log_diag_model(cond)
+        log_unnorm_corr_rot = self.log_rot_model(cond)
+        log_unnorm_corr_eigvals = self.log_diag_model(cond)
         log_std = self.log_std_model(cond)
 
-        unnormalised_corr_rot = torch.matrix_exp(log_unnormalised_corr_rot)
+        unnorm_corr_rot = torch.matrix_exp(log_unnorm_corr_rot)
         cov_tilda = torch.einsum(
             'bji,bj,bjk->bik',
-            unnormalised_corr_rot,
-            log_unnormalised_corr_eigvals.exp(),
-            unnormalised_corr_rot
+            unnorm_corr_rot,
+            log_unnorm_corr_eigvals.exp(),
+            unnorm_corr_rot
         )
-        root_unnormalised_corr_diag = torch.sqrt(torch.diagonal(cov_tilda, dim1=1, dim2=2))  # (B,d)
+        root_unnorm_corr_diag = torch.sqrt(torch.diagonal(cov_tilda, dim1=1, dim2=2))
 
         std = torch.exp(log_std)
-        return (
-            cov_tilda
-            * (std * root_unnormalised_corr_diag).unsqueeze(-2)
-            * (std * root_unnormalised_corr_diag).unsqueeze(-1)
-        )
+        return torch.einsum('bi,bij,bj->bij',
+                            std / root_unnorm_corr_diag,
+                            cov_tilda,
+                            std / root_unnorm_corr_diag
+                            )
