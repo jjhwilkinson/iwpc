@@ -1,4 +1,4 @@
-from typing import List, Optional, Any
+from typing import List
 
 import numpy as np
 from numpy._typing import NDArray
@@ -105,8 +105,8 @@ def construct_binned_statistic_result_regular_bins(
 def faster_binned_statistic_dd_without_overflow(
     samples: np.ndarray,
     values: np.ndarray | List[np.ndarray],
-    bins: Optional[List[np.ndarray]] = None,
-    statistic: Optional[str, Any] =None,
+    bins: List[np.ndarray] | None = None,
+    statistic: str | None = None,
     binned_statistic_result: BinnedStatisticddResult | None = None,
 ):
     """
