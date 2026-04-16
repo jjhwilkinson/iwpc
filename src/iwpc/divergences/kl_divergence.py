@@ -25,7 +25,7 @@ class KLDivergence(DifferentiableFDivergence):
         return np.exp(x - 1)
 
     def _f_dash_given_log_torch(self, log_x):
-        return 1 + torch.log(log_x)
+        return 1 + log_x
 
     def _f_dash_given_log_np(self, log_x):
-        return 1 + np.log(log_x)
+        return 1 + log_x
