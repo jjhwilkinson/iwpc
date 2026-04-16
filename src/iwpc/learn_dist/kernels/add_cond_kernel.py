@@ -1,6 +1,6 @@
 from typing import Tuple
 from torch import Tensor
-from iwpc.encodings.encoding_base import ConcatenatedEncoding
+from iwpc.encodings.encoding_base import ConcatenatedEncoding, Encoding
 from iwpc.encodings.trivial_encoding import TrivialEncoding
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
@@ -10,9 +10,13 @@ class AddCondKernel(TrainableKernelBase):
     """
     Wrapper for kernels that have the same conditioning and sample space. Samples are taken as the sum of the
     conditioning information and the samples from the base distribution. The base distribution can be thought of as
-    providing a sample error or delta and the wrapper adds on the central value
+    providing a sample error or delta and the wrapper adds on the central value.
+
+    When sampling on complicated manifolds, like the circle, there are often issues associated with faulty charts. To
+    allow users to account for this, an optional custom_encoding option is provided that is applied to the difference
+    between samples and the cond when calculating the log_probability
     """
-    def __init__(self, base_kernel: TrainableKernelBase, custom_encoding: ConcatenatedEncoding | None = None):
+    def __init__(self, base_kernel: TrainableKernelBase, custom_encoding: Encoding | None = None):
         """
         Parameters
         ----------
@@ -54,7 +58,9 @@ class AddCondKernel(TrainableKernelBase):
         Returns
         -------
         Tensor
-            The log probability of each sample given the conditioning information
+            The log probability of each sample given the conditioning information. Evaluated using the base_kernel and
+            the difference between the samples and the conditioning information. The difference is passed through the
+            custom_encoding if provided before being handed to base_kernel.log_prob
         """
         diff = samples - cond
         return self.base_kernel.log_prob(self.custom_encoding(diff), cond)
@@ -90,5 +96,4 @@ class AddCondKernel(TrainableKernelBase):
             A sample for each row of conditioning information along with its associated log probability
         """
         samples, log_prob = self.base_kernel.draw_with_log_prob(cond)
-        out = self.custom_encoding(cond + samples)
-        return out, log_prob
+        return cond + samples, log_prob
