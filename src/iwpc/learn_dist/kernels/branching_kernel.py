@@ -231,7 +231,7 @@ class FiniteBranchingKernel(FiniteKernelInterface, BranchingKernel):
         sub_kernels
             An iterable of FiniteKernelInterface sub-kernels
         branch_sample_indices
-            The indices of the conditioning information that making up the 'branching sample'
+            The indices of the conditioning information that make up the 'branching sample'
         outcome_to_idx_fn
             Function that accepts a tensor of shape (N, len(branch_sample_indices)) and returns an integer tensor of
             shape (N,)
