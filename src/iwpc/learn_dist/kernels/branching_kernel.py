@@ -95,7 +95,9 @@ class BranchingKernel(TrainableKernelBase):
         sub_kernels
             An iterable of TrainableKernelBase sub-kernels
         branch_sample_indices
-            The indices of the conditioning information that making up the 'branching sample'
+            Either a list of integer indices into the conditioning tensor that make up the
+            'branching sample', or a single int N meaning the first N columns of the
+            conditioning tensor are used as the branching sample.
         outcome_to_idx_fn
             Function that accepts a tensor of shape (N, len(branch_sample_indices)) and returns an integer tensor of
             shape (N,)
@@ -103,12 +105,14 @@ class BranchingKernel(TrainableKernelBase):
         sub_kernels = list(sub_kernels)
         assert all(k.sample_dimension == sub_kernels[0].sample_dimension for k in sub_kernels)
         assert all(k.cond_dimension == sub_kernels[0].cond_dimension for k in sub_kernels)
+        if isinstance(branch_sample_indices, int):
+            branch_sample_indices = list(range(branch_sample_indices))
         super().__init__(
             sub_kernels[0].sample_dimension,
             len(branch_sample_indices) + sub_kernels[0].cond_dimension,
         )
-        
-        self.branching_indices = [branch_sample_indices,] if isinstance(branch_sample_indices, int) else branch_sample_indices
+
+        self.branching_indices = branch_sample_indices
         self.sub_kernel_conditioning_indices = [i for i in range(self.cond_dimension) if i not in self.branching_indices]
         self.sub_kernels = ModuleList(sub_kernels)
         self.outcome_to_idx_fn = outcome_to_idx_fn
@@ -231,7 +235,9 @@ class FiniteBranchingKernel(FiniteKernelInterface, BranchingKernel):
         sub_kernels
             An iterable of FiniteKernelInterface sub-kernels
         branch_sample_indices
-            The indices of the conditioning information that make up the 'branching sample'
+            Either a list of integer indices into the conditioning tensor that make up the
+            'branching sample', or a single int N meaning the first N columns of the
+            conditioning tensor are used as the branching sample.
         outcome_to_idx_fn
             Function that accepts a tensor of shape (N, len(branch_sample_indices)) and returns an integer tensor of
             shape (N,)
