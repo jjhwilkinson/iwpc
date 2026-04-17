@@ -420,7 +420,16 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         Tensor
             A sample from the gaussian kernel for each row of conditioning information
         """
-
+        root_cov = torch.einsum(
+            'bi,bij,bj,bjk->bik',
+            gaussian_parameters.std / gaussian_parameters.unnorm_corr_diag,
+            gaussian_parameters.unnorm_corr_rot.transpose(-1, -2),
+            torch.sqrt(gaussian_parameters.unnorm_corr_eigvals),
+            gaussian_parameters.unnorm_corr_rot,
+        )
+        noise = torch.randn_like(gaussian_parameters.mean)
+        correlated_noise = torch.einsum('bjk,bk->bj', root_cov, noise)
+        return correlated_noise + gaussian_parameters.mean
 
     def _draw(self, cond: torch.Tensor) -> torch.Tensor:
         """
