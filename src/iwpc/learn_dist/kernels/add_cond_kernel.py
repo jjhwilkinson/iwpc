@@ -1,27 +1,36 @@
 from typing import Tuple
-
 from torch import Tensor
-
+from iwpc.encodings.encoding_base import ConcatenatedEncoding, Encoding
+from iwpc.encodings.trivial_encoding import TrivialEncoding
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
+
 
 
 class AddCondKernel(TrainableKernelBase):
     """
     Wrapper for kernels that have the same conditioning and sample space. Samples are taken as the sum of the
     conditioning information and the samples from the base distribution. The base distribution can be thought of as
-    providing a sample error or delta and the wrapper adds on the central value
+    providing a sample error or delta and the wrapper adds on the central value.
+
+    When sampling on complicated manifolds, like the circle, there are often issues associated with faulty charts. To
+    allow users to account for this, an optional custom_encoding option is provided that is applied to the difference
+    between samples and the cond when calculating the log_probability
     """
-    def __init__(self, base_kernel: TrainableKernelBase):
+    def __init__(self, base_kernel: TrainableKernelBase, custom_encoding: Encoding | None = None):
         """
         Parameters
         ----------
         base_kernel
             A TrainableKernelBase that models the differences between the conditioning vectors and the target samples
+        custom_encoding
+            An optional encoding to apply to the differences before passing them to the base kernel. This can be used to handle cases 
+            where some features are angles and should be treated as circular quantities.
         """
         if base_kernel.sample_dimension != base_kernel.cond_dimension:
             raise ValueError("AddCondKernel base kernel cond_dimension and sample_dimension must be the same")
         super().__init__(base_kernel.sample_dimension, base_kernel.cond_dimension)
         self.base_kernel = base_kernel
+        self.custom_encoding = custom_encoding if custom_encoding is not None else TrivialEncoding(self.sample_dimension)
 
     def _draw(self, cond: Tensor) -> Tensor:
         """
@@ -49,9 +58,12 @@ class AddCondKernel(TrainableKernelBase):
         Returns
         -------
         Tensor
-            The log probability of each sample given the conditioning information
+            The log probability of each sample given the conditioning information. Evaluated using the base_kernel and
+            the difference between the samples and the conditioning information. The difference is passed through the
+            custom_encoding if provided before being handed to base_kernel.log_prob
         """
-        return self.base_kernel.log_prob(samples - cond, cond)
+        diff = samples - cond
+        return self.base_kernel.log_prob(self.custom_encoding(diff), cond)
 
     def calculate_loss(self, batch: tuple) -> Tensor:
         """
@@ -68,7 +80,8 @@ class AddCondKernel(TrainableKernelBase):
             A tensor containing -mean(log_prob) over finite entries.
         """
         cond, targets, weights = batch
-        return self.base_kernel.calculate_loss((cond, targets - cond, weights))
+        diff = targets - cond
+        return self.base_kernel.calculate_loss((cond, self.custom_encoding(diff), weights))
 
     def draw_with_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tensor]:
         """
