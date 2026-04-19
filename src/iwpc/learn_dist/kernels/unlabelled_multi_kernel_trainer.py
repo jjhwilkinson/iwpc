@@ -8,7 +8,8 @@ from torch.nn import Module, ModuleList
 from torch.nn.functional import logsigmoid
 from torch.optim import Optimizer, Adam
 
-from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase, ConcatenatedKernel
+from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
+from iwpc.learn_dist.kernels.concatenated_kernel import ConcatenatedKernel
 
 
 class MultiKernelKLDivergenceGradientLoss:

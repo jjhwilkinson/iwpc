@@ -6,7 +6,7 @@ from torch.nn import Module, ModuleList
 
 from iwpc.encodings.encoding_base import Encoding
 from iwpc.encodings.log_softmax_encoding import LogSoftmaxEncoding
-from iwpc.learn_dist.kernels.finite_kernel import sample_idx_from_logits
+from iwpc.learn_dist.kernels.finite_kernel_interface import sample_idx_from_logits
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.models.utils import basic_model_factory
 

@@ -3,7 +3,7 @@ from numpy._typing import ArrayLike
 from torch import Tensor
 
 from iwpc.encodings.encoding_base import Encoding
-from iwpc.learn_dist.kernels.finite_kernel import FiniteKernelInterface
+from iwpc.learn_dist.kernels.finite_kernel_interface import FiniteKernelInterface
 from iwpc.learn_dist.kernels.finite_sample_space import ExplicitFiniteSampleSpace
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
