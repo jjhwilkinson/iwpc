@@ -51,7 +51,8 @@ class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
 
         conditioning_logits = self.conditioning_kernel.construct_logits(cond)
 
-        if getattr(self.sample_kernel, 'index_cond_indices', None) is not None:
+        from iwpc.learn_dist.kernels.indexed_finite_kernel import IndexedFiniteKernel
+        if isinstance(self.sample_kernel, IndexedFiniteKernel):
             logit_table = self.sample_kernel.construct_logit_table(cond)  # (N, M, K)
             a_log_probs = logit_table.log_softmax(dim=1)                  # normalise over M per b
             joint = a_log_probs + conditioning_logits.unsqueeze(1)        # (N, M, K) + (N, 1, K)
@@ -85,10 +86,10 @@ class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
         return samples_kernel_idxs * self.conditioning_kernel.sample_space.num_outcomes + cond_kernel_idxs
 
 
-
 if __name__ == "__main__":
     from iwpc.learn_dist.kernels.finite_conditioned_kernel import FiniteConditionedKernel
     from iwpc.learn_dist.kernels.finite_kernel import FiniteKernel
+    from iwpc.learn_dist.kernels.indexed_finite_kernel import IndexedFiniteKernel
 
     torch.manual_seed(0)
 
@@ -114,9 +115,8 @@ if __name__ == "__main__":
     joint_slow = sample_kernel | cond_kernel
     check_joint(joint_slow, cond, "slow path")
 
-    # fast path: indexed FiniteKernel sample kernel
+    # fast path: IndexedFiniteKernel sample kernel
     cond_kernel2 = FiniteKernel(3, 4)
-    torch.manual_seed(0)
-    sample_kernel_indexed = FiniteKernel.condition_on(2, cond_kernel2, 4)
+    sample_kernel_indexed = IndexedFiniteKernel.condition_on(2, cond_kernel2, 4)
     joint_fast = sample_kernel_indexed | cond_kernel2
     check_joint(joint_fast, cond, "fast path")
