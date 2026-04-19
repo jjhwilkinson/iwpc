@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 from torch.nn import ModuleList
 
-from iwpc.learn_dist.kernels.finite_kernel import FiniteKernelInterface
+from iwpc.learn_dist.kernels.finite_kernel_interface import FiniteKernelInterface
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
 
@@ -86,26 +86,36 @@ class BranchingKernel(TrainableKernelBase):
     def __init__(
         self,
         sub_kernels: Iterable[TrainableKernelBase],
-        idx_fn: Callable[[Tensor], Tensor],
+        branch_sample_indices: list[int] | int,
+        outcome_to_idx_fn: Callable[[Tensor], Tensor],
     ):
         """
         Parameters
         ----------
         sub_kernels
             An iterable of TrainableKernelBase sub-kernels
-        idx_fn
-            Function that accepts a tensor of shape (N, self.sample_dimension) and returns an integer tensor of
-            shape (N,) containing the respective samples' indices
+        branch_sample_indices
+            Either a list of integer indices into the conditioning tensor that make up the
+            'branching sample', or a single int N meaning the first N columns of the
+            conditioning tensor are used as the branching sample.
+        outcome_to_idx_fn
+            Function that accepts a tensor of shape (N, len(branch_sample_indices)) and returns an integer tensor of
+            shape (N,)
         """
         sub_kernels = list(sub_kernels)
         assert all(k.sample_dimension == sub_kernels[0].sample_dimension for k in sub_kernels)
         assert all(k.cond_dimension == sub_kernels[0].cond_dimension for k in sub_kernels)
+        if isinstance(branch_sample_indices, int):
+            branch_sample_indices = list(range(branch_sample_indices))
         super().__init__(
             sub_kernels[0].sample_dimension,
-            sub_kernels[0].cond_dimension,
+            len(branch_sample_indices) + sub_kernels[0].cond_dimension,
         )
+
+        self.branching_indices = branch_sample_indices
+        self.sub_kernel_conditioning_indices = [i for i in range(self.cond_dimension) if i not in self.branching_indices]
         self.sub_kernels = ModuleList(sub_kernels)
-        self.idx_fn = idx_fn
+        self.outcome_to_idx_fn = outcome_to_idx_fn
 
     @classmethod
     def condition_on(
@@ -132,8 +142,8 @@ class BranchingKernel(TrainableKernelBase):
         assert len(sub_kernels) == finite_kernel.num_outcomes
         return cls(
             sub_kernels,
-            lambda x: finite_kernel.outcome_to_idx(x[:, :finite_kernel.sample_dimension]),
-            finite_kernel.sample_dimension + finite_kernel.cond_dimension,
+            list(range(finite_kernel.sample_dimension)),
+            finite_kernel.outcome_to_idx
         )
 
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
@@ -153,13 +163,15 @@ class BranchingKernel(TrainableKernelBase):
         Tensor
             A tensor of shape (N,)
         """
-        branching_idxs = self.idx_fn(cond)
+        branching_cond = cond[:, self.branching_indices]
+        branching_idxs = self.outcome_to_idx_fn(branching_cond)
+        sub_kernel_cond = cond[:, self.sub_kernel_conditioning_indices]
 
         return branched_evaluation(
             branching_idxs,
             [k.log_prob for k in self.sub_kernels],
             samples,
-            cond,
+            sub_kernel_cond,
         )[0]
 
     def _draw(self, cond: Tensor) -> Tensor:
@@ -174,12 +186,13 @@ class BranchingKernel(TrainableKernelBase):
         Tensor
             A tensor of shape (N, base_kernels[0].sample_dimension)
         """
-        branching_idxs = self.idx_fn(cond)
+        branching_cond = cond[:, self.branching_indices]
+        branching_idxs = self.outcome_to_idx_fn(branching_cond)
 
         return branched_evaluation(
             branching_idxs,
             [k.draw for k in self.sub_kernels],
-            cond,
+            cond[:, self.sub_kernel_conditioning_indices],
         )[0]
 
     def draw_with_log_prob(self, cond: Tensor) -> tuple[Tensor, Tensor]:
@@ -195,12 +208,14 @@ class BranchingKernel(TrainableKernelBase):
             A tensor of shape (N, base_kernels[0].sample_dimension) and corresponding probability of each sample in a
             tensor of shape (N,)
         """
-        branching_idxs = self.idx_fn(cond)
+        branching_cond = cond[:, self.branching_indices]
+        branching_idxs = self.outcome_to_idx_fn(branching_cond)
+        sub_kernel_cond = cond[:, self.sub_kernel_conditioning_indices]
 
         return branched_evaluation(
             branching_idxs,
             [k.draw_with_log_prob for k in self.sub_kernels],
-            cond,
+            sub_kernel_cond,
         )
 
 
@@ -211,14 +226,19 @@ class FiniteBranchingKernel(FiniteKernelInterface, BranchingKernel):
     def __init__(
         self,
         sub_kernels: Iterable[TrainableKernelBase],
-        idx_fn: Callable[[Tensor], Tensor],
+        branch_sample_indices: list[int] | int,
+        outcome_to_idx_fn: Callable[[Tensor], Tensor],
     ):
         """
         Parameters
         ----------
         sub_kernels
             An iterable of FiniteKernelInterface sub-kernels
-        idx_fn
+        branch_sample_indices
+            Either a list of integer indices into the conditioning tensor that make up the
+            'branching sample', or a single int N meaning the first N columns of the
+            conditioning tensor are used as the branching sample.
+        outcome_to_idx_fn
             Function that accepts a tensor of shape (N, len(branch_sample_indices)) and returns an integer tensor of
             shape (N,)
         """
@@ -226,7 +246,8 @@ class FiniteBranchingKernel(FiniteKernelInterface, BranchingKernel):
         super().__init__(
             sub_kernels[0].sample_space,
             sub_kernels,
-            idx_fn
+            branch_sample_indices,
+            outcome_to_idx_fn
         )
 
     def construct_logits(self, cond: Tensor) -> Tensor:
@@ -244,7 +265,7 @@ class FiniteBranchingKernel(FiniteKernelInterface, BranchingKernel):
             A tensor of shape (N, self.num_outcomes)
         """
         branching_cond = cond[:, self.branching_indices]
-        branching_idxs = self.idx_fn(branching_cond)
+        branching_idxs = self.outcome_to_idx_fn(branching_cond)
         sub_kernel_cond = cond[:, self.sub_kernel_conditioning_indices]
 
         return branched_evaluation(
@@ -252,3 +273,6 @@ class FiniteBranchingKernel(FiniteKernelInterface, BranchingKernel):
             [k.construct_logits for k in self.sub_kernels],
             sub_kernel_cond,
         )[0]
+
+    def _draw(self, cond: Tensor) -> Tensor:
+        return BranchingKernel._draw(self, cond)
