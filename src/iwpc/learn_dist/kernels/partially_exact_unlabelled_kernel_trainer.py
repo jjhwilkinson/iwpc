@@ -219,7 +219,8 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         base_samples = base_samples[mask]
 
 
-        p_loss = - logsigmoid(self.log_p_over_q_model(p)[:, 0] - self.exact_kernel.log_prob(p[:, [0, 4]], p[:, [1, 2, 3, 5, 6, 7]])).mean()
+        # p_loss = - logsigmoid(self.log_p_over_q_model(p)[:, 0] - self.exact_kernel.log_prob(p[:, [0, 4]], p[:, [1, 2, 3, 5, 6, 7]])).mean()
+        p_loss = - logsigmoid(self.log_p_over_q_model(p)[:, 0]).mean()
         q_loss = torch.tensor(0.)
         for outcome, outcome_log_prob in self.exact_kernel.outcomes_with_log_prob_iter(base_samples):
             repeated_outcome = outcome[None, :].repeat((base_samples.shape[0], 1))
