@@ -62,8 +62,8 @@ class FiniteConcatenatedKernel(FiniteKernelInterface, ConcatenatedKernel):
         Tensor
             An integer tensor of shape (N,)
         """
-        idxs = 0.
-        cum_prod = 1.
+        idxs = 0
+        cum_prod = 1
         for sample_edges, sub_kernel in zip(self.sample_edges[::-1], self.sub_kernels[::-1]):
             idxs += sub_kernel.outcome_to_idx(samples[:, sample_edges]) * cum_prod
             cum_prod *= sub_kernel.num_outcomes

@@ -10,15 +10,15 @@ from iwpc.learn_dist.kernels.concatenated_kernel import ConcatenatedKernel
 from iwpc.learn_dist.kernels.conditioned_kernel import ConditionedKernel
 
 
-def sample_idx_from_logits(logits: Tensor) -> Tensor:
+def sample_idx_from_log_probs(log_probs: Tensor) -> Tensor:
     """
-    Given a Tensor containing N rows of K logits, randomly samples an integer between 0 and K-1 from the implied
-    distribution
+    Given a Tensor containing N rows of K log-probabilities, randomly samples an integer between 0 and K-1 from the
+    implied distribution
 
     Parameters
     ----------
-    logits
-        A 2D tensor of shape (N, K)
+    log_probs
+        A 2D tensor of shape (N, K) of log-probabilities
 
     Returns
     -------
@@ -26,11 +26,15 @@ def sample_idx_from_logits(logits: Tensor) -> Tensor:
         A float tensor containing the sampled integers of shape (N,)
     """
     with torch.no_grad():
-        probs = logits.softmax(dim=-1)
+        probs = log_probs.exp()
         cum_probs = torch.cumsum(probs, dim=-1)
-        rand = torch.rand(size=(logits.shape[0], 1), device=logits.device)
+        rand = torch.rand(size=(log_probs.shape[0], 1), device=log_probs.device)
         samples = ((cum_probs - rand) > 0).float().argmax(dim=-1)
     return samples
+
+
+def sample_idx_from_logits(logits: Tensor) -> Tensor:
+    return sample_idx_from_log_probs(logits.log_softmax(dim=-1))
 
 
 class FiniteKernelInterface(ABC):
@@ -91,7 +95,7 @@ class FiniteKernelInterface(ABC):
         Tensor
             A sample drawn from the distribution over self.outcomes
         """
-        return self.sample_space.idx_to_outcome(sample_idx_from_logits(self.construct_logits(cond)))
+        return self.sample_space.idx_to_outcome(sample_idx_from_log_probs(self.construct_logits(cond).log_softmax(dim=-1)))
 
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
         """
@@ -110,7 +114,7 @@ class FiniteKernelInterface(ABC):
             A tensor of shape (N,)
         """
         idxs = self.sample_space.outcome_to_idx(samples)
-        return self.construct_logits(cond).log_softmax(dim=-1)[range(cond.shape[0]), idxs]
+        return self.construct_logits(cond).log_softmax(dim=-1).gather(1, idxs.unsqueeze(1)).squeeze(1)
 
     def draw_with_log_prob(self, cond: Tensor) -> tuple[Tensor, Tensor]:
         """
@@ -128,7 +132,7 @@ class FiniteKernelInterface(ABC):
         """
         logits = self.construct_logits(cond)
         log_probs = logits.log_softmax(dim=-1)
-        sample_idxs = sample_idx_from_logits(log_probs)
+        sample_idxs = sample_idx_from_log_probs(log_probs)
         return self.sample_space.idx_to_outcome(sample_idxs), log_probs[range(cond.shape[0]), sample_idxs]
 
     def outcomes_with_log_prob_iter(self, cond: Tensor) -> Iterator[tuple[Tensor, Tensor]]:

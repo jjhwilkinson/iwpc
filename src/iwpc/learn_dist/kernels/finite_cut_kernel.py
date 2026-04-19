@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 
 from iwpc.learn_dist.kernels.cut_kernel import CutKernelInterface
-from iwpc.learn_dist.kernels.finite_kernel_interface import FiniteKernelInterface, sample_idx_from_logits
+from iwpc.learn_dist.kernels.finite_kernel_interface import FiniteKernelInterface, sample_idx_from_log_probs
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
 
@@ -100,7 +100,7 @@ class FiniteCutKernel(CutKernelInterface, FiniteKernelInterface, TrainableKernel
         base_log_probs = self.base_kernel.construct_logits(cond).log_softmax(dim=-1)
         cut_pass_log_probs = base_log_probs[:, self.allowed_indices].logsumexp(dim=-1)
         log_probs = base_log_probs[:, self.allowed_indices] - cut_pass_log_probs
-        sample_idxs = sample_idx_from_logits(log_probs)
+        sample_idxs = sample_idx_from_log_probs(log_probs)
         return self.outcomes[sample_idxs], log_probs, cut_pass_log_probs
 
     def pass_log_prob_and_outcomes_with_log_prob_iter(self, cond: Tensor) -> tuple[Tensor, Iterator[tuple[Tensor, Tensor]]]:

@@ -6,7 +6,7 @@ from torch.nn import Module, ModuleList
 
 from iwpc.encodings.encoding_base import Encoding
 from iwpc.encodings.log_softmax_encoding import LogSoftmaxEncoding
-from iwpc.learn_dist.kernels.finite_kernel_interface import sample_idx_from_logits
+from iwpc.learn_dist.kernels.finite_kernel_interface import sample_idx_from_log_probs
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.models.utils import basic_model_factory
 
@@ -69,7 +69,7 @@ class MixtureKernel(TrainableKernelBase):
             each sub-kernel being chosen is given by self.log_probability_model
         """
         sub_samples = torch.stack([k.draw(cond) for k in self.sub_kernels], dim=-1)
-        labels = sample_idx_from_logits(self.log_probability_model(cond))
+        labels = sample_idx_from_log_probs(self.log_probability_model(cond))
         samples = sub_samples[range(cond.shape[0]), ..., labels]
 
         return samples
