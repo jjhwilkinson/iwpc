@@ -30,7 +30,7 @@ class IndexedFiniteKernel(FiniteKernel):
         index_cond_indices: list[int] | int,
         index_sample_space: FiniteSampleSpace,
         logit_model: torch.nn.Module | None = None,
-        init_prob: float | Iterable[float] | Iterable[Iterable[float]] | None = None,
+        init_log_probs: float | Iterable[float] | Iterable[Iterable[float]] | None = None,
     ):
         """
         Parameters
@@ -48,11 +48,11 @@ class IndexedFiniteKernel(FiniteKernel):
             Optional custom logit model. Must accept x of shape (N, standard_cond_dim) and return
             (N, K*M) laid out as K contiguous blocks of M logits — reshape(N, K, M) gives block k the
             logits for index value k. If None, a default model is constructed via basic_model_factory.
-        init_prob
-            Optional initial probability bias. A float p initialises a binary kernel with the same
-            [log(1-p), log(p)] shift for all K index values. A flat iterable of length M is broadcast
+        init_log_probs
+            Optional initial log-probability bias. A float lp initialises a binary kernel with the same
+            [log(1-exp(lp)), lp] shift for all K index values. A flat iterable of length M is broadcast
             uniformly across all K index values. A K×M nested iterable provides a distinct initial
-            distribution per index value. Ignored if logit_model is provided.
+            log-prob per outcome per index value. Ignored if logit_model is provided.
         """
         if isinstance(num_variable_outcomes, int):
             num_variable_outcomes = (num_variable_outcomes,)
@@ -65,18 +65,19 @@ class IndexedFiniteKernel(FiniteKernel):
         total_cond_dim = len(index_cond_indices) + standard_cond_dim
 
         if logit_model is None:
-            if init_prob is not None:
-                if isinstance(init_prob, float):
+            if init_log_probs is not None:
+                if isinstance(init_log_probs, float):
                     if M != 2:
-                        raise ValueError(f"A scalar init_prob can only be used with binary kernels (2 outcomes), got {M}")
-                    probs_per_b = [[1 - init_prob, init_prob]] * K
+                        raise ValueError(f"A scalar init_log_probs can only be used with binary kernels (2 outcomes), got {M}")
+                    lp_row = [np.log1p(-np.exp(init_log_probs)), init_log_probs]
+                    log_probs_per_b = [lp_row] * K
                 else:
-                    probs_list = list(init_prob)
-                    if isinstance(probs_list[0], (list, tuple)):
-                        probs_per_b = [list(row) for row in probs_list]
+                    lp_list = list(init_log_probs)
+                    if isinstance(lp_list[0], (list, tuple)):
+                        log_probs_per_b = [list(row) for row in lp_list]
                     else:
-                        probs_per_b = [probs_list] * K
-                final_layers = [ConstantScaleLayer(shift=[np.log(p) for row in probs_per_b for p in row])]
+                        log_probs_per_b = [lp_list] * K
+                final_layers = [ConstantScaleLayer(shift=[lp for row in log_probs_per_b for lp in row])]
             else:
                 final_layers = []
             logit_model = basic_model_factory(standard_cond, TrivialEncoding(K * M), final_layers=final_layers)

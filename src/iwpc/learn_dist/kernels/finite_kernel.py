@@ -28,7 +28,7 @@ class FiniteKernel(FiniteKernelInterface, TrainableKernelBase):
         num_variable_outcomes: int | Iterable[int],
         cond: Encoding | int,
         logit_model: torch.nn.Module | None = None,
-        init_prob: float | Iterable[float] | None = None,
+        init_log_probs: float | Iterable[float] | None = None,
     ):
         """
         Parameters
@@ -43,11 +43,11 @@ class FiniteKernel(FiniteKernelInterface, TrainableKernelBase):
             Optional custom logit model. If None, a default model is constructed via basic_model_factory.
             When provided, the model must accept cond of shape (N, cond_dim) and return (N, M) where
             M = sample_space.num_outcomes
-        init_prob
-            Optional initial probability bias applied as a constant log-probability shift to the logits. A float p
-            initialises a binary kernel with shift [log(1-p), log(p)] — raises ValueError if the kernel has more
-            than 2 outcomes. An iterable of floats provides one probability per outcome for multi-outcome kernels.
-            Ignored if logit_model is provided.
+        init_log_probs
+            Optional initial log-probability bias applied as a constant shift to the logits. A float lp
+            initialises a binary kernel with shift [log(1-exp(lp)), lp] — raises ValueError if the kernel has
+            more than 2 outcomes. An iterable of floats provides one log-prob per outcome for multi-outcome
+            kernels. Ignored if logit_model is provided.
         """
         if isinstance(num_variable_outcomes, int):
             num_variable_outcomes = (num_variable_outcomes,)
@@ -63,14 +63,14 @@ class FiniteKernel(FiniteKernelInterface, TrainableKernelBase):
         if logit_model is not None:
             self.logit_model = logit_model
         else:
-            if init_prob is not None:
-                if isinstance(init_prob, float):
+            if init_log_probs is not None:
+                if isinstance(init_log_probs, float):
                     if self.sample_space.num_outcomes != 2:
-                        raise ValueError(f"A scalar init_prob can only be used with binary kernels (2 outcomes), got {self.sample_space.num_outcomes}")
-                    probs = [1 - init_prob, init_prob]
+                        raise ValueError(f"A scalar init_log_probs can only be used with binary kernels (2 outcomes), got {self.sample_space.num_outcomes}")
+                    log_probs = [np.log1p(-np.exp(init_log_probs)), init_log_probs]
                 else:
-                    probs = list(init_prob)
-                final_layers = [ConstantScaleLayer(shift=[np.log(p) for p in probs])]
+                    log_probs = list(init_log_probs)
+                final_layers = [ConstantScaleLayer(shift=log_probs)]
             else:
                 final_layers = []
             self.logit_model = basic_model_factory(

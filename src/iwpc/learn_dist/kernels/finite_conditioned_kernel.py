@@ -26,6 +26,11 @@ class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
             A finite kernel that produces samples upon which the sample kernel above is additionally conditioned
         """
         assert sample_kernel.cond_dimension == (conditioning_kernel.sample_dimension + conditioning_kernel.cond_dimension)
+        from iwpc.learn_dist.kernels.indexed_finite_kernel import IndexedFiniteKernel
+        if isinstance(sample_kernel, IndexedFiniteKernel):
+            assert conditioning_kernel.sample_space.num_outcomes == sample_kernel.index_sample_space.num_outcomes, (
+                "IndexedFiniteKernel index space (K) must match conditioning kernel sample space"
+            )
         super().__init__(
             ConcatenatedFiniteSampleSpace([sample_kernel.sample_space, conditioning_kernel.sample_space]),
             sample_kernel,
