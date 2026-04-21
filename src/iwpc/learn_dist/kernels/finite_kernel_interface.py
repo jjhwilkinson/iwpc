@@ -33,10 +33,6 @@ def sample_idx_from_log_probs(log_probs: Tensor) -> Tensor:
     return samples
 
 
-def sample_idx_from_logits(logits: Tensor) -> Tensor:
-    return sample_idx_from_log_probs(logits.log_softmax(dim=-1))
-
-
 class FiniteKernelInterface(ABC):
     """
     Abstract interface for all finite discrete kernels. Since there are a finite number of possible outcomes, a mapping

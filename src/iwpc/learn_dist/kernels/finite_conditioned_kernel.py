@@ -26,11 +26,6 @@ class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
             A finite kernel that produces samples upon which the sample kernel above is additionally conditioned
         """
         assert sample_kernel.cond_dimension == (conditioning_kernel.sample_dimension + conditioning_kernel.cond_dimension)
-        from iwpc.learn_dist.kernels.indexed_finite_kernel import IndexedFiniteKernel
-        if isinstance(sample_kernel, IndexedFiniteKernel):
-            assert conditioning_kernel.sample_space.num_outcomes == sample_kernel.index_sample_space.num_outcomes, (
-                "IndexedFiniteKernel index space (K) must match conditioning kernel sample space"
-            )
         super().__init__(
             ConcatenatedFiniteSampleSpace([sample_kernel.sample_space, conditioning_kernel.sample_space]),
             sample_kernel,
@@ -57,8 +52,9 @@ class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
         conditioning_logits = self.conditioning_kernel.construct_logits(cond)
 
         from iwpc.learn_dist.kernels.indexed_finite_kernel import IndexedFiniteKernel
-        if isinstance(self.sample_kernel, IndexedFiniteKernel):
-            logit_table = self.sample_kernel.construct_logit_table(cond)  # (N, M, K)
+        from iwpc.learn_dist.kernels.indexed_finite_conditioned_kernel import IndexedFiniteConditionedKernel
+        if isinstance(self.sample_kernel, IndexedFiniteKernel) or isinstance(self.sample_kernel, IndexedFiniteConditionedKernel):
+            logit_table = self.sample_kernel.construct_logit_table(cond[:, self.sample_kernel.standard_cond_indices - self.conditioning_kernel.sample_dimension])  # (N, M, K)
             a_log_probs = logit_table.log_softmax(dim=1)                  # normalise over M per b
             joint = a_log_probs + conditioning_logits.unsqueeze(1)        # (N, M, K) + (N, 1, K)
             return joint.reshape(cond.shape[0], -1)
@@ -92,7 +88,6 @@ class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
 
 
 if __name__ == "__main__":
-    from iwpc.learn_dist.kernels.finite_conditioned_kernel import FiniteConditionedKernel
     from iwpc.learn_dist.kernels.finite_kernel import FiniteKernel
     from iwpc.learn_dist.kernels.indexed_finite_kernel import IndexedFiniteKernel
 
