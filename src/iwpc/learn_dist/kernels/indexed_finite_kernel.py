@@ -178,4 +178,4 @@ class IndexedFiniteKernel(IndexedInterface, FiniteKernel):
         b = cond[:, self.index_cond_indices]
         table = self.construct_logit_table(x)                                              # (N, M, K)
         idxs = self.index_sample_space.outcome_to_idx(b).long()
-        return table.gather(2, idxs[:, None, None].expand(-1, table.shape[1], 1)).squeeze(2)  # (N, M)
+        return table.gather(2, idxs.long()[:, None, None].expand(-1, table.shape[1], 1)).squeeze(2)  # (N, M)

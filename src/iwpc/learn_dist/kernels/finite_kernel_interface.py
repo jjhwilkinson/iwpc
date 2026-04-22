@@ -110,7 +110,7 @@ class FiniteKernelInterface(ABC):
             A tensor of shape (N,)
         """
         idxs = self.sample_space.outcome_to_idx(samples)
-        return self.construct_logits(cond).log_softmax(dim=-1).gather(1, idxs.unsqueeze(1)).squeeze(1)
+        return self.construct_logits(cond).log_softmax(dim=-1).gather(1, idxs.long().unsqueeze(1)).squeeze(1)
 
     def draw_with_log_prob(self, cond: Tensor) -> tuple[Tensor, Tensor]:
         """
