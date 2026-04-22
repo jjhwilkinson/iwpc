@@ -4,6 +4,7 @@ from torch import Tensor
 from iwpc.learn_dist.kernels.finite_kernel_interface import FiniteKernelInterface
 from iwpc.learn_dist.kernels.finite_sample_space import ConcatenatedFiniteSampleSpace
 from iwpc.learn_dist.kernels.conditioned_kernel import ConditionedKernel
+from iwpc.learn_dist.kernels.indexed_interface import IndexedInterface
 
 
 class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
@@ -50,10 +51,7 @@ class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
             return torch.zeros((0, self.sample_space.num_outcomes), device=cond.device, dtype=cond.dtype)
 
         conditioning_logits = self.conditioning_kernel.construct_logits(cond)
-
-        from iwpc.learn_dist.kernels.indexed_finite_kernel import IndexedFiniteKernel
-        from iwpc.learn_dist.kernels.indexed_finite_conditioned_kernel import IndexedFiniteConditionedKernel
-        if isinstance(self.sample_kernel, IndexedFiniteKernel) or isinstance(self.sample_kernel, IndexedFiniteConditionedKernel):
+        if isinstance(self.sample_kernel, IndexedInterface):
             logit_table = self.sample_kernel.construct_logit_table(cond[:, self.sample_kernel.standard_cond_indices - self.conditioning_kernel.sample_dimension])  # (N, M, K)
             a_log_probs = logit_table.log_softmax(dim=1)                  # normalise over M per b
             joint = a_log_probs + conditioning_logits.unsqueeze(1)        # (N, M, K) + (N, 1, K)
