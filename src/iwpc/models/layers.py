@@ -44,6 +44,7 @@ class RunningNormLayer(Module):
         self.register_buffer('sq_sum_', torch.zeros(input_shape))
         self.register_buffer('N_', torch.tensor(0.))
         self.max_samples = max_samples
+        self.has_printed_frozen_values = False
 
     @property
     def shift(self) -> Tensor:
@@ -69,10 +70,7 @@ class RunningNormLayer(Module):
             return torch.ones_like(self.sum_)
 
         var = self.sq_sum_ / max(self.N_, 1.) - self.shift**2
-        if (var <= 0).any():
-            return torch.ones_like(self.sum_)
-
-        return torch.sqrt(var)
+        return torch.where(var > 0, torch.sqrt(var), torch.ones_like(self.sum_))
 
     def _update(self, x: torch.Tensor) -> None:
         """
@@ -104,8 +102,12 @@ class RunningNormLayer(Module):
         Tensor
             The input tensor with each component normalised by the running mean and standard deviation
         """
-        if self.training and self.N_ < self.max_samples:
-            self._update(x)
+        if self.N_ < self.max_samples:
+            if self.training:
+                self._update(x)
+        elif not self.has_printed_frozen_values:
+            self.has_printed_frozen_values = True
+            print(f"RunningNormLayer frozen values: {self.shift=} {self.scale=} {self.N_=}")
 
         return (x - self.shift) / self.scale
 

@@ -1,9 +1,11 @@
-from typing import Optional, Iterable
+from dataclasses import dataclass
+from typing import Optional, Iterable, Tuple
 
 import numpy as np
 import torch
 from numpy import ndarray
 from scipy.linalg import logm
+from torch import Tensor
 from torch.nn import Module
 
 from iwpc.encodings.antisymmetric_matrix_encoding import AntiSymmetricMatrixEncoding
@@ -14,10 +16,41 @@ from iwpc.models.layers import ConstantScaleLayer
 from iwpc.models.utils import basic_model_factory
 
 
+@dataclass(frozen=True)
+class MultivariateGaussianParameters:
+    """
+    Holds the parameters used to construct the mean and covariance matrix of a multivariate Gaussian.
+
+    Attributes
+    ----------
+    mean
+        The computed mean tensor.
+    log_std
+        Logarithm of the standard deviation tensor.
+    unnorm_corr_eigvals
+        Unnormalized eigenvalues of the correlation matrix.
+    unnorm_corr_rot
+        Unnormalized rotation matrix for the correlation matrix.
+    unnorm_corr_diag
+        Diagonal values of the unnormalized correlation matrix, representing its standard deviations.
+    std
+        Standard deviation tensor, computed as the exponential of the log standard deviations.
+    log_unnorm_corr_eigvals
+        Logarithm of the unnormalized eigenvalues of the correlation matrix.
+    """
+    mean: Tensor
+    log_std: Tensor
+    unnorm_corr_eigvals: Tensor
+    unnorm_corr_rot: Tensor
+    unnorm_corr_diag: Tensor
+    std: Tensor
+    log_unnorm_corr_eigvals: Tensor
+
+
 def construct_init_parameters(cov: ndarray) -> tuple[ndarray, ndarray, ndarray]:
     """
-    Given a covariance matrix, calculates the initial values for the parameterization within the
-    MultivariateGaussianKernel needed to seed the kernel with the given covariance matrix.
+    Calculates a set of parameters that produce the given matrix within the parameterization used by the
+    MultivariateGaussianKernel
 
     Parameters
     ----------
@@ -43,8 +76,8 @@ def construct_init_parameters(cov: ndarray) -> tuple[ndarray, ndarray, ndarray]:
 
 class MultivariateGaussianKernel(TrainableKernelBase):
     """
-    Multivariate normal kernel with mean and covariance conditioned on `cond`. The covariance matrix is parameterized
-    using the decomposition of a positive definite matrix into the form:
+    Multivariate normal kernel with mean and covariance that vary as a function of the conditioning information. The
+    covariance matrix is parameterized using the decomposition of a positive definite matrix into the form:
 
     std-dev * correlation * std-dev
 
@@ -74,11 +107,11 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self,
         cond: int | torch.Tensor,
         sample_dim: int | torch.Tensor,
-        max_chi: Optional[float] = None,
         mean_model: Optional[Module] = None,
         log_diag_model: Optional[Module] = None,
         log_rot_model: Optional[Module] = None,
         log_std_model: Optional[Module] = None,
+        max_chi: Optional[float] = None,
     ):
         """
         Parameters
@@ -86,9 +119,7 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         cond
             The conditioning space encoding or dimension
         sample_dim
-            The sample space encoding or dimension
-        max_chi
-            The maximum chi-squared to consider in the negative log-prob when fitting for numerical stability.
+            The sample dimension of the distribution
         mean_model
             Optional model that constructs the mean of the distribution for the given conditioning information
         log_diag_model
@@ -97,6 +128,8 @@ class MultivariateGaussianKernel(TrainableKernelBase):
             Optional model that constructs the log rotational matrix of the distribution for the given conditioning information.
         log_std_model
             Optional model that constructs the log standard deviation of the distribution for the given conditioning information.
+        max_chi
+            An optional maximum chi-squared to consider in the negative log-prob when fitting for numerical stability.
         """
         super().__init__(sample_dim, cond)
         self.cond = cond
@@ -107,25 +140,6 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         self.log_std_model = basic_model_factory(TrivialEncoding(cond), TrivialEncoding(sample_dim)) if log_std_model is None else log_std_model
         self.max_chi = max_chi
 
-    def _draw(self, cond: torch.Tensor) -> torch.Tensor:
-        """
-        Parameters
-        ----------
-        cond
-            The conditioning information for each sample
-
-        Returns
-        -------
-        Tensor
-            A sample from the gaussian kernel for each row of conditioning information
-        """
-        mean = self.mean_model(cond)
-        cov = self.construct_cov(cond)
-        L = torch.linalg.cholesky(cov)
-        noise = torch.randn_like(mean)
-        correlated_noise = torch.einsum('bjk,bk->bj', L, noise)
-        return correlated_noise + mean
-
     @classmethod
     def initialise(
         cls,
@@ -134,20 +148,23 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         **kwargs,
     ) -> "MultivariateGaussianKernel":
         """
-        Compute initialisation parameters for the smearing kernel.
+        Initialises a MultivariateGaussianKernel seeded with the global mean and covariance of the provided data.
 
         Parameters
         ----------
-        data : ndarray or Iterable[ndarray]
+        data
             The data to compute the initialisation parameters for
-        cond: int | Encoding
+        cond
             The dimension or encoding of the conditioning space
+        kwargs
+            Additional keyword arguments passed to the cls.initialise_cov function. See the cls.initialise_cov docstring
+            for details
 
         Returns
         -------
         MultivariateGaussianKernel
-            An initialized instance of the `MultivariateGaussianKernel` class with models
-            and parameters derived from the input data or user-provided models.
+            An instance of MultivariateGaussianKernel with models and parameters derived from the input data or
+            user-provided models.
         """
         cov = np.cov(data.T)
         mean = np.mean(data, axis=0)
@@ -168,8 +185,8 @@ class MultivariateGaussianKernel(TrainableKernelBase):
     ) -> "MultivariateGaussianKernel":
 
         """
-        Initializes a multivariate Gaussian kernel with optional user-defined models for
-        mean, log diagonal, log rotation, and log standard deviation.
+        Initializes a multivariate Gaussian kernel with optional user-defined models for mean, log diagonal, log
+        rotation, and log standard deviation.
 
         Parameters
         ----------
@@ -192,8 +209,8 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         Returns
         -------
         MultivariateGaussianKernel
-            An initialized instance of the `MultivariateGaussianKernel` class with models
-            and parameters derived from the input data or user-provided models.
+            An initialized instance of the `MultivariateGaussianKernel` class with models and parameters derived from
+            the input data or user-provided models.
         """
         sample_dim = cov.shape[0]
         log_corr_eigvals, log_corr_rot, log_std = construct_init_parameters(cov)
@@ -232,11 +249,85 @@ class MultivariateGaussianKernel(TrainableKernelBase):
             **kwargs,
         )
 
-    def log_prob(self,
+    def construct_gaussian_parameters(self, cond: torch.Tensor) -> MultivariateGaussianParameters:
+        """
+        Parameters
+        ----------
+        cond:
+            The conditioning information for each sample
+
+        Returns
+        -------
+        MultivariateGaussianParameters
+            MultivariateGaussianParameters instance containing a parameterisation of the predicted mean and covariance
+            for each row of conditioning information
+        """
+        log_unnorm_corr_rot = self.log_rot_model(cond)
+        mean = self.mean_model(cond)
+        log_std = self.log_std_model(cond)
+        log_unnorm_corr_eigvals = self.log_diag_model(cond)
+
+        unnorm_corr_eigvals = torch.exp(log_unnorm_corr_eigvals)
+        unnorm_corr_rot = torch.matrix_exp(log_unnorm_corr_rot)
+        unnorm_corr = torch.einsum('bji,bj,bjk->bik', unnorm_corr_rot, unnorm_corr_eigvals, unnorm_corr_rot)
+        unnorm_corr_diag = torch.sqrt(torch.diagonal(unnorm_corr, dim1=1, dim2=2))
+        std = torch.exp(log_std)
+
+        return MultivariateGaussianParameters(
+            mean=mean,
+            log_std=log_std,
+            unnorm_corr_eigvals=unnorm_corr_eigvals,
+            unnorm_corr_rot=unnorm_corr_rot,
+            unnorm_corr_diag=unnorm_corr_diag,
+            std=std,
+            log_unnorm_corr_eigvals=log_unnorm_corr_eigvals,
+        )
+
+    def log_prob_from_gaussian_parameters(
+        self,
+        samples: torch.Tensor,
+        gaussian_parameters: MultivariateGaussianParameters,
+        return_chi_sqs: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        """
+        Parameters
+        ----------
+        samples
+            The sampling information for each sample
+        gaussian_parameters
+            The parameters of the gaussian for each sample
+        return_chi_sqs
+            Whether the chi-square of each sample should be returned
+
+        Returns
+        -------
+        torch.Tensor | tuple[torch.Tensor, torch.Tensor]
+            Log probability of drawing each samples from a Gaussian with the given the gaussian_parameters.
+            The chi-square of each sample is also provided if return_chi_sqs=True.
+        """
+        diffs = samples - gaussian_parameters.mean
+        normed_diffs = diffs / gaussian_parameters.std
+        normed_diffs = torch.exp(-0.5 * gaussian_parameters.log_unnorm_corr_eigvals) * torch.einsum(
+            'bij,bj->bi',
+            gaussian_parameters.unnorm_corr_rot,
+            normed_diffs * gaussian_parameters.unnorm_corr_diag,
+        )
+        chi_sqs = torch.sum(normed_diffs ** 2, dim=-1)
+        log_prob = -0.5 * (
+            chi_sqs
+            + 2 * gaussian_parameters.log_std.sum(dim=-1)
+            - 2 * torch.log(gaussian_parameters.unnorm_corr_diag).sum(dim=-1)
+            + gaussian_parameters.log_unnorm_corr_eigvals.sum(dim=-1)
+            + self.sample_dimension * np.log(2 * np.pi)
+        )
+        return (log_prob, chi_sqs) if return_chi_sqs else log_prob
+
+    def log_prob(
+        self,
         samples: torch.Tensor,
         cond: torch.Tensor,
         return_chi_sqs: bool = False,
-    ) -> torch.Tensor:
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
         Parameters
         ----------
@@ -252,36 +343,17 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         Tensor
             Log probability of samples given the conditioning information
         """
-        log_unnormalised_corr_rot = self.log_rot_model(cond)
-        mean = self.mean_model(cond)
-        log_std = self.log_std_model(cond)
-        log_unnormalised_corr_eigvals = self.log_diag_model(cond)
-
-        unnormalised_corr_rot = torch.matrix_exp(log_unnormalised_corr_rot)
-        unnormalised_corr_eigvals = torch.exp(log_unnormalised_corr_eigvals)
-        unnormalised_corr = torch.einsum('bji,bj,bjk->bik', unnormalised_corr_rot, unnormalised_corr_eigvals, unnormalised_corr_rot)
-        unnormalised_corr_diag = torch.sqrt(torch.diagonal(unnormalised_corr, dim1=1, dim2=2))
-
-        diffs = samples - mean
-        normed_diffs = diffs / torch.exp(log_std)
-        normed_diffs = torch.exp(-0.5 * log_unnormalised_corr_eigvals) * torch.einsum(
-            'bij,bj->bi',
-            torch.matrix_exp(log_unnormalised_corr_rot),
-            normed_diffs * unnormalised_corr_diag,
+        return self.log_prob_from_gaussian_parameters(
+            samples,
+            self.construct_gaussian_parameters(cond),
+            return_chi_sqs=return_chi_sqs,
         )
-        chi_sqs = torch.sum(normed_diffs ** 2, dim=-1)
-        log_prob = - 0.5 * (
-            chi_sqs + 2 * log_std.sum(dim=-1)
-            - 2 * torch.log(unnormalised_corr_diag).sum(dim=-1)
-            + log_unnormalised_corr_eigvals.sum(dim=-1)
-            + self.sample_dimension * np.log(2 * np.pi)
-        )
-        return (log_prob, chi_sqs) if return_chi_sqs else log_prob
-
 
     def calculate_loss(self, batch: tuple) -> torch.Tensor:
         """
-        Calculate the loss of the given batch
+        Calculate the loss of the given batch as the average negative log-probability of the samples given the
+        conditioning information. If self.max_chi is specified, then only samples at most self.max_chi standard
+        deviations from the predicted mean are included in the calculation. This suppresses outliers
 
         Parameters
         ----------
@@ -291,10 +363,10 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         Returns
         -------
         Tensor
-            A tensor containing -mean(log_prob) over finite entries.
+            A tensor containing -mean(log_prob) for the samples in the batch
         """
         cond, targets, _ = batch
-        log_prob, chi_sqs = self.log_prob(targets, cond, return_chi_sqs = True)
+        log_prob, chi_sqs = self.log_prob(targets, cond, return_chi_sqs=True)
         if self.max_chi is not None:
             mask = chi_sqs < self.max_chi ** 2
             log_prob = log_prob[mask]
@@ -312,22 +384,81 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         Tensor
             Covariance matrix of the distribution for the given conditioning information.
         """
-        log_unnormalised_corr_rot = self.log_rot_model(cond)
-        log_unnormalised_corr_eigvals = self.log_diag_model(cond)
+        log_unnorm_corr_rot = self.log_rot_model(cond)
+        log_unnorm_corr_eigvals = self.log_diag_model(cond)
         log_std = self.log_std_model(cond)
 
-        unnormalised_corr_rot = torch.matrix_exp(log_unnormalised_corr_rot)
+        unnorm_corr_rot = torch.matrix_exp(log_unnorm_corr_rot)
         cov_tilda = torch.einsum(
             'bji,bj,bjk->bik',
-            unnormalised_corr_rot,
-            log_unnormalised_corr_eigvals.exp(),
-            unnormalised_corr_rot
+            unnorm_corr_rot,
+            log_unnorm_corr_eigvals.exp(),
+            unnorm_corr_rot
         )
-        root_unnormalised_corr_diag = torch.sqrt(torch.diagonal(cov_tilda, dim1=1, dim2=2))  # (B,d)
+        root_unnorm_corr_diag = torch.sqrt(torch.diagonal(cov_tilda, dim1=1, dim2=2))
 
         std = torch.exp(log_std)
-        return (
-            cov_tilda
-            * (std * root_unnormalised_corr_diag).unsqueeze(-2)
-            * (std * root_unnormalised_corr_diag).unsqueeze(-1)
+        return torch.einsum('bi,bij,bj->bij',
+            std / root_unnorm_corr_diag,
+            cov_tilda,
+            std / root_unnorm_corr_diag
         )
+
+    def draw_from_gaussian_parameters(
+        self,
+        gaussian_parameters: MultivariateGaussianParameters
+    ) -> torch.Tensor:
+        """
+
+        Parameters
+        ----------
+        gaussian_parameters
+            The parameters of the gaussian distribution from which to draw each sample
+
+        Returns
+        -------
+        Tensor
+            A sample from the gaussian kernel for each row of conditioning information
+        """
+        root_cov = torch.einsum(
+            'bi,bij,bj,bjk->bik',
+            gaussian_parameters.std / gaussian_parameters.unnorm_corr_diag,
+            gaussian_parameters.unnorm_corr_rot.transpose(-1, -2),
+            torch.sqrt(gaussian_parameters.unnorm_corr_eigvals),
+            gaussian_parameters.unnorm_corr_rot,
+        )
+        noise = torch.randn_like(gaussian_parameters.mean)
+        correlated_noise = torch.einsum('bjk,bk->bj', root_cov, noise)
+        return correlated_noise + gaussian_parameters.mean
+
+    def _draw(self, cond: torch.Tensor) -> torch.Tensor:
+        """
+        Parameters
+        ----------
+        cond
+            The conditioning information for each sample
+
+        Returns
+        -------
+        Tensor
+            A sample from the gaussian kernel for each row of conditioning information
+        """
+        return self.draw_from_gaussian_parameters(self.construct_gaussian_parameters(cond))
+
+    def draw_with_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tensor]:
+        """
+        Parameters
+        ----------
+        cond
+            The conditioning information for each sample
+
+        Returns
+        -------
+        Tuple[Tensor, Tensor]
+            A sample from the gaussian kernel for each row of conditioning information along with each sample's
+            corresponding log probability
+        """
+        gaussian_parameters = self.construct_gaussian_parameters(cond)
+        samples = self.draw_from_gaussian_parameters(gaussian_parameters)
+        log_probs = self.log_prob_from_gaussian_parameters(samples, gaussian_parameters)
+        return samples, log_probs
