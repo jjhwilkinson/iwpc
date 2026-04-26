@@ -346,7 +346,6 @@ class PandasDirDataModule(LightningDataModule):
         if self.use_in_memory_dataset:
             kwargs = {**self.dataloader_kwargs}
             kwargs.setdefault('pin_memory', True)
-            kwargs.setdefault('non_blocking', True)
             kwargs.setdefault('shuffle', True)
             return DataLoader(self._in_memory_train_ds, **kwargs)
         return DataLoader(self.train_ds, shuffle=False, **self.dataloader_kwargs)
@@ -358,7 +357,6 @@ class PandasDirDataModule(LightningDataModule):
         if self.use_in_memory_dataset:
             kwargs = {**self.dataloader_kwargs}
             kwargs.setdefault('pin_memory', True)
-            kwargs.setdefault('non_blocking', True)
             kwargs.setdefault('shuffle', False)
             return DataLoader(self._in_memory_val_ds, **kwargs)
         return DataLoader(self.val_ds, shuffle=False, **self.dataloader_kwargs)
