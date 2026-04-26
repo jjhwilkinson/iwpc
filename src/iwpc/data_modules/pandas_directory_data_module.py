@@ -288,7 +288,7 @@ class PandasDirDataModule(LightningDataModule):
         """
         return pd.read_pickle(self.all_files[idx])
 
-    def _load_in_memory_dataset(self, files: list[Path]) -> PandasDataset:
+    def _load_in_memory_dataset(self, files: list[Path], name: str) -> PandasDataset:
         """
         Concatenates all files into a single PandasDataset with all tensors placed in shared memory.
 
@@ -296,6 +296,8 @@ class PandasDirDataModule(LightningDataModule):
         ----------
         files
             Ordered list of pickle file paths to load and concatenate
+        name
+            Name of the data being loaded placed into the tqdm progress bar
 
         Returns
         -------
@@ -303,7 +305,7 @@ class PandasDirDataModule(LightningDataModule):
             Dataset backed by shared-memory tensors
         """
         df = pd.concat(
-            [pd.read_pickle(f) for f in tqdm(files, desc="Loading into shared memory")],
+            [pd.read_pickle(f) for f in tqdm(files, desc=f"Loading {name} data into shared memory")],
             ignore_index=True,
         )
         ds = PandasDataset(df, self.feature_spec, self.weight_col)
@@ -323,9 +325,9 @@ class PandasDirDataModule(LightningDataModule):
         """
         if self.use_in_memory_dataset:
             if self._in_memory_train_ds is None:
-                self._in_memory_train_ds = self._load_in_memory_dataset(self.train_files)
+                self._in_memory_train_ds = self._load_in_memory_dataset(self.train_files, name="train")
             if self._in_memory_val_ds is None:
-                self._in_memory_val_ds = self._load_in_memory_dataset(self.validation_files)
+                self._in_memory_val_ds = self._load_in_memory_dataset(self.validation_files, name="val")
 
     def all_dataloader(self) -> DataLoader:
         """
@@ -344,6 +346,7 @@ class PandasDirDataModule(LightningDataModule):
         if self.use_in_memory_dataset:
             kwargs = {**self.dataloader_kwargs}
             kwargs.setdefault('pin_memory', True)
+            kwargs.setdefault('non_blocking', True)
             kwargs.setdefault('shuffle', True)
             return DataLoader(self._in_memory_train_ds, **kwargs)
         return DataLoader(self.train_ds, shuffle=False, **self.dataloader_kwargs)
@@ -355,6 +358,7 @@ class PandasDirDataModule(LightningDataModule):
         if self.use_in_memory_dataset:
             kwargs = {**self.dataloader_kwargs}
             kwargs.setdefault('pin_memory', True)
+            kwargs.setdefault('non_blocking', True)
             kwargs.setdefault('shuffle', False)
             return DataLoader(self._in_memory_val_ds, **kwargs)
         return DataLoader(self.val_ds, shuffle=False, **self.dataloader_kwargs)
