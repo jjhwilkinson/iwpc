@@ -9,18 +9,35 @@ from typing import Callable, Iterable, Any, Generator
 
 import numpy as np
 import pandas as pd
+import torch
 from lightning import LightningDataModule
 from pandas import DataFrame
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchmetrics import MeanMetric
 from tqdm import tqdm
 
-from ..datasets.pandas_dataset import StructuredDataSpec
+from ..datasets.pandas_dataset import StructuredDataSpec, PandasDataset
 from ..datasets.pandas_file_list_dataset import PandasFileListDataset
 from ..types import PathLike, TensorOrNDArray
 from ..utils import read_yaml, temp_directory, dump_yaml
 
 logger = logging.getLogger(__name__)
+
+
+def _recursive_share_memory(data: torch.Tensor | list) -> None:
+    """
+    Recursively calls share_memory_() on all tensors in a nested list structure.
+
+    Parameters
+    ----------
+    data
+        A Tensor or arbitrarily nested list of Tensors
+    """
+    if isinstance(data, torch.Tensor):
+        data.share_memory_()
+    elif isinstance(data, list):
+        for item in data:
+            _recursive_share_memory(item)
 
 
 def batched_df_pickles_iter(in_dir: Path, batch_size: int) -> Generator[DataFrame, None, None]:
@@ -93,6 +110,7 @@ class PandasDirDataModule(LightningDataModule):
         limit_files: int | None = None,
         dataloader_kwargs: dict | None = None,
         shuffle_in_train_files: bool = True,
+        use_in_memory_dataset: bool = False,
     ):
         """
         Parameters
@@ -114,6 +132,10 @@ class PandasDirDataModule(LightningDataModule):
             Any other arguments to be provided to DataLoader instances
         shuffle_in_train_files
             Whether to shuffle the data within each file during training
+        use_in_memory_dataset
+            If True, all files are concatenated into a single PandasDataset with tensors pinned in shared memory during
+            setup(). The train DataLoader shuffles across the full dataset. Faster than file-by-file loading when the
+            data fits in RAM.
         """
         super().__init__()
         self.dataset_dir = Path(dataset_dir)
@@ -122,6 +144,9 @@ class PandasDirDataModule(LightningDataModule):
         self.split = split
         self.limit_files = limit_files
         self.shuffle_in_train_files = shuffle_in_train_files
+        self.use_in_memory_dataset = use_in_memory_dataset
+        self._in_memory_train_ds: PandasDataset | None = None
+        self._in_memory_val_ds: PandasDataset | None = None
 
         self.dataloader_kwargs = dataloader_kwargs or {}
         self.dataloader_kwargs.setdefault("batch_size", 2**15)
@@ -263,6 +288,45 @@ class PandasDirDataModule(LightningDataModule):
         """
         return pd.read_pickle(self.all_files[idx])
 
+    def _load_in_memory_dataset(self, files: list[Path]) -> PandasDataset:
+        """
+        Concatenates all files into a single PandasDataset with all tensors placed in shared memory.
+
+        Parameters
+        ----------
+        files
+            Ordered list of pickle file paths to load and concatenate
+
+        Returns
+        -------
+        PandasDataset
+            Dataset backed by shared-memory tensors
+        """
+        df = pd.concat(
+            [pd.read_pickle(f) for f in tqdm(files, desc="Loading into shared memory")],
+            ignore_index=True,
+        )
+        ds = PandasDataset(df, self.feature_spec, self.weight_col)
+        for item in ds.structured_data:
+            _recursive_share_memory(item)
+        return ds
+
+    def setup(self, stage: str | None = None) -> None:
+        """
+        Pre-loads train and validation datasets into shared memory when use_in_memory_dataset is True.
+        Called automatically by Lightning before the first dataloader is requested.
+
+        Parameters
+        ----------
+        stage
+            One of 'fit', 'validate', 'test', 'predict', or None
+        """
+        if self.use_in_memory_dataset:
+            if self._in_memory_train_ds is None:
+                self._in_memory_train_ds = self._load_in_memory_dataset(self.train_files)
+            if self._in_memory_val_ds is None:
+                self._in_memory_val_ds = self._load_in_memory_dataset(self.validation_files)
+
     def all_dataloader(self) -> DataLoader:
         """
         Returns a DataLoader which iterates over all samples in all files
@@ -277,21 +341,23 @@ class PandasDirDataModule(LightningDataModule):
         """
         Returns a DataLoader which iterates over the samples in the training files
         """
-        return DataLoader(
-            self.train_ds,
-            shuffle=False,
-            **self.dataloader_kwargs,
-        )
+        if self.use_in_memory_dataset:
+            kwargs = {**self.dataloader_kwargs}
+            kwargs.setdefault('pin_memory', True)
+            kwargs.setdefault('shuffle', True)
+            return DataLoader(self._in_memory_train_ds, **kwargs)
+        return DataLoader(self.train_ds, shuffle=False, **self.dataloader_kwargs)
 
     def val_dataloader(self) -> DataLoader:
         """
         Returns a DataLoader which iterates over the samples in the validation files
         """
-        return DataLoader(
-            self.val_ds,
-            shuffle=False,
-            **self.dataloader_kwargs,
-        )
+        if self.use_in_memory_dataset:
+            kwargs = {**self.dataloader_kwargs}
+            kwargs.setdefault('pin_memory', True)
+            kwargs.setdefault('shuffle', False)
+            return DataLoader(self._in_memory_val_ds, **kwargs)
+        return DataLoader(self.val_ds, shuffle=False, **self.dataloader_kwargs)
 
     @property
     def tags(self) -> list[str]:
