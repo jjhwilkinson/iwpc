@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 import torch
 
+import iwpc
+
 from ..data_modules.pandas_directory_data_module import PandasDirDataModule
 
 
@@ -67,7 +69,7 @@ def _build_banner(dm: PandasDirDataModule) -> str:
         f"  - tags: {dm.tags}",
         f"  - num_files: {dm.num_files} (train: {dm.num_train_files}, val: {dm.num_validation_files})",
         f"  - columns: {dm.columns}",
-        "Available names: dm, np, pd, torch, Path, PandasDirDataModule",
+        "Available names: dm, iwpc, np, pd, torch, Path, PandasDirDataModule",
         "Examples:",
         '  dm.transform(fn, out_dir, tag="...")              # write transformed copy to a new dir',
         '  dm.transform(fn, None, force=True, tag="...")     # overwrite in place',
@@ -116,6 +118,7 @@ def run(args: argparse.Namespace) -> None:
     banner = _build_banner(dm)
     local_ns = {
         "dm": dm,
+        "iwpc": iwpc,
         "np": np,
         "pd": pd,
         "torch": torch,
