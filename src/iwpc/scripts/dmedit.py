@@ -46,6 +46,40 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
         type=Path,
         help="Path to a PandasDirDataModule dataset directory.",
     )
+    parser.add_argument(
+        "--transform",
+        type=str,
+        default=None,
+        help=(
+            "Python expression evaluating to a callable ``df -> df``. When "
+            "provided, ``dm.transform`` is invoked non-interactively with this "
+            "function instead of dropping into a REPL. The expression is "
+            "evaluated with ``np``, ``pd``, ``torch``, ``iwpc``, ``Path`` and "
+            "``PandasDirDataModule`` in scope (e.g. "
+            "\"lambda df: df.assign(x2=df['x']**2)\")."
+        ),
+    )
+    parser.add_argument(
+        "--out-dir",
+        type=lambda s: None if s in ("", "None") else Path(s),
+        default=None,
+        help=(
+            "Output directory for the transformed dataset. Pass ``None`` (or "
+            "omit) to overwrite the input directory in place; requires "
+            "``--force``."
+        ),
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite ``--out-dir`` if it already exists (required when overwriting in place).",
+    )
+    parser.add_argument(
+        "--tag",
+        type=str,
+        default=None,
+        help="Optional tag to record on the transformed dataset.",
+    )
     parser.set_defaults(func=run)
     return parser
 
@@ -115,7 +149,6 @@ def run(args: argparse.Namespace) -> None:
         Parsed CLI arguments. Must expose a ``dataset_dir`` attribute.
     """
     dm = PandasDirDataModule(args.dataset_dir)
-    banner = _build_banner(dm)
     local_ns = {
         "dm": dm,
         "iwpc": iwpc,
@@ -125,4 +158,16 @@ def run(args: argparse.Namespace) -> None:
         "Path": Path,
         "PandasDirDataModule": PandasDirDataModule,
     }
-    _embed(local_ns, banner)
+
+    if args.transform is not None:
+        if args.out_dir is None and not args.force:
+            raise SystemExit(
+                "--out-dir=None overwrites the input dataset in place; pass --force to confirm."
+            )
+        fn = eval(args.transform, {"__builtins__": __builtins__}, local_ns)
+        if not callable(fn):
+            raise SystemExit(f"--transform expression did not evaluate to a callable: {fn!r}")
+        dm.transform(fn, args.out_dir, force=args.force, tag=args.tag)
+        return
+
+    _embed(local_ns, _build_banner(dm))
