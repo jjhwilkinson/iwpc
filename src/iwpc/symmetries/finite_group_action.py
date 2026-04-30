@@ -1,4 +1,4 @@
-from typing import Iterable, Tuple, Optional
+from typing import Iterable, Tuple
 
 from torch.nn import ModuleList
 
@@ -16,8 +16,8 @@ class FiniteGroupAction(GroupAction):
     def __init__(
         self,
         non_id_elements: Iterable[GroupActionElement],
-        input_dim: Optional[int] = None,
-        output_dim: Optional[int] = None,
+        input_dim: int,
+        output_dim: int,
     ):
         """
         Parameters
@@ -25,11 +25,11 @@ class FiniteGroupAction(GroupAction):
         non_id_elements
             An iterable of the non-identity GroupActionElements in the group action
         input_dim
-            The dimensionality of the input space this group acts on. Optional in general but required for use with the
-            '&' direct-product operator. The prepended Identity element is constructed with this dim
+            The dimensionality of the input space this group acts on. The prepended Identity element is constructed
+            with this dim
         output_dim
-            The dimensionality of the output space this group acts on. Optional in general but required for use with the
-            '&' direct-product operator. The prepended Identity element is constructed with this dim
+            The dimensionality of the output space this group acts on. The prepended Identity element is constructed
+            with this dim
         """
         super().__init__(input_dim=input_dim, output_dim=output_dim)
         self.elements = ModuleList([Identity(input_dim=input_dim, output_dim=output_dim), *non_id_elements])

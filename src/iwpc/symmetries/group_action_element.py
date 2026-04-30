@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from torch import Tensor
 from torch.nn import Module
@@ -29,20 +28,17 @@ class GroupActionElement(Module, ABC):
     >>> # Direct product on disjoint dim ranges: (g1 & g2)(concat(x1, x2)) = concat(g1(x1), g2(x2))
     >>> product = g1 & g2
 
-    The '&' operator requires both operands to declare their input_dim and output_dim so that the input and output
-    tensors may be sliced into the corresponding dim ranges. Nested compositions are automatically un-curried, so
-    g1 * g2 * g3 yields a single ComposedActionElement with three sub-elements rather than a binary tree
+    Nested compositions are automatically un-curried, so g1 * g2 * g3 yields a single ComposedActionElement with three
+    sub-elements rather than a binary tree
     """
-    def __init__(self, input_dim: Optional[int] = None, output_dim: Optional[int] = None):
+    def __init__(self, input_dim: int, output_dim: int):
         """
         Parameters
         ----------
         input_dim
-            The dimensionality of the input space this element acts on. Optional in general but required for use with
-            the '&' direct-product operator
+            The dimensionality of the input space this element acts on
         output_dim
-            The dimensionality of the output space this element acts on. Optional in general but required for use with
-            the '&' direct-product operator
+            The dimensionality of the output space this element acts on
         """
         super().__init__()
         self.input_dim = input_dim
@@ -140,29 +136,16 @@ class Identity(GroupActionElement):
     """
     Convenience implementation of the action of the identity.
     """
-    def __init__(
-        self,
-        dim: Optional[int] = None,
-        input_dim: Optional[int] = None,
-        output_dim: Optional[int] = None,
-    ):
+    def __init__(self, input_dim: int, output_dim: int):
         """
         Parameters
         ----------
-        dim
-            Convenience kwarg used as both input_dim and output_dim. Ignored if either input_dim or output_dim is also
-            supplied
         input_dim
-            The dimensionality of the input space this identity acts on. Required when this element participates in a
-            '&' direct-product composition
+            The dimensionality of the input space this identity acts on
         output_dim
-            The dimensionality of the output space this identity acts on. Required when this element participates in a
-            '&' direct-product composition
+            The dimensionality of the output space this identity acts on
         """
-        super().__init__(
-            input_dim=input_dim if input_dim is not None else dim,
-            output_dim=output_dim if output_dim is not None else dim,
-        )
+        super().__init__(input_dim=input_dim, output_dim=output_dim)
 
     def input_space_action(self, x: Tensor) -> Tensor:
         raise InputSpaceInvariantException()

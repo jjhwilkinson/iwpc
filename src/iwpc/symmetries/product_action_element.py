@@ -27,12 +27,6 @@ class ProductActionElement(GroupActionElement):
         """
         if len(sub_elements) == 0:
             raise ValueError('ProductActionElement requires at least one sub-element')
-        for element in sub_elements:
-            if element.input_dim is None or element.output_dim is None:
-                raise ValueError(
-                    'Cannot form direct product of GroupActionElements without both input_dim and output_dim. '
-                    f'Got {type(element).__name__} with input_dim={element.input_dim}, output_dim={element.output_dim}'
-                )
 
         super().__init__(
             input_dim=sum(e.input_dim for e in sub_elements),

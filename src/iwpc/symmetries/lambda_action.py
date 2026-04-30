@@ -12,25 +12,23 @@ class LambdaAction(GroupActionElement):
     """
     def __init__(
         self,
+        input_dim: int,
+        output_dim: int,
         input_fn: Optional[Callable[[Tensor], Tensor]] = None,
         output_fn: Optional[Callable[[Tensor], Tensor]] = None,
-        input_dim: Optional[int] = None,
-        output_dim: Optional[int] = None,
     ):
         """
         Parameters
         ----------
+        input_dim
+            The dimensionality of the input space this element acts on
+        output_dim
+            The dimensionality of the output space this element acts on
         input_fn
             A callable that acts on the input space. If this action is trivial, you should provide input_fn=None rather
             than an identity function like lambda x: x
         output_fn
             A callable that acts on the output space
-        input_dim
-            The dimensionality of the input space this element acts on. Required when this element participates in a
-            '&' direct-product composition
-        output_dim
-            The dimensionality of the output space this element acts on. Required when this element participates in a
-            '&' direct-product composition
         """
         super().__init__(input_dim=input_dim, output_dim=output_dim)
 

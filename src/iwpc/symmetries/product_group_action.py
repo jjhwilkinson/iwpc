@@ -29,12 +29,6 @@ class ProductGroupAction(GroupAction):
         """
         if len(sub_groups) == 0:
             raise ValueError('ProductGroupAction requires at least one sub-group')
-        for group in sub_groups:
-            if group.input_dim is None or group.output_dim is None:
-                raise ValueError(
-                    'Cannot form direct product of GroupActions without both input_dim and output_dim. '
-                    f'Got {type(group).__name__} with input_dim={group.input_dim}, output_dim={group.output_dim}'
-                )
 
         super().__init__(
             input_dim=sum(g.input_dim for g in sub_groups),
@@ -116,12 +110,6 @@ def _build_finite_product(sub_groups: List[FiniteGroupAction]) -> FiniteGroupAct
     """
     if len(sub_groups) == 0:
         raise ValueError('ProductGroupAction requires at least one sub-group')
-    for group in sub_groups:
-        if group.input_dim is None or group.output_dim is None:
-            raise ValueError(
-                'Cannot form direct product of GroupActions without both input_dim and output_dim. '
-                f'Got {type(group).__name__} with input_dim={group.input_dim}, output_dim={group.output_dim}'
-            )
 
     input_dim = sum(g.input_dim for g in sub_groups)
     output_dim = sum(g.output_dim for g in sub_groups)

@@ -28,12 +28,15 @@ class ComposedActionElement(GroupActionElement):
         if len(sub_elements) == 0:
             raise ValueError('ComposedActionElement requires at least one sub-element')
 
-        input_dims = [e.input_dim for e in sub_elements]
-        output_dims = [e.output_dim for e in sub_elements]
-        super().__init__(
-            input_dim=input_dims[-1] if all(d is not None and d == input_dims[-1] for d in input_dims) else None,
-            output_dim=output_dims[0] if all(d is not None and d == output_dims[0] for d in output_dims) else None,
-        )
+        input_dims = {e.input_dim for e in sub_elements}
+        output_dims = {e.output_dim for e in sub_elements}
+        if len(input_dims) != 1 or len(output_dims) != 1:
+            raise ValueError(
+                'All sub-elements of a ComposedActionElement must agree on input_dim and output_dim. '
+                f'Got input_dims={input_dims}, output_dims={output_dims}'
+            )
+
+        super().__init__(input_dim=sub_elements[0].input_dim, output_dim=sub_elements[0].output_dim)
         self.sub_elements = ModuleList(sub_elements)
 
     def input_space_action(self, x: Tensor) -> Tensor:

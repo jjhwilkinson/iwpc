@@ -38,18 +38,20 @@ class ProdAddAction(GroupActionElement):
             An array like with as many entries as the output space dimension. Used as the additive constant in the
             output space action
         input_dim
-            The dimensionality of the input space this element acts on. If not provided, it is inferred from the length
-            of input_prod or input_add when available. Required when this element participates in a '&' direct-product
-            composition
+            The dimensionality of the input space this element acts on. May be omitted if it can be inferred from the
+            length of input_prod or input_add
         output_dim
-            The dimensionality of the output space this element acts on. If not provided, it is inferred from the length
-            of output_prod or output_add when available. Required when this element participates in a '&' direct-product
-            composition
+            The dimensionality of the output space this element acts on. May be omitted if it can be inferred from the
+            length of output_prod or output_add
         """
         if input_dim is None:
             input_dim = _infer_dim(input_prod, input_add)
         if output_dim is None:
             output_dim = _infer_dim(output_prod, output_add)
+        if input_dim is None:
+            raise ValueError('input_dim must be provided when neither input_prod nor input_add is supplied')
+        if output_dim is None:
+            raise ValueError('output_dim must be provided when neither output_prod nor output_add is supplied')
         super().__init__(input_dim=input_dim, output_dim=output_dim)
 
         if input_prod is not None:

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Callable, Optional
+from typing import Tuple, Callable
 
 from torch import Tensor
 from torch.nn import Module
@@ -21,20 +21,17 @@ class GroupAction(ABC, Module):
     >>> # Joint action on the same space. For finite groups, the full Cartesian product is enumerated
     >>> joint_group = G1 * G2
 
-    The '&' operator requires both operands to declare their input_dim and output_dim so that the resulting elements may
-    slice the input and output tensors into the corresponding dim ranges. Nested compositions are automatically
-    un-curried, so G1 & G2 & G3 yields a single ProductGroupAction with three sub-groups rather than a binary tree
+    Nested compositions are automatically un-curried, so G1 & G2 & G3 yields a single ProductGroupAction with three
+    sub-groups rather than a binary tree
     """
-    def __init__(self, input_dim: Optional[int] = None, output_dim: Optional[int] = None):
+    def __init__(self, input_dim: int, output_dim: int):
         """
         Parameters
         ----------
         input_dim
-            The dimensionality of the input space this group acts on. Optional in general but required for use with the
-            '&' direct-product operator
+            The dimensionality of the input space this group acts on
         output_dim
-            The dimensionality of the output space this group acts on. Optional in general but required for use with the
-            '&' direct-product operator
+            The dimensionality of the output space this group acts on
         """
         super().__init__()
         self.input_dim = input_dim
