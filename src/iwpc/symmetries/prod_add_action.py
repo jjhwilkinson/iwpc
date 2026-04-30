@@ -4,7 +4,6 @@ import torch
 from numpy._typing import ArrayLike
 from torch import Tensor
 
-from iwpc.symmetries.finite_group_action import FiniteGroupAction
 from iwpc.symmetries.group_action_element import GroupActionElement, InputSpaceInvariantException
 
 
@@ -20,6 +19,8 @@ class ProdAddAction(GroupActionElement):
         input_add: Optional[ArrayLike] = None,
         output_prod: Optional[ArrayLike] = None,
         output_add: Optional[ArrayLike] = None,
+        input_dim: Optional[int] = None,
+        output_dim: Optional[int] = None,
     ):
         """
         Parameters
@@ -36,8 +37,21 @@ class ProdAddAction(GroupActionElement):
         output_add
             An array like with as many entries as the output space dimension. Used as the additive constant in the
             output space action
+        input_dim
+            The dimensionality of the input space this element acts on. If not provided, it is inferred from the length
+            of input_prod or input_add when available. Required when this element participates in a '&' direct-product
+            composition
+        output_dim
+            The dimensionality of the output space this element acts on. If not provided, it is inferred from the length
+            of output_prod or output_add when available. Required when this element participates in a '&' direct-product
+            composition
         """
-        super().__init__()
+        if input_dim is None:
+            input_dim = _infer_dim(input_prod, input_add)
+        if output_dim is None:
+            output_dim = _infer_dim(output_prod, output_add)
+        super().__init__(input_dim=input_dim, output_dim=output_dim)
+
         if input_prod is not None:
             self.register_buffer('input_prod', torch.as_tensor(input_prod, dtype=torch.float)[None, :])
         else:
@@ -93,3 +107,26 @@ class ProdAddAction(GroupActionElement):
             x = x + self.output_add
 
         return x
+
+
+def _infer_dim(prod: Optional[ArrayLike], add: Optional[ArrayLike]) -> Optional[int]:
+    """
+    Infers a dim size from the lengths of prod and add. Returns None if neither is provided
+
+    Parameters
+    ----------
+    prod
+        An optional array-like
+    add
+        An optional array-like
+
+    Returns
+    -------
+    Optional[int]
+        The inferred dim, or None if neither array-like is provided
+    """
+    for arr in (prod, add):
+        if arr is None:
+            continue
+        return int(torch.as_tensor(arr).shape[-1])
+    return None

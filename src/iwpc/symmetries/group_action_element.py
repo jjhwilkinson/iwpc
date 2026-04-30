@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Optional
 
 from torch import Tensor
 from torch.nn import Module
@@ -19,8 +20,34 @@ class GroupActionElement(Module, ABC):
     """
     Abstract interface for the action of a particular group element, g, on the function space accessible to a NN from
     R^M -> R^N. We restrict ourselves to actions that act separately on the input and output spaces, that is group
-    actions that can be expressed in the form [g⋅f](x) = g⋅(f(g⋅x)) for some action of G on R^M and R^N separately
+    actions that can be expressed in the form [g⋅f](x) = g⋅(f(g⋅x)) for some action of G on R^M and R^N separately.
+
+    GroupActionElements support declarative composition via Python operators
+
+    >>> # Group multiplication: (g1 * g2)(x) = g1(g2(x)) for both input and output spaces
+    >>> composed = g1 * g2
+    >>> # Direct product on disjoint dim ranges: (g1 & g2)(concat(x1, x2)) = concat(g1(x1), g2(x2))
+    >>> product = g1 & g2
+
+    The '&' operator requires both operands to declare their input_dim and output_dim so that the input and output
+    tensors may be sliced into the corresponding dim ranges. Nested compositions are automatically un-curried, so
+    g1 * g2 * g3 yields a single ComposedActionElement with three sub-elements rather than a binary tree
     """
+    def __init__(self, input_dim: Optional[int] = None, output_dim: Optional[int] = None):
+        """
+        Parameters
+        ----------
+        input_dim
+            The dimensionality of the input space this element acts on. Optional in general but required for use with
+            the '&' direct-product operator
+        output_dim
+            The dimensionality of the output space this element acts on. Optional in general but required for use with
+            the '&' direct-product operator
+        """
+        super().__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+
     @abstractmethod
     def input_space_action(self, x: Tensor) -> Tensor:
         """
@@ -67,13 +94,76 @@ class GroupActionElement(Module, ABC):
             A FiniteGroupAction containing only this element and the identity
         """
         from iwpc.symmetries.finite_group_action import FiniteGroupAction
-        return FiniteGroupAction([self])
+        return FiniteGroupAction([self], input_dim=self.input_dim, output_dim=self.output_dim)
+
+    def __mul__(self, other: "GroupActionElement") -> "ComposedActionElement":
+        """
+        Composes two GroupActionElements via group multiplication. The resulting element acts on the input space as
+        (g1 * g2).input_space_action(x) = g1.input_space_action(g2.input_space_action(x)), and likewise for the output
+        space. Nested ComposedActionElement instances are automatically un-curried
+
+        Parameters
+        ----------
+        other
+            A GroupActionElement to compose with
+
+        Returns
+        -------
+        ComposedActionElement
+            The composed group element
+        """
+        from iwpc.symmetries.composed_action_element import ComposedActionElement
+        return ComposedActionElement.merge(self, other)
+
+    def __and__(self, other: "GroupActionElement") -> "ProductActionElement":
+        """
+        Forms the direct product of two GroupActionElements acting on disjoint dim ranges. The resulting element acts on
+        the concatenation of input feature vectors of length self.input_dim + other.input_dim by applying self to the
+        first slice and other to the second slice, and likewise for the output space. Both operands must declare their
+        input_dim and output_dim. Nested ProductActionElement instances are automatically un-curried
+
+        Parameters
+        ----------
+        other
+            A GroupActionElement to take the direct product with
+
+        Returns
+        -------
+        ProductActionElement
+            The direct product element
+        """
+        from iwpc.symmetries.product_action_element import ProductActionElement
+        return ProductActionElement.merge(self, other)
 
 
 class Identity(GroupActionElement):
     """
     Convenience implementation of the action of the identity.
     """
+    def __init__(
+        self,
+        dim: Optional[int] = None,
+        input_dim: Optional[int] = None,
+        output_dim: Optional[int] = None,
+    ):
+        """
+        Parameters
+        ----------
+        dim
+            Convenience kwarg used as both input_dim and output_dim. Ignored if either input_dim or output_dim is also
+            supplied
+        input_dim
+            The dimensionality of the input space this identity acts on. Required when this element participates in a
+            '&' direct-product composition
+        output_dim
+            The dimensionality of the output space this identity acts on. Required when this element participates in a
+            '&' direct-product composition
+        """
+        super().__init__(
+            input_dim=input_dim if input_dim is not None else dim,
+            output_dim=output_dim if output_dim is not None else dim,
+        )
+
     def input_space_action(self, x: Tensor) -> Tensor:
         raise InputSpaceInvariantException()
 
