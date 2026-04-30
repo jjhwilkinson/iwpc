@@ -1,4 +1,5 @@
-from functools import partial
+from functools import partial, reduce
+from operator import mul
 from typing import List, Callable, Iterable, Optional, Union, Dict
 
 import torch
@@ -69,8 +70,8 @@ def basic_model_factory(
     batch_norm: bool = False,
     initial_layers: Optional[Iterable[nn.Module]] = None,
     final_layers: Optional[Iterable[nn.Module]] = None,
-    symmetries: Union[GroupAction, Iterable[GroupAction]] = tuple(),
-    complement_symmetries: Union[GroupAction, Iterable[GroupAction]] = tuple(),
+    symmetries: Optional[Union[GroupAction, Iterable[GroupAction]]] = None,
+    complement_symmetries: Optional[Union[GroupAction, Iterable[GroupAction]]] = None,
     activation: Callable = LeakyReLU,
     debug_name: str | None = None,
 ) -> Sequential:
@@ -97,9 +98,14 @@ def basic_model_factory(
     final_layers
         An optional list of any additional layers to insert at the end of the sequential model sequence
     symmetries
-        A series of symmetry group actions under which the network should be invariant
+        A symmetry group action under which the network should be invariant. To combine multiple symmetries,
+        compose them declaratively with '*' (joint action on the same space) or '&' (direct product on disjoint
+        dim ranges), e.g. ``G1 * G2``. An iterable of GroupActions is also accepted as a convenience and is folded
+        via '*' to match the previous behaviour of symmetrizing over each group on the same space
     complement_symmetries
-        A series of symmetry group actions which the network output should reside in the symmetrized complement of
+        A symmetry group action for which the network output should reside in the symmetrized complement.
+        Compose multiple symmetries declaratively with '*' or '&'. An iterable of GroupActions is also accepted as
+        a convenience and is folded via '*'
     activation
         The activation function class to apply to the output of layers
     debug_name
@@ -155,15 +161,44 @@ def basic_model_factory(
         *list(final_layers),
     ]
 
-    symmetries = [symmetries] if isinstance(symmetries, GroupAction) else symmetries
-    complement_symmetries = [complement_symmetries] if isinstance(complement_symmetries, GroupAction) else complement_symmetries
     model = Sequential(*layers)
-    for group in symmetries:
-        model = group.symmetrize(model)
-    for group in complement_symmetries:
-        model = group.complement(model)
+    symmetry_group = _coerce_group_action(symmetries)
+    if symmetry_group is not None:
+        model = symmetry_group.symmetrize(model)
+    complement_group = _coerce_group_action(complement_symmetries)
+    if complement_group is not None:
+        model = complement_group.complement(model)
 
     return model
+
+
+def _coerce_group_action(
+    symmetries: Optional[Union[GroupAction, Iterable[GroupAction]]],
+) -> Optional[GroupAction]:
+    """
+    Coerces the symmetries argument of basic_model_factory into a single GroupAction. A None or empty iterable returns
+    None. A single GroupAction is returned as-is. An iterable of GroupActions is folded together via the '*' operator
+    (joint action on the same space) so the resulting model is symmetrized once over the joint group, matching the
+    semantics of the previous nested-symmetrize loop
+
+    Parameters
+    ----------
+    symmetries
+        Either None, a single GroupAction, or an iterable of GroupActions
+
+    Returns
+    -------
+    Optional[GroupAction]
+        A single GroupAction representing the combined symmetries, or None if no symmetries were provided
+    """
+    if symmetries is None:
+        return None
+    if isinstance(symmetries, GroupAction):
+        return symmetries
+    groups = list(symmetries)
+    if len(groups) == 0:
+        return None
+    return reduce(mul, groups)
 
 
 def basic_model_factory_sum(

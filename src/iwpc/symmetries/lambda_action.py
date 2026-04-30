@@ -2,7 +2,6 @@ from typing import Callable, Optional
 
 from torch import Tensor
 
-from iwpc.symmetries.finite_group_action import FiniteGroupAction
 from iwpc.symmetries.group_action_element import GroupActionElement, InputSpaceInvariantException
 
 
@@ -13,19 +12,25 @@ class LambdaAction(GroupActionElement):
     """
     def __init__(
         self,
+        input_dim: int,
+        output_dim: int,
         input_fn: Optional[Callable[[Tensor], Tensor]] = None,
-        output_fn: Optional[Callable] = None,
+        output_fn: Optional[Callable[[Tensor], Tensor]] = None,
     ):
         """
         Parameters
         ----------
+        input_dim
+            The dimensionality of the input space this element acts on
+        output_dim
+            The dimensionality of the output space this element acts on
         input_fn
             A callable that acts on the input space. If this action is trivial, you should provide input_fn=None rather
             than an identity function like lambda x: x
         output_fn
             A callable that acts on the output space
         """
-        super().__init__()
+        super().__init__(input_dim=input_dim, output_dim=output_dim)
 
         if output_fn is None:
             output_fn = lambda x: x
