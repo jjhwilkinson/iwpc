@@ -4,6 +4,7 @@ from typing import Iterable
 import torch
 from torch import Tensor
 
+from iwpc.learn_dist.kernels.finite_kernel_interface import FiniteKernelInterface
 from iwpc.learn_dist.kernels.finite_sample_space import FiniteSampleSpace
 
 
@@ -65,3 +66,17 @@ class IndexedInterface(ABC):
             K = index_sample_space.num_outcomes. Column k holds the M logits for index value k.
         """
         pass
+
+    def __or__(self, other) -> 'IndexedFiniteConditionedKernel | FiniteConditionedKernel':
+        """
+        If other is an indexed kernel `compatible` with self as a sample kernel, returns an
+        IndexedFiniteConditionedKernel modelling p(A, B2 | B1, z). Compatibility requires
+        self.index_cond_indices == list(range(dim_B2)) + [dim_B2 + i for i in other.index_cond_indices],
+        i.e. self must be indexed on the sample space of other, and the index space of other.
+        Falls back to super().__or__ otherwise
+        """
+        from iwpc.learn_dist.kernels.indexed_finite_conditioned_kernel import IndexedFiniteConditionedKernel
+        if isinstance(other, FiniteKernelInterface) and isinstance(other, IndexedInterface):
+            if list(self.index_cond_indices) == IndexedFiniteConditionedKernel.expected_sample_index_cond_indices(other):
+                return IndexedFiniteConditionedKernel(self, other)
+        return super().__or__(other)
