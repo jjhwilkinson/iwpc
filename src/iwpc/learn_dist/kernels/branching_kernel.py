@@ -250,9 +250,9 @@ class FiniteBranchingKernel(FiniteKernelInterface, BranchingKernel):
             outcome_to_idx_fn
         )
 
-    def construct_logits(self, cond: Tensor) -> Tensor:
+    def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
-        Constructs the logits over the possible outcomes given the conditioning information
+        Constructs the log-probabilities over the possible outcomes given the conditioning information.
 
         Parameters
         ----------
@@ -270,7 +270,7 @@ class FiniteBranchingKernel(FiniteKernelInterface, BranchingKernel):
 
         return branched_evaluation(
             branching_idxs,
-            [k.construct_logits for k in self.sub_kernels],
+            [k.construct_log_probs for k in self.sub_kernels],
             sub_kernel_cond,
         )[0]
 

@@ -97,7 +97,7 @@ class FiniteKernel(FiniteKernelInterface, TrainableKernelBase):
         """
         return (samples * self.reversed_cumprod_num_variable_outcomes[None, :]).sum(dim=-1).int()
 
-    def construct_logits(self, cond: Tensor) -> Tensor:
+    def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
         Parameters
         ----------
@@ -107,10 +107,10 @@ class FiniteKernel(FiniteKernelInterface, TrainableKernelBase):
         Returns
         -------
         Tensor
-            A tensor of size (N, self.num_outcomes) containing logits over the outcomes for each row of conditioning
-            information
+            A tensor of size (N, self.num_outcomes) of log-probabilities over the outcomes for each row of
+            conditioning information.
         """
-        return self.logit_model(cond)
+        return self.logit_model(cond).log_softmax(dim=-1)
 
     def __ror__(self, other: list[TrainableKernelBase | list[TrainableKernelBase]]) -> "BranchingKernel":
         """

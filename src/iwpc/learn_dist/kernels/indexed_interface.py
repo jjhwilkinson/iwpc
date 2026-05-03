@@ -20,9 +20,9 @@ class IndexedInterface(ABC):
         index_cond_indices: list[int]
             Indices into the full cond tensor that carry the discrete index b
 
-    construct_logit_table(x) takes the standard conditioning x — the full cond with the
-    index_cond_indices columns removed — and returns a (N, M, K) tensor. Column k holds the M
-    unnormalised logits for index value b_k.
+    construct_log_prob_table(x) takes the standard conditioning x — the full cond with the
+    index_cond_indices columns removed — and returns a (N, M, K) tensor of normalised log-probabilities,
+    where column k holds ``log p(A=m | B=k, x)``.
     """
     def __init__(
         self,
@@ -49,21 +49,22 @@ class IndexedInterface(ABC):
         self.standard_cond_indices = torch.tensor([i for i in range(self.cond_dimension) if i not in index_cond_indices])
 
     @abstractmethod
-    def construct_logit_table(self, cond: Tensor) -> Tensor:
+    def construct_log_prob_table(self, cond: Tensor) -> Tensor:
         """
-        Returns the full logit table for all index values in a single forward pass.
+        Returns the full log-probability table for all index values in a single forward pass, normalised over
+        the sample axis (dim=1).
 
         Parameters
         ----------
         cond
-            Standard conditioning x of shape (N, cond_dim - len(index_cond_indices)), with the
-            discrete index columns removed.
+            Standard conditioning x of shape (N, cond_dim - len(index_cond_indices)), with the discrete index
+            columns removed.
 
         Returns
         -------
         Tensor
-            Shape (N, M, K) where M = sample_space.num_outcomes and
-            K = index_sample_space.num_outcomes. Column k holds the M logits for index value k.
+            Shape (N, M, K) where M = sample_space.num_outcomes and K = index_sample_space.num_outcomes.
+            Column k holds ``log p(A=m | B=k, x)`` for m in [0, M).
         """
         pass
 

@@ -126,9 +126,9 @@ class IndexedFiniteKernel(IndexedInterface, FiniteKernel):
             **kwargs,
         )
 
-    def construct_logit_table(self, unindexed_cond: Tensor) -> Tensor:
+    def construct_log_prob_table(self, unindexed_cond: Tensor) -> Tensor:
         """
-        Returns the full logit table for all index values in a single forward pass.
+        Returns the full log-probability table for all index values in a single forward pass.
 
         Parameters
         ----------
@@ -139,17 +139,16 @@ class IndexedFiniteKernel(IndexedInterface, FiniteKernel):
         -------
         Tensor
             A tensor of shape (N, M, K) where M = sample_space.num_outcomes and K = index_sample_space.num_outcomes.
-            Column k holds the M logits for index value k.
+            Column k holds ``log p(A=m | B=k, x)``.
         """
         N = unindexed_cond.shape[0]
-        logits = self.logit_model(unindexed_cond).reshape(
+        return self.logit_model(unindexed_cond).reshape(
             N,
             self.sample_space.num_outcomes,
             self.index_sample_space.num_outcomes,
-        )
-        return logits
+        ).log_softmax(dim=1)
 
-    def construct_logits(self, cond: Tensor) -> Tensor:
+    def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
         Parameters
         ----------
@@ -159,10 +158,10 @@ class IndexedFiniteKernel(IndexedInterface, FiniteKernel):
         Returns
         -------
         Tensor
-            A tensor of size (N, M) containing logits over the sample space for the give conditioning information
+            A tensor of size (N, M) of log-probabilities over the sample space for the given conditioning information.
         """
         x = cond[:, self.standard_cond_indices]
         b = cond[:, self.index_cond_indices]
-        table = self.construct_logit_table(x)
+        table = self.construct_log_prob_table(x)
         idxs = self.index_sample_space.outcome_to_idx(b).long()
         return table.gather(2, idxs.long()[:, None, None].expand(-1, table.shape[1], 1)).squeeze(2)

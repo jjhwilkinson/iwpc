@@ -33,35 +33,25 @@ class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
             conditioning_kernel,
         )
 
-    def construct_logits(self, cond: Tensor) -> Tensor:
+    def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
-        Constructs the logits over the possible outcomes given the conditioning information using p(A and B) = p(A|B) p(B)
-
-        Parameters
-        ----------
-        cond
-            The conditioning information
-
-        Returns
-        -------
-        Tensor
-            A tensor of shape (N, self.num_outcomes)
+        Computes log p(A, B) = log p(A | B) + log p(B) directly in log-prob space.
         """
         if cond.shape[0] == 0:
             return torch.zeros((0, self.sample_space.num_outcomes), device=cond.device, dtype=cond.dtype)
 
-        conditioning_logits = self.conditioning_kernel.construct_logits(cond)
+        cond_log_probs = self.conditioning_kernel.construct_log_probs(cond)
         if isinstance(self.sample_kernel, IndexedInterface):
-            logit_table = self.sample_kernel.construct_logit_table(cond[:, self.sample_kernel.standard_cond_indices - self.conditioning_kernel.sample_dimension])  # (N, M, K)
-            a_log_probs = logit_table.log_softmax(dim=1)                  # normalise over M per b
-            joint = a_log_probs + conditioning_logits.unsqueeze(1)        # (N, M, K) + (N, 1, K)
+            z = cond[:, self.sample_kernel.standard_cond_indices - self.conditioning_kernel.sample_dimension]
+            sample_log_probs = self.sample_kernel.construct_log_prob_table(z)        # (N, M, K)
+            joint = sample_log_probs + cond_log_probs.unsqueeze(1)                   # (N, M, K)
             return joint.reshape(cond.shape[0], -1)
 
         outputs = []
         for b_idx, outcome in enumerate(self.conditioning_kernel.sample_space.outcomes_iter()):
             full_cond = torch.concat([outcome.repeat((cond.shape[0], 1)), cond], dim=1)
-            sample_log_probs = self.sample_kernel.construct_logits(full_cond).log_softmax(dim=-1)
-            outputs.append(sample_log_probs + conditioning_logits[:, b_idx:b_idx + 1])
+            sample_log_probs = self.sample_kernel.construct_log_probs(full_cond)
+            outputs.append(sample_log_probs + cond_log_probs[:, b_idx:b_idx + 1])
 
         return torch.stack(outputs, dim=2).reshape((cond.shape[0], -1))
 
@@ -94,13 +84,12 @@ if __name__ == "__main__":
     def check_joint(joint, cond, label):
         joint.eval()
         with torch.no_grad():
-            logits = joint.construct_logits(cond)
-            log_probs_from_logits = logits.log_softmax(dim=-1)
+            log_probs_from_kernel = joint.construct_log_probs(cond)
             for idx in range(joint.sample_space.num_outcomes):
                 outcome = joint.sample_space.idx_to_outcome(torch.full((N,), idx, dtype=torch.long))
-                lp_logits = log_probs_from_logits[:, idx]
+                lp_kernel = log_probs_from_kernel[:, idx]
                 lp_log_prob = joint.log_prob(outcome, cond)
-                max_diff = (lp_logits - lp_log_prob).abs().max().item()
+                max_diff = (lp_kernel - lp_log_prob).abs().max().item()
                 assert max_diff < 1e-5, f"[{label}] Mismatch at outcome {idx}: max diff {max_diff}"
         print(f"[{label}] All outcomes match.")
 

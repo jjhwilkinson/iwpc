@@ -28,10 +28,9 @@ class FiniteConcatenatedKernel(FiniteKernelInterface, ConcatenatedKernel):
             concatenate_cond,
         )
 
-    def construct_logits(self, cond: Tensor) -> Tensor:
+    def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
-        Constructs the logits over the possible outcomes given the conditioning information using p(A and B) = p(A) p(B)
-        if A and B are independent
+        Computes log p(A_1, ..., A_n) = sum_i log p(A_i) using the independence assumption.
 
         Parameters
         ----------
@@ -41,14 +40,14 @@ class FiniteConcatenatedKernel(FiniteKernelInterface, ConcatenatedKernel):
         Returns
         -------
         Tensor
-            A tensor of shape (N, self.num_outcomes)
+            A tensor of shape (N, self.num_outcomes) of joint log-probabilities.
         """
-        sub_logits = []
+        sub_log_probs = []
         for i, (cond_edges, sub_kernel) in enumerate(zip(self.cond_edges, self.sub_kernels)):
-            sub_logit = sub_kernel.construct_logits(cond[:, cond_edges])
-            sub_logit = sub_logit.reshape((cond.shape[0],) + (1,) * i + (-1,) + (1,) * (len(self.sub_kernels) - i - 1))
-            sub_logits.append(sub_logit)
-        return sum(sub_logits).reshape((cond.shape[0], self.sample_space.num_outcomes))
+            sub_log_prob = sub_kernel.construct_log_probs(cond[:, cond_edges])
+            sub_log_prob = sub_log_prob.reshape((cond.shape[0],) + (1,) * i + (-1,) + (1,) * (len(self.sub_kernels) - i - 1))
+            sub_log_probs.append(sub_log_prob)
+        return sum(sub_log_probs).reshape((cond.shape[0], self.sample_space.num_outcomes))
 
     def outcome_to_idx(self, samples: Tensor) -> Tensor:
         """
@@ -89,14 +88,13 @@ if __name__ == "__main__":
     cond = torch.randn(N, joint.cond_dimension)
 
     with torch.no_grad():
-        logits = joint.construct_logits(cond)
-        log_probs_from_logits = logits.log_softmax(dim=-1)
+        log_probs_from_kernel = joint.construct_log_probs(cond)
 
         for idx in range(joint.sample_space.num_outcomes):
             outcome = joint.sample_space.idx_to_outcome(torch.full((N,), idx, dtype=torch.long))
-            lp_logits = log_probs_from_logits[:, idx]
+            lp_kernel = log_probs_from_kernel[:, idx]
             lp_log_prob = joint.log_prob(outcome, cond)
-            max_diff = (lp_logits - lp_log_prob).abs().max().item()
+            max_diff = (lp_kernel - lp_log_prob).abs().max().item()
             assert max_diff < 1e-5, f"Mismatch at outcome {idx}: max diff {max_diff}"
 
     print("All outcomes match.")

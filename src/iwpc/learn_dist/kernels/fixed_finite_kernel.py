@@ -40,7 +40,7 @@ class FixedFiniteKernel(FiniteKernelInterface, TrainableKernelBase):
         )
         self.register_buffer('log_probs', log_probs)
 
-    def construct_logits(self, cond: Tensor) -> Tensor:
+    def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
         Parameters
         ----------
@@ -50,6 +50,6 @@ class FixedFiniteKernel(FiniteKernelInterface, TrainableKernelBase):
         Returns
         -------
         Tensor
-            The log of the probabilities provided in the constructor, repeated for each sample
+            The log of the probabilities provided in the constructor, repeated for each sample.
         """
         return self.log_probs.repeat(cond.shape[0], 1)

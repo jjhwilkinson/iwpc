@@ -16,8 +16,8 @@ class IndexedFiniteConditionedKernel(IndexedInterface, FiniteConditionedKernel):
         index_cond_indices = list(range(dim_B2)) + [dim_B2 + i for i in conditioning_kernel.index_cond_indices]
         and index_sample_space covering the joint (B2, B1) outcome space
 
-    construct_logit_table(z) takes standard conditioning z (outer cond with B1 stripped) and
-    returns (N, M_A * K_B2, K_B1) — joint (A, B2) logits for each B1 value.
+    construct_log_prob_table(z) takes standard conditioning z (outer cond with B1 stripped) and returns
+    (N, M_A * K_B2, K_B1) — joint (A, B2) log-probabilities for each B1 value.
     """
 
     def __init__(
@@ -64,30 +64,23 @@ class IndexedFiniteConditionedKernel(IndexedInterface, FiniteConditionedKernel):
         dim_B2 = conditioning_kernel.sample_dimension
         return list(range(dim_B2)) + [dim_B2 + i for i in conditioning_kernel.index_cond_indices]
 
-    def construct_logit_table(self, unindexed_cond: Tensor) -> Tensor:
+    def construct_log_prob_table(self, unindexed_cond: Tensor) -> Tensor:
         """
-        Parameters
-        ----------
-        unindexed_cond
-            Standard conditioning of shape (N, standard_cond_dim), i.e. the cond_kernel's conditioning information
-            with B1 columns (self.index_cond_indices) stripped.
-
-        Returns
-        -------
-        Tensor
-            Shape (N, M_A * K_B2, K_B1). Column k=b1 holds unnormalised logits for the joint
-            (A, B2) outcome proportional to p(A, B2 | B1=b1, z) = p(A | B2, B1, z) * p(B2 | B1, z).
+        Computes log p(A, B2 | B1, z) = log p(A | B2, B1, z) + log p(B2 | B1, z) by summing the children's
+        log-prob tables directly. Each leaf kernel runs one log_softmax over its own sample axis; this
+        composition step adds two pre-normalised log-prob tables without re-normalising, so deep chains
+        avoid the geometric growth of joint axes through cascading log_softmaxes.
         """
         num_conditioning_kernel_index_outcomes = self.conditioning_kernel.sample_space.num_outcomes
         num_conditioning_kernel_outcomes = self.conditioning_kernel.index_sample_space.num_outcomes
 
-        cond_table = self.conditioning_kernel.construct_logit_table(unindexed_cond)
-        sample_table = self.sample_kernel.construct_logit_table(unindexed_cond).log_softmax(dim=1)
+        sample_log_probs = self.sample_kernel.construct_log_prob_table(unindexed_cond)
+        cond_log_probs = self.conditioning_kernel.construct_log_prob_table(unindexed_cond)
 
         return (
-            sample_table.reshape(unindexed_cond.shape[0], -1, num_conditioning_kernel_index_outcomes, num_conditioning_kernel_outcomes)
-            + cond_table[:, None]).reshape(unindexed_cond.shape[0], -1, num_conditioning_kernel_outcomes
-        )
+            sample_log_probs.reshape(unindexed_cond.shape[0], -1, num_conditioning_kernel_index_outcomes, num_conditioning_kernel_outcomes)
+            + cond_log_probs[:, None]
+        ).reshape(unindexed_cond.shape[0], -1, num_conditioning_kernel_outcomes)
 
 
 if __name__ == "__main__":
@@ -129,8 +122,8 @@ if __name__ == "__main__":
     ifck = IndexedFiniteConditionedKernel(sample_kernel, cond_kernel)
     ifck.eval()
 
-    # construct_logit_table: shape (N, M_A*K_B2, K_B1), indexed over B1 only
-    table = ifck.construct_logit_table(z)
+    # construct_log_prob_table: shape (N, M_A*K_B2, K_B1), indexed over B1 only
+    table = ifck.construct_log_prob_table(z)
     K_B1, K_B2, M_A = 2, 3, 2
     assert table.shape == (N, M_A * K_B2, K_B1), f"Expected ({N}, {M_A * K_B2}, {K_B1}), got {table.shape}"
 
@@ -138,11 +131,11 @@ if __name__ == "__main__":
     # Joint outcome row index in column b1: a_idx * K_B2 + b2_idx (M_A slowest, K_B2 fastest).
     for b1_idx in range(K_B1):
         cond = torch.cat([torch.full((z.shape[0], 1), b1_idx), z], dim=1)
-        b2_log_probs = cond_kernel.construct_logits(cond).log_softmax(dim=-1)  # (N, K_B2)
+        b2_log_probs = cond_kernel.construct_log_probs(cond)  # (N, K_B2)
         for b2_idx in range(K_B2):
             sample_cond = torch.cat([torch.full((z.shape[0], 1), b2_idx), cond], dim=1)
-            a_log_probs_direct = sample_kernel.construct_logits(sample_cond).log_softmax(dim=-1)
-            col = table.reshape(N, sample_kernel.sample_space.num_outcomes, b2_space.num_outcomes, b1_space.num_outcomes)[:, :, b2_idx, b1_idx]                       # (N, M_A*K_B2)
+            a_log_probs_direct = sample_kernel.construct_log_probs(sample_cond)
+            col = table.reshape(N, sample_kernel.sample_space.num_outcomes, b2_space.num_outcomes, b1_space.num_outcomes)[:, :, b2_idx, b1_idx]
             assert (a_log_probs_direct - col.log_softmax(dim=-1)).abs().max().item() < 1e-5, f"log_softmax mismatch at (b1={b1_idx}, b2={b2_idx})"
 
     print("All checks passed.")

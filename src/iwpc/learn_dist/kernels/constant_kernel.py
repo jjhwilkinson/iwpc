@@ -69,7 +69,7 @@ class ConstantKernel(FiniteKernelInterface, TrainableKernelBase):
         """
         return self.constant_value.repeat(cond.shape[0], 1)
 
-    def construct_logits(self, cond: Tensor) -> Tensor:
+    def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
         Parameters
         ----------
@@ -79,6 +79,6 @@ class ConstantKernel(FiniteKernelInterface, TrainableKernelBase):
         Returns
         -------
         Tensor
-            A tensor of shape (N, 1) of zeros
+            A tensor of shape (N, 1) of zeros — log p(constant_value) = log(1) = 0.
         """
         return torch.zeros((cond.shape[0], 1), dtype=torch.float32, device=cond.device)

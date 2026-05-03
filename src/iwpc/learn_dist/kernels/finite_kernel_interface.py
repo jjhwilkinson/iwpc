@@ -39,13 +39,10 @@ class FiniteKernelInterface(ABC):
     can be constructed between the sample space of size K and the integers [0, K-1]. Provides many operations and
     utilities common to finite kernels.
 
-    Warning
-    -------
-    Avoid overriding ``log_prob`` or ``draw_with_log_prob`` unless you know what you are doing. These methods are
-    implemented here via a single ``construct_logits`` call followed by one ``log_softmax``, which is the numerically
-    optimal path for composite finite kernels. Overriding them to chain sub-kernel ``log_prob`` calls introduces
-    cascading ``log_softmax`` operations whose float32 rounding errors accumulate in deep kernel compositions. Instead,
-    override ``construct_logits`` and let the interface handle normalisation.
+    Implementors override ``construct_log_probs`` to return normalised log-probabilities over the full sample space.
+    Composite kernels (FiniteConditionedKernel, FiniteCutKernel, FiniteConcatenatedKernel, …) compose log-probs
+    directly so a forward pass through a deep chain only runs one ``log_softmax`` per leaf kernel — no cascading
+    re-softmax over geometrically-growing joint axes.
     """
 
     def __init__(self, sample_space: FiniteSampleSpace, *args, **kwargs):
@@ -63,9 +60,9 @@ class FiniteKernelInterface(ABC):
         self.sample_space = sample_space
 
     @abstractmethod
-    def construct_logits(self, cond: Tensor) -> Tensor:
+    def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
-        Returns a set of logits over the self.num_outcomes possible outcomes for the given condition information
+        Returns normalised log-probabilities over self.num_outcomes for the given conditioning information.
 
         Parameters
         ----------
@@ -75,7 +72,8 @@ class FiniteKernelInterface(ABC):
         Returns
         -------
         Tensor
-            A tensor of shape (N, self.num_outcomes)
+            A tensor of shape (N, self.num_outcomes) of log-probabilities, normalised so that
+            ``logsumexp(dim=-1) == 0`` per row.
         """
         pass
 
@@ -91,7 +89,7 @@ class FiniteKernelInterface(ABC):
         Tensor
             A sample drawn from the distribution over self.outcomes
         """
-        return self.sample_space.idx_to_outcome(sample_idx_from_log_probs(self.construct_logits(cond).log_softmax(dim=-1)))
+        return self.sample_space.idx_to_outcome(sample_idx_from_log_probs(self.construct_log_probs(cond)))
 
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
         """
@@ -110,11 +108,11 @@ class FiniteKernelInterface(ABC):
             A tensor of shape (N,)
         """
         idxs = self.sample_space.outcome_to_idx(samples)
-        return self.construct_logits(cond).log_softmax(dim=-1).gather(1, idxs.long().unsqueeze(1)).squeeze(1)
+        return self.construct_log_probs(cond).gather(1, idxs.long().unsqueeze(1)).squeeze(1)
 
     def draw_with_log_prob(self, cond: Tensor) -> tuple[Tensor, Tensor]:
         """
-        Draw a sample and return its log-probability in a single construct_logits call.
+        Draw a sample and return its log-probability in a single construct_log_probs call.
 
         Parameters
         ----------
@@ -126,8 +124,7 @@ class FiniteKernelInterface(ABC):
         tuple[Tensor, Tensor]
             Samples of shape (N, sample_dimension) and log-probabilities of shape (N,)
         """
-        logits = self.construct_logits(cond)
-        log_probs = logits.log_softmax(dim=-1)
+        log_probs = self.construct_log_probs(cond)
         sample_idxs = sample_idx_from_log_probs(log_probs)
         return self.sample_space.idx_to_outcome(sample_idxs), log_probs[range(cond.shape[0]), sample_idxs]
 
@@ -146,10 +143,9 @@ class FiniteKernelInterface(ABC):
         Iterator[tuple[Tensor, Tensor]]
             Iterator over the set of possible outcomes alongside the associated log-probability
         """
-        logits = self.construct_logits(cond)
-        log_probs = logits.log_softmax(dim=-1)
-        for outcome, logit in zip(self.sample_space.outcomes_iter(), log_probs.T):
-            yield outcome, logit
+        log_probs = self.construct_log_probs(cond)
+        for outcome, log_prob in zip(self.sample_space.outcomes_iter(), log_probs.T):
+            yield outcome, log_prob
 
     def __and__(self, other: TrainableKernelBase) -> 'FiniteConcatenatedKernel | ConcatenatedKernel':
         """

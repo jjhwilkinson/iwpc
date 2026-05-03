@@ -38,22 +38,15 @@ class FiniteCutKernel(CutKernelInterface, FiniteKernelInterface, TrainableKernel
         self.cut_fn = cut_fn
         self.base_kernel = base_kernel
 
-    def construct_logits(self, cond: Tensor) -> Tensor:
+    def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
-        Constructs the logits over the possible outcomes given the conditioning information. Since logits are not
-        normalized, we are free to use the same logits as the base kernel.
-
-        Parameters
-        ----------
-        cond
-            The conditioning information
-
-        Returns
-        -------
-        Tensor
-            A tensor of shape (N, self.num_outcomes)
+        Returns log p(outcome | passes cut) directly: index the base kernel's full log-probs into the allowed
+        subset and renormalise via one logsumexp. The renormalisation here is genuine math (the cut redefines
+        the support), not redundant.
         """
-        return self.base_kernel.construct_logits(cond)[:, self.allowed_indices]
+        base_log_probs = self.base_kernel.construct_log_probs(cond)
+        cut = base_log_probs[:, self.allowed_indices]
+        return cut - cut.logsumexp(dim=-1, keepdim=True)
 
     def cut_pass_log_prob(self, cond: Tensor) -> Tensor:
         """
@@ -67,7 +60,7 @@ class FiniteCutKernel(CutKernelInterface, FiniteKernelInterface, TrainableKernel
         Tensor
             The log-probability that a sample from the base kernel is one of the allowed outcomes
         """
-        return self.base_kernel.construct_logits(cond).log_softmax(dim=-1)[:, self.allowed_indices].logsumexp(dim=-1)
+        return self.base_kernel.construct_log_probs(cond)[:, self.allowed_indices].logsumexp(dim=-1)
 
     def cut_fail_log_prob(self, cond: Tensor) -> Tensor:
         """
@@ -81,7 +74,7 @@ class FiniteCutKernel(CutKernelInterface, FiniteKernelInterface, TrainableKernel
         Tensor
             The log-probability that a sample from the base kernel is one of the dis-allowed outcomes
         """
-        return self.base_kernel.construct_logits(cond).log_softmax(dim=-1)[:, self.disallowed_indices].logsumexp(dim=-1)
+        return self.base_kernel.construct_log_probs(cond)[:, self.disallowed_indices].logsumexp(dim=-1)
 
     def draw_with_log_prob_and_cut_pass_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         """
@@ -97,7 +90,7 @@ class FiniteCutKernel(CutKernelInterface, FiniteKernelInterface, TrainableKernel
             2. The log-probability of observing the above sample for the given conditioning information
             3. The log-probability that a sample from the base kernel passes the cut for each row of conditioning information
         """
-        base_log_probs = self.base_kernel.construct_logits(cond).log_softmax(dim=-1)
+        base_log_probs = self.base_kernel.construct_log_probs(cond)
         cut_pass_log_probs = base_log_probs[:, self.allowed_indices].logsumexp(dim=-1)
         log_probs = base_log_probs[:, self.allowed_indices] - cut_pass_log_probs
         sample_idxs = sample_idx_from_log_probs(log_probs)
@@ -116,7 +109,7 @@ class FiniteCutKernel(CutKernelInterface, FiniteKernelInterface, TrainableKernel
         2. An iterator over the allowed outcomes of the cut-kernel for each row of conditioning information and the
             log-probability of observing said outcome
         """
-        base_log_probs = self.base_kernel.construct_logits(cond).log_softmax(dim=-1)
+        base_log_probs = self.base_kernel.construct_log_probs(cond)
         pass_log_probs = base_log_probs[:, self.allowed_indices].logsumexp(dim=-1)
         log_probs = base_log_probs[:, self.allowed_indices] - pass_log_probs
 
@@ -148,7 +141,7 @@ class FiniteCutKernel(CutKernelInterface, FiniteKernelInterface, TrainableKernel
         Tensor
             The probability of observing each sample given the sample passes the cut for each row of conditioning information
         """
-        base_log_probs = self.base_kernel.construct_logits(cond).log_softmax(dim=-1)
+        base_log_probs = self.base_kernel.construct_log_probs(cond)
         cut_pass_log_probs = base_log_probs[:, self.allowed_indices].logsumexp(dim=-1)
         return base_log_probs[
             range(base_log_probs.shape[0]),
