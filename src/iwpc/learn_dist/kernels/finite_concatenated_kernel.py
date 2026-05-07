@@ -20,7 +20,7 @@ class FiniteConcatenatedKernel(FiniteKernelInterface, ConcatenatedKernel):
         sub_kernels
             A list of TrainableKernelBase sub-kernels
         concatenate_cond
-            Whether the conditioning information spaced should be concatenated, or are the same for all sub-kernels
+            Whether the conditioning information spaced should be concatenated, or whether it is shared by all sub-kernels
         """
         super().__init__(
             ConcatenatedFiniteSampleSpace([k.sample_space for k in sub_kernels]),
