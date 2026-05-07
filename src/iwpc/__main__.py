@@ -22,7 +22,13 @@ def build_parser() -> argparse.ArgumentParser:
         prog="python -m iwpc",
         description="iwpc command-line utilities.",
     )
-    subparsers = parser.add_subparsers(dest="command", metavar="command")
+    subparsers = parser.add_subparsers(
+        dest="command",
+        title="available commands",
+        description=(
+            "Run `python -m iwpc <command> --help` for command-specific options."
+        ),
+    )
     subparsers.required = True
 
     dmedit.add_subparser(subparsers)
@@ -45,6 +51,11 @@ def main(argv: list[str] | None = None) -> int:
         The exit code to return to the shell.
     """
     parser = build_parser()
+    if argv is None:
+        argv = sys.argv[1:]
+    if not argv:
+        parser.print_help()
+        return 1
     args = parser.parse_args(argv)
     args.func(args)
     return 0
