@@ -79,6 +79,6 @@ class ConstantKernel(FiniteKernelInterface, TrainableKernelBase):
         Returns
         -------
         Tensor
-            A tensor of shape (N, 1) of zeros — log p(constant_value) = log(1) = 0.
+            A tensor of shape (N, 1) of zeros — log p(constant_value) = log(1) = 0. See log_prob docstring
         """
         return torch.zeros((cond.shape[0], 1), dtype=torch.float32, device=cond.device)
