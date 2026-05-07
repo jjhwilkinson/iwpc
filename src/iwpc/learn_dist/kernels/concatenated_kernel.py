@@ -21,7 +21,16 @@ class ConcatenatedKernel(TrainableKernelBase):
         sub_kernels
             A list of TrainableKernelBase sub-kernels
         concatenate_cond
-            Whether the conditioning information spaced should be concatenated, or are the same for all sub-kernels
+            Controls how the conditioning vector is dispatched to the sub-kernels. If False (default), every sub-kernel
+            is conditioned on the *same* incoming `cond` tensor — this requires every sub-kernel to share an identical
+            cond_dimension, and the resulting ConcatenatedKernel exposes that same cond_dimension. If True, the
+            conditioning vector is treated as the row-wise concatenation of each sub-kernel's conditioning information,
+            and is sliced along the last axis using the cumulative sum of sub-kernel cond_dimensions: sub-kernel i sees
+            columns `[sum(cond_dims[:i]) : sum(cond_dims[:i+1])]`. The resulting ConcatenatedKernel exposes a
+            cond_dimension equal to the sum of sub-kernel cond_dimensions, mirroring how the sample axis is always
+            partitioned. Use False when the same conditioning context drives several independent factors of a joint
+            distribution; use True when each factor has its own conditioning information that should not leak across
+            sub-kernels
         """
         assert concatenate_cond or all(k.cond_dimension == sub_kernels[0].cond_dimension for k in sub_kernels)
         cond_dimension = sum(k.cond_dimension for k in sub_kernels) if concatenate_cond else sub_kernels[0].cond_dimension
@@ -102,7 +111,7 @@ class ConcatenatedKernel(TrainableKernelBase):
 
     def draw_with_separate_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tuple[Tensor, ...]]:
         """
-        Utility method to draw samples but return the log-likelihoods of each independent sub-kernel's samples
+        Utility method to draw samples but return the log-probability of each independent sub-kernel's samples
         separately it is unlikely the end user ever needs to use this function, but its helpful for the implementation of
         UnlabelledMultiKernelTrainer.
 
