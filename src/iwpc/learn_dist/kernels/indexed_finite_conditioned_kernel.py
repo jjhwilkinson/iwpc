@@ -66,10 +66,22 @@ class IndexedFiniteConditionedKernel(IndexedInterface, FiniteConditionedKernel):
 
     def construct_log_prob_table(self, unindexed_cond: Tensor) -> Tensor:
         """
-        Computes log p(A, B2 | B1, z) = log p(A | B2, B1, z) + log p(B2 | B1, z) by summing the children's
-        log-prob tables directly. Each leaf kernel runs one log_softmax over its own sample axis; this
-        composition step adds two pre-normalised log-prob tables without re-normalising, so deep chains
-        avoid the geometric growth of joint axes through cascading log_softmaxes.
+        Computes log p(A, B2 | B1, z) = log p(A | B2, B1, z) + log p(B2 | B1, z) by summing the children's log-prob
+        tables directly. Each leaf kernel runs one log_softmax over its own sample axis; this composition step adds two
+        pre-normalised log-prob tables without re-normalising, so deep chains avoid the geometric growth of joint axes
+        through cascading log_softmaxes
+
+        Parameters
+        ----------
+        unindexed_cond
+            Standard conditioning z of shape (N, standard_cond_dim), i.e. with all index columns (B1) stripped
+
+        Returns
+        -------
+        Tensor
+            Shape (N, M_A * K_B2, K_B1) where M_A is the sample-kernel sample-space size, K_B2 is the conditioning
+            kernel's sample-space size, and K_B1 is the conditioning kernel's index-space size. Entry (n, j, k) is
+            log p(A=a, B2=b2 | B1=k, z[n]) where j = a * K_B2 + b2 (A slowest, B2 fastest)
         """
         num_conditioning_kernel_index_outcomes = self.conditioning_kernel.sample_space.num_outcomes
         num_conditioning_kernel_outcomes = self.conditioning_kernel.index_sample_space.num_outcomes

@@ -300,6 +300,17 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         # self.make_plot(batch_idx)
 
     def make_plot(self, batch_idx):
+        """
+        Debug helper that draws a fresh batch from the current kernel and dumps a histogram comparing the dimuon
+        invariant masses of the benchmark p, the base distribution, the learned q, and q reweighted by exp(log_p_over_q)
+        to a hard-coded path on disk. Intended only for one-off animation frames during development; not part of any
+        training loop and likely to need rewiring before reuse
+
+        Parameters
+        ----------
+        batch_idx
+            Index of the current batch, used in the output filename
+        """
         with torch.no_grad():
             q = self.sampled_kernel.draw(torch.concat([self.exact_kernel.draw(self.q_base), self.q_base], dim=1))
             log_p_over_q = self.log_p_over_q_model(q)[:, 0]
@@ -319,7 +330,13 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
 
     def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> None:
         """
-        Calculates the validation learned divergence between p and q
+        Calculates the validation learned divergence between p and q via the discriminator's BCE loss and logs it as
+        `val_divergence`
+
+        Parameters
+        ----------
+        batch
+            (base_samples, data_samples, labels, weights). Same convention as training_step
         """
         bce = self.calculate_cross_entropy(batch)
         self.log('val_divergence', 1 - bce / self.log_two, on_step=False, on_epoch=True, prog_bar=True)

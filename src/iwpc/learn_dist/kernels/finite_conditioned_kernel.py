@@ -35,7 +35,22 @@ class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
 
     def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
-        Computes log p(A, B) = log p(A | B) + log p(B) directly in log-prob space.
+        Computes the joint log probability table log p(A, B | cond) = log p(A | B, cond) + log p(B | cond) directly in
+        log-prob space. When the sample kernel is an IndexedInterface, the joint table is assembled from the children's
+        pre-normalised log-prob tables via a single broadcasted addition; otherwise the conditioning kernel's outcomes
+        are enumerated one at a time and each branch is summed independently
+
+        Parameters
+        ----------
+        cond
+            A tensor of conditioning information of shape (N, self.cond_dimension)
+
+        Returns
+        -------
+        Tensor
+            A tensor of shape (N, self.sample_space.num_outcomes) where entry (n, k) is the log probability of joint
+            outcome k given cond[n]. Outcome ordering follows ConcatenatedFiniteSampleSpace's convention
+            (sample-kernel index slowest, conditioning-kernel index fastest)
         """
         if cond.shape[0] == 0:
             return torch.zeros((0, self.sample_space.num_outcomes), device=cond.device, dtype=cond.dtype)
@@ -56,6 +71,21 @@ class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
         return torch.stack(outputs, dim=2).reshape((cond.shape[0], -1))
 
     def _draw(self, cond: Tensor) -> Tensor:
+        """
+        Delegates to ConditionedKernel._draw, which first draws an outcome from the conditioning kernel and then draws
+        from the sample kernel using that outcome appended to cond. Defined explicitly here so the FiniteKernelInterface
+        MRO does not shadow the ConditionedKernel implementation
+
+        Parameters
+        ----------
+        cond
+            Conditioning tensor of shape (N, self.cond_dimension)
+
+        Returns
+        -------
+        Tensor
+            Samples drawn from the joint distribution, shape (N, self.sample_dimension)
+        """
         return ConditionedKernel._draw(self, cond)
 
     def outcome_to_idx(self, samples: Tensor) -> Tensor:

@@ -117,6 +117,12 @@ class IndexedFiniteKernel(IndexedInterface, FiniteKernel):
             The encoding or dimension of the standard conditioning x passed to the logit model
         **kwargs
             Forwarded to __init__ (e.g. init_prob, logit_model)
+
+        Returns
+        -------
+        IndexedFiniteKernel
+            An IndexedFiniteKernel indexed on the conditioning kernel's sample space, with index_cond_indices set so
+            that the first conditioning_kernel.sample_dimension columns of cond are interpreted as the index B
         """
         return cls(
             num_variable_outcomes,

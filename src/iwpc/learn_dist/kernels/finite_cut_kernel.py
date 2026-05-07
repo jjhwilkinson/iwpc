@@ -40,9 +40,19 @@ class FiniteCutKernel(CutKernelInterface, FiniteKernelInterface, TrainableKernel
 
     def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
-        Returns log p(outcome | passes cut) directly: index the base kernel's full log-probs into the allowed
-        subset and renormalise via one logsumexp. The renormalisation here is genuine math (the cut redefines
-        the support), not redundant.
+        Returns log p(outcome | passes cut) directly: indexes the base kernel's full log-probs into the allowed
+        subset and renormalises via one logsumexp. The renormalisation is genuine math here (the cut redefines the
+        support), not redundant
+
+        Parameters
+        ----------
+        cond
+            A tensor of conditioning information of shape (N, self.cond_dimension)
+
+        Returns
+        -------
+        Tensor
+            Log probabilities of shape (N, len(self.allowed_indices)) over the cut sample space
         """
         base_log_probs = self.base_kernel.construct_log_probs(cond)
         cut = base_log_probs[:, self.allowed_indices]

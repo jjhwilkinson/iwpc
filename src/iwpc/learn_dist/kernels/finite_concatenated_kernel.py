@@ -69,4 +69,19 @@ class FiniteConcatenatedKernel(FiniteKernelInterface, ConcatenatedKernel):
         return idxs.int()
 
     def _draw(self, cond: Tensor) -> Tensor:
+        """
+        Delegates to ConcatenatedKernel._draw, which draws independently from each sub-kernel and concatenates the
+        resulting samples along the last axis. Defined explicitly here so the FiniteKernelInterface MRO does not shadow
+        the ConcatenatedKernel implementation
+
+        Parameters
+        ----------
+        cond
+            Conditioning tensor of shape (N, self.cond_dimension)
+
+        Returns
+        -------
+        Tensor
+            Concatenated samples of shape (N, self.sample_dimension)
+        """
         return ConcatenatedKernel._draw(self, cond)

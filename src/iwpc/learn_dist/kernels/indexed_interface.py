@@ -72,9 +72,20 @@ class IndexedInterface(ABC):
         """
         If other is an indexed kernel `compatible` with self as a sample kernel, returns an
         IndexedFiniteConditionedKernel modelling p(A, B2 | B1, z). Compatibility requires
-        self.index_cond_indices == list(range(dim_B2)) + [dim_B2 + i for i in other.index_cond_indices],
-        i.e. self must be indexed on the sample space of other, and the index space of other.
-        Falls back to super().__or__ otherwise
+        self.index_cond_indices == list(range(dim_B2)) + [dim_B2 + i for i in other.index_cond_indices], i.e. self must
+        be indexed on the sample space of other, and the index space of other. Falls back to super().__or__ (the generic
+        FiniteConditionedKernel composition) otherwise
+
+        Parameters
+        ----------
+        other
+            The conditioning kernel. If it is an IndexedInterface compatible with self, the fast indexed-table
+            composition is used; otherwise the generic enumeration path is taken
+
+        Returns
+        -------
+        IndexedFiniteConditionedKernel | FiniteConditionedKernel
+            The composed conditioned kernel
         """
         from iwpc.learn_dist.kernels.indexed_finite_conditioned_kernel import IndexedFiniteConditionedKernel
         if isinstance(other, FiniteKernelInterface) and isinstance(other, IndexedInterface):

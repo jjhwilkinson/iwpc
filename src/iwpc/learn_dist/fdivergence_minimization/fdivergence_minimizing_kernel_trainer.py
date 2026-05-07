@@ -28,6 +28,39 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         zero_out_init_q_samples: bool = False,
         accumulate_kernel_batches: int = -1,
     ):
+        """
+        Parameters
+        ----------
+        sampled_kernel
+            The trainable kernel that produces q via convolution with the base distribution. Optimised to minimise the
+            f-divergence between p and q
+        log_p_over_q_model
+            A torch Module that maps a sample x to a scalar estimate of log(p(x) / q(x)). Trained as a binary classifier
+            between p and q samples
+        divergence
+            The DifferentiableFDivergence to minimise. Both the discriminator's BCE loss and the kernel's surrogate loss
+            are derived from it
+        exact_kernel
+            Optional FiniteKernelInterface representing a discrete component of q whose outcomes can be enumerated
+            exactly rather than sampled. If provided, expectations over its outcomes are taken via summation
+        discriminator_opt_lr
+            Learning rate for the discriminator (log_p_over_q_model) Adam optimizer
+        kernel_opt_lr
+            Learning rate for the kernel Adam optimizer
+        start_kernel_train_epoch
+            Epoch from which the kernel begins training. Earlier epochs only train the discriminator
+        start_discriminator_train_epoch
+            Epoch from which the discriminator begins training
+        kernel_resample_rate
+            Number of fresh kernel draws per batch when computing the kernel loss. Higher values reduce gradient
+            variance at proportional compute cost
+        zero_out_init_q_samples
+            If True, the q-side input samples are zeroed before being added to the kernel draw. Used when the kernel
+            output is to be interpreted as the full sample rather than a residual on top of an initial guess
+        accumulate_kernel_batches
+            Number of batches over which to accumulate kernel gradients before stepping the kernel optimiser. -1 steps
+            every batch
+        """
         super().__init__()
 
         self.sampled_kernel = sampled_kernel
@@ -74,9 +107,37 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         )
 
     def calculate_log_p_over_q(self, samples) -> torch.Tensor:
+        """
+        Evaluates the discriminator on the given samples and returns the scalar log(p / q) estimate per sample
+
+        Parameters
+        ----------
+        samples
+            A tensor of samples of shape (N, sample_dimension)
+
+        Returns
+        -------
+        torch.Tensor
+            A tensor of shape (N,) of log(p / q) estimates
+        """
         return self.log_p_over_q_model(samples)[:, 0]
 
     def exact_outcomes_with_log_prob_iter(self, q_base_samples) -> Iterator[tuple[Tensor, Tensor]]:
+        """
+        Enumerates the outcomes of the exact kernel and the corresponding log probability for each base sample. If no
+        exact kernel is configured, returns a single trivial (zero-width outcome, zero log-prob) pair so callers can
+        treat both code paths uniformly
+
+        Parameters
+        ----------
+        q_base_samples
+            Base samples used as conditioning information for the exact kernel, shape (N, base_dim)
+
+        Returns
+        -------
+        Iterator[tuple[Tensor, Tensor]]
+            Iterator yielding (outcome, log_prob) pairs over the exact kernel's discrete outcomes
+        """
         return (
             self.exact_kernel.outcomes_with_log_prob_iter(q_base_samples) if self.exact_kernel is not None
             else [
@@ -86,6 +147,21 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         )
 
     def sampled_kernel_cond_iter(self, q_base_samples) -> Iterator[tuple[Tensor, Tensor]]:
+        """
+        Yields the conditioning vector that should be fed into the sampled kernel for each exact-kernel outcome,
+        together with the log probability of that outcome. When no exact kernel is configured, yields the base samples
+        themselves with a zero log-prob so the caller iterates exactly once
+
+        Parameters
+        ----------
+        q_base_samples
+            Base samples used as conditioning information for both kernels, shape (N, base_dim)
+
+        Yields
+        ------
+        tuple[Tensor, Tensor]
+            (conditioning tensor of shape (N, exact_outcome_dim + base_dim), exact-outcome log probability of shape (N,))
+        """
         if self.exact_kernel is None:
             yield q_base_samples, torch.zeros(q_base_samples.shape[0], dtype=torch.float32, device=self.device)
         else:
@@ -216,7 +292,13 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
 
     def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> None:
         """
-        Calculates the validation learned divergence between p and q
+        Calculates the validation learned divergence between p and q via the discriminator's BCE loss and logs it as
+        `val_divergence`
+
+        Parameters
+        ----------
+        batch
+            (base_samples, data_samples, labels, weights). Same convention as training_step
         """
         bce = self.calculate_cross_entropy(batch)
         self.log('val_divergence', 1 - bce / self.log_two, on_step=False, on_epoch=True, prog_bar=True)

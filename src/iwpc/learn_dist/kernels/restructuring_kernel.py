@@ -64,4 +64,18 @@ class RestructuringKernel(TrainableKernelBase):
         return self.base_kernel.log_prob(samples, cond[:, self.indices])
 
     def draw_with_log_prob(self, cond: Tensor) -> tuple[Tensor, Tensor]:
+        """
+        Draws a sample from the base kernel using the restructured conditioning information and returns it alongside
+        its log probability under the base kernel
+
+        Parameters
+        ----------
+        cond
+            A Tensor of conditioning information of shape (N, self.cond_dimension)
+
+        Returns
+        -------
+        tuple[Tensor, Tensor]
+            A tensor of samples of shape (N, self.sample_dimension) and a tensor of log probabilities of shape (N,)
+        """
         return self.base_kernel.draw_with_log_prob(cond[:, self.indices])
