@@ -73,37 +73,3 @@ class FiniteConditionedKernel(FiniteKernelInterface, ConditionedKernel):
         samples_kernel_idxs = self.conditioning_kernel.sample_space.outcome_to_idx(samples[:, :self.sample_kernel.sample_dimension])
         cond_kernel_idxs = self.conditioning_kernel.sample_space.outcome_to_idx(samples[:, self.sample_kernel.sample_dimension:])
         return samples_kernel_idxs * self.conditioning_kernel.sample_space.num_outcomes + cond_kernel_idxs
-
-
-if __name__ == "__main__":
-    from iwpc.learn_dist.kernels.finite_kernel import FiniteKernel
-    from iwpc.learn_dist.kernels.indexed_finite_kernel import IndexedFiniteKernel
-
-    torch.manual_seed(0)
-
-    def check_joint(joint, cond, label):
-        joint.eval()
-        with torch.no_grad():
-            log_probs_from_kernel = joint.construct_log_probs(cond)
-            for idx in range(joint.sample_space.num_outcomes):
-                outcome = joint.sample_space.idx_to_outcome(torch.full((N,), idx, dtype=torch.long))
-                lp_kernel = log_probs_from_kernel[:, idx]
-                lp_log_prob = joint.log_prob(outcome, cond)
-                max_diff = (lp_kernel - lp_log_prob).abs().max().item()
-                assert max_diff < 1e-5, f"[{label}] Mismatch at outcome {idx}: max diff {max_diff}"
-        print(f"[{label}] All outcomes match.")
-
-    N = 4
-    cond = torch.randn(N, 4)
-
-    # slow path: plain FiniteKernel sample kernel
-    cond_kernel = FiniteKernel(3, 4)
-    sample_kernel = FiniteKernel(2, 5)
-    joint_slow = sample_kernel | cond_kernel
-    check_joint(joint_slow, cond, "slow path")
-
-    # fast path: IndexedFiniteKernel sample kernel
-    cond_kernel2 = FiniteKernel(3, 4)
-    sample_kernel_indexed = IndexedFiniteKernel.condition_on(2, cond_kernel2, 4)
-    joint_fast = sample_kernel_indexed | cond_kernel2
-    check_joint(joint_fast, cond, "fast path")

@@ -70,31 +70,3 @@ class FiniteConcatenatedKernel(FiniteKernelInterface, ConcatenatedKernel):
 
     def _draw(self, cond: Tensor) -> Tensor:
         return ConcatenatedKernel._draw(self, cond)
-
-
-if __name__ == "__main__":
-    import torch
-    from iwpc.learn_dist.kernels.finite_kernel import FiniteKernel
-
-    torch.manual_seed(0)
-
-    # joint: p(A, B | z) = p(A | z) p(B | z), independent
-    kernel_a = FiniteKernel(3, 4)
-    kernel_b = FiniteKernel(2, 4)
-    joint = kernel_a & kernel_b
-    joint.eval()
-
-    N = 1
-    cond = torch.randn(N, joint.cond_dimension)
-
-    with torch.no_grad():
-        log_probs_from_kernel = joint.construct_log_probs(cond)
-
-        for idx in range(joint.sample_space.num_outcomes):
-            outcome = joint.sample_space.idx_to_outcome(torch.full((N,), idx, dtype=torch.long))
-            lp_kernel = log_probs_from_kernel[:, idx]
-            lp_log_prob = joint.log_prob(outcome, cond)
-            max_diff = (lp_kernel - lp_log_prob).abs().max().item()
-            assert max_diff < 1e-5, f"Mismatch at outcome {idx}: max diff {max_diff}"
-
-    print("All outcomes match.")
