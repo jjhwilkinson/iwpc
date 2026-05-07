@@ -47,7 +47,8 @@ class HistogramBaseModel(SamplableBaseModel):
             idxs.append(np.digitize(vals, bins) - 1)
             out_of_bounds_mask = out_of_bounds_mask | (idxs[-1] < 0) | (idxs[-1] > bins.shape[0] - 2)
 
-        probability = np.log(self.histogram[*(np.clip(idx, 0, b.shape[0] - 2) for idx, b in zip(idxs, self.bins))])
+        idxs_clipped = tuple(np.clip(idx, 0, b.shape[0] - 2) for idx, b in zip(idxs, self.bins))
+        probability = np.log(self.histogram[idxs_clipped])
         probability[out_of_bounds_mask] = -np.inf
 
         return probability

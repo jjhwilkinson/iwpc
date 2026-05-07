@@ -3,7 +3,7 @@ from operator import mul
 from typing import List, Callable, Iterable, Optional, Union, Dict
 
 import torch
-from torch import nn, Tensor
+from torch import nn
 from torch.nn import BatchNorm1d, LeakyReLU, Linear, Dropout, Module, Sequential, Flatten
 
 from .layers import RunningNormLayer, LambdaLayer
@@ -12,6 +12,14 @@ from ..encodings.trivial_encoding import TrivialEncoding
 from ..modules.utility_modules.independent_sum_module import IndependentSumModule
 from ..symmetries.group_action import GroupAction
 from ..types import Shape
+
+
+def debug_print(x, name):
+    """
+    Helper to enable debug_name in basic_model_factory
+    """
+    print(f"Forward called on {name}")
+    return x
 
 
 def make_layer_group(
@@ -65,6 +73,7 @@ def basic_model_factory(
     symmetries: Optional[Union[GroupAction, Iterable[GroupAction]]] = None,
     complement_symmetries: Optional[Union[GroupAction, Iterable[GroupAction]]] = None,
     activation: Callable = LeakyReLU,
+    debug_name: str | None = None,
 ) -> Sequential:
     """
     Parameters
@@ -99,6 +108,8 @@ def basic_model_factory(
         a convenience and is folded via '*'
     activation
         The activation function class to apply to the output of layers
+    debug_name
+        Optional name that if provided results in a print statement every time this model is used
 
     Returns
     -------
@@ -140,6 +151,10 @@ def basic_model_factory(
     ]
     for i in range(len(shape) - 2):
         layers += make_layer_group(shape[i], shape[i + 1], dropout=dropout, batch_norm=batch_norm, activation=activation)
+
+    if debug_name is not None:
+        layers.append(LambdaLayer(partial(debug_print, name=debug_name)))
+
     layers += [
         Linear(shape[-2], shape[-1]),
         LambdaLayer(lambda x: x.reshape((-1,) + output_shape)),

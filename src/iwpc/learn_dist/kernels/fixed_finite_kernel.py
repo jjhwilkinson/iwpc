@@ -3,7 +3,7 @@ import torch
 from torch import Tensor
 
 from iwpc.encodings.encoding_base import Encoding
-from iwpc.learn_dist.kernels.finite_kernel import FiniteKernelInterface
+from iwpc.learn_dist.kernels.finite_kernel_interface import FiniteKernelInterface
 from iwpc.learn_dist.kernels.finite_sample_space import FiniteSampleSpace
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
@@ -40,7 +40,7 @@ class FixedFiniteKernel(FiniteKernelInterface, TrainableKernelBase):
         )
         self.register_buffer('log_probs', log_probs)
 
-    def construct_logits(self, cond: Tensor) -> Tensor:
+    def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
         Parameters
         ----------
@@ -50,6 +50,6 @@ class FixedFiniteKernel(FiniteKernelInterface, TrainableKernelBase):
         Returns
         -------
         Tensor
-            The log of the probabilities provided in the constructor, repeated for each sample
+            The log of the probabilities provided in the constructor, repeated for each sample.
         """
         return self.log_probs.repeat(cond.shape[0], 1)

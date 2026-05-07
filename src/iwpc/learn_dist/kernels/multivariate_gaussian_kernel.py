@@ -46,6 +46,36 @@ class MultivariateGaussianParameters:
     std: Tensor
     log_unnorm_corr_eigvals: Tensor
 
+    def construct_cov(self) -> Tensor:
+        """
+        Constructs the covariance matrix from the stored parameters.
+
+        Returns
+        -------
+        Tensor
+            Covariance matrix of shape (batch, D, D).
+        """
+        unnorm_corr = torch.einsum('bji,bj,bjk->bik', self.unnorm_corr_rot, self.unnorm_corr_eigvals, self.unnorm_corr_rot)
+        scale = self.std / self.unnorm_corr_diag
+        return torch.einsum('bi,bij,bj->bij', scale, unnorm_corr, scale)
+
+    def construct_root_cov(self) -> Tensor:
+        """
+        Constructs a matrix R such that R @ R.T equals the covariance matrix.
+
+        Returns
+        -------
+        Tensor
+            Root covariance matrix of shape (batch, D, D).
+        """
+        return torch.einsum(
+            'bi,bij,bj,bjk->bik',
+            self.std / self.unnorm_corr_diag,
+            self.unnorm_corr_rot.transpose(-1, -2),
+            torch.sqrt(self.unnorm_corr_eigvals),
+            self.unnorm_corr_rot,
+        )
+
 
 def construct_init_parameters(cov: ndarray) -> tuple[ndarray, ndarray, ndarray]:
     """
@@ -372,38 +402,6 @@ class MultivariateGaussianKernel(TrainableKernelBase):
             log_prob = log_prob[mask]
         return - log_prob[log_prob.isfinite()].mean()
 
-    def construct_cov(self, cond: torch.Tensor) -> torch.Tensor:
-        """
-        Parameters
-        ----------
-        cond
-            The conditioning information for each sample
-
-        Returns
-        -------
-        Tensor
-            Covariance matrix of the distribution for the given conditioning information.
-        """
-        log_unnorm_corr_rot = self.log_rot_model(cond)
-        log_unnorm_corr_eigvals = self.log_diag_model(cond)
-        log_std = self.log_std_model(cond)
-
-        unnorm_corr_rot = torch.matrix_exp(log_unnorm_corr_rot)
-        cov_tilda = torch.einsum(
-            'bji,bj,bjk->bik',
-            unnorm_corr_rot,
-            log_unnorm_corr_eigvals.exp(),
-            unnorm_corr_rot
-        )
-        root_unnorm_corr_diag = torch.sqrt(torch.diagonal(cov_tilda, dim1=1, dim2=2))
-
-        std = torch.exp(log_std)
-        return torch.einsum('bi,bij,bj->bij',
-            std / root_unnorm_corr_diag,
-            cov_tilda,
-            std / root_unnorm_corr_diag
-        )
-
     def draw_from_gaussian_parameters(
         self,
         gaussian_parameters: MultivariateGaussianParameters
@@ -420,16 +418,8 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         Tensor
             A sample from the gaussian kernel for each row of conditioning information
         """
-        root_cov = torch.einsum(
-            'bi,bij,bj,bjk->bik',
-            gaussian_parameters.std / gaussian_parameters.unnorm_corr_diag,
-            gaussian_parameters.unnorm_corr_rot.transpose(-1, -2),
-            torch.sqrt(gaussian_parameters.unnorm_corr_eigvals),
-            gaussian_parameters.unnorm_corr_rot,
-        )
         noise = torch.randn_like(gaussian_parameters.mean)
-        correlated_noise = torch.einsum('bjk,bk->bj', root_cov, noise)
-        return correlated_noise + gaussian_parameters.mean
+        return torch.einsum('bjk,bk->bj', gaussian_parameters.construct_root_cov(), noise) + gaussian_parameters.mean
 
     def _draw(self, cond: torch.Tensor) -> torch.Tensor:
         """

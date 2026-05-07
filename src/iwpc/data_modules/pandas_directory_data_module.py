@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from torchmetrics import MeanMetric
 from tqdm import tqdm
 
-from ..datasets.pandas_dataset import StructuredDataSpec
+from ..datasets.pandas_dataset import StructuredDataSpec, PandasDataset
 from ..datasets.pandas_file_list_dataset import PandasFileListDataset
 from ..types import PathLike, TensorOrNDArray
 from ..utils import read_yaml, temp_directory, dump_yaml
@@ -93,6 +93,7 @@ class PandasDirDataModule(LightningDataModule):
         limit_files: int | None = None,
         dataloader_kwargs: dict | None = None,
         shuffle_in_train_files: bool = True,
+        use_in_memory_dataset: bool = False,
     ):
         """
         Parameters
@@ -114,6 +115,11 @@ class PandasDirDataModule(LightningDataModule):
             Any other arguments to be provided to DataLoader instances
         shuffle_in_train_files
             Whether to shuffle the data within each file during training
+        use_in_memory_dataset
+            If True, all files are concatenated into a single PandasDataset with tensors pinned in shared memory during
+            setup(). The train and val DataLoaders are then constructed with `pin_memory=True` defaulted on (overridable
+            via dataloader_kwargs), the train loader additionally with `shuffle=True` so it shuffles across the full
+            dataset, and the val loader with `shuffle=False`. Faster than file-by-file loading when the data fits in RAM
         """
         super().__init__()
         self.dataset_dir = Path(dataset_dir)
@@ -122,6 +128,9 @@ class PandasDirDataModule(LightningDataModule):
         self.split = split
         self.limit_files = limit_files
         self.shuffle_in_train_files = shuffle_in_train_files
+        self.use_in_memory_dataset = use_in_memory_dataset
+        self._in_memory_train_ds: PandasDataset | None = None
+        self._in_memory_val_ds: PandasDataset | None = None
 
         self.dataloader_kwargs = dataloader_kwargs or {}
         self.dataloader_kwargs.setdefault("batch_size", 2**15)
@@ -263,6 +272,44 @@ class PandasDirDataModule(LightningDataModule):
         """
         return pd.read_pickle(self.all_files[idx])
 
+    def _load_in_memory_dataset(self, files: list[Path], name: str) -> PandasDataset:
+        """
+        Concatenates all files into a single PandasDataset with all tensors placed in shared memory.
+
+        Parameters
+        ----------
+        files
+            Ordered list of pickle file paths to load and concatenate
+        name
+            Name of the data being loaded placed into the tqdm progress bar
+
+        Returns
+        -------
+        PandasDataset
+            Dataset backed by shared-memory tensors
+        """
+        df = pd.concat(
+            [pd.read_pickle(f) for f in tqdm(files, desc=f"Loading {name} data into shared memory")],
+            ignore_index=True,
+        )
+        return PandasDataset(df, self.feature_spec, self.weight_col).share_memory_()
+
+    def setup(self, stage: str | None = None) -> None:
+        """
+        Pre-loads train and validation datasets into shared memory when use_in_memory_dataset is True.
+        Called automatically by Lightning before the first dataloader is requested.
+
+        Parameters
+        ----------
+        stage
+            One of 'fit', 'validate', 'test', 'predict', or None
+        """
+        if self.use_in_memory_dataset:
+            if self._in_memory_train_ds is None:
+                self._in_memory_train_ds = self._load_in_memory_dataset(self.train_files, name="train")
+            if self._in_memory_val_ds is None:
+                self._in_memory_val_ds = self._load_in_memory_dataset(self.validation_files, name="val")
+
     def all_dataloader(self) -> DataLoader:
         """
         Returns a DataLoader which iterates over all samples in all files
@@ -275,23 +322,32 @@ class PandasDirDataModule(LightningDataModule):
 
     def train_dataloader(self) -> DataLoader:
         """
-        Returns a DataLoader which iterates over the samples in the training files
+        Returns a DataLoader which iterates over the samples in the training files. When
+        use_in_memory_dataset is True the loader is built over the pre-loaded shared-memory PandasDataset and defaults
+        `pin_memory=True` and `shuffle=True` on top of self.dataloader_kwargs (both overridable by the user via
+        dataloader_kwargs). Otherwise iteration is file-by-file via PandasFileListDataset with `shuffle=False` (within-
+        file shuffling is controlled by shuffle_in_train_files instead)
         """
-        return DataLoader(
-            self.train_ds,
-            shuffle=False,
-            **self.dataloader_kwargs,
-        )
+        if self.use_in_memory_dataset:
+            kwargs = {**self.dataloader_kwargs}
+            kwargs.setdefault('pin_memory', True)
+            kwargs.setdefault('shuffle', True)
+            return DataLoader(self._in_memory_train_ds, **kwargs)
+        return DataLoader(self.train_ds, shuffle=False, **self.dataloader_kwargs)
 
     def val_dataloader(self) -> DataLoader:
         """
-        Returns a DataLoader which iterates over the samples in the validation files
+        Returns a DataLoader which iterates over the samples in the validation files. When use_in_memory_dataset is True
+        the loader is built over the pre-loaded shared-memory PandasDataset and defaults `pin_memory=True` and
+        `shuffle=False` on top of self.dataloader_kwargs (both overridable by the user via dataloader_kwargs). Otherwise
+        iteration is file-by-file via PandasFileListDataset with `shuffle=False`
         """
-        return DataLoader(
-            self.val_ds,
-            shuffle=False,
-            **self.dataloader_kwargs,
-        )
+        if self.use_in_memory_dataset:
+            kwargs = {**self.dataloader_kwargs}
+            kwargs.setdefault('pin_memory', True)
+            kwargs.setdefault('shuffle', False)
+            return DataLoader(self._in_memory_val_ds, **kwargs)
+        return DataLoader(self.val_ds, shuffle=False, **self.dataloader_kwargs)
 
     @property
     def tags(self) -> list[str]:

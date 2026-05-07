@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 from torch.nn import ModuleList
 
-from iwpc.learn_dist.kernels.finite_kernel import FiniteKernelInterface
+from iwpc.learn_dist.kernels.finite_kernel_interface import FiniteKernelInterface
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
 
@@ -13,7 +13,7 @@ def map_indexing(
     slices_tensor: Tensor
 ) -> Tensor | tuple[Tensor, ...]:
     """
-    Given a pytorch-indexing  compatible slice object, slices all tensors in tensor_or_tensors with the given slice
+    Given a pytorch-indexing compatible slice object, slices all tensors in tensor_or_tensors with the given slice
     along the first dimension
 
     Parameters
@@ -250,9 +250,9 @@ class FiniteBranchingKernel(FiniteKernelInterface, BranchingKernel):
             outcome_to_idx_fn
         )
 
-    def construct_logits(self, cond: Tensor) -> Tensor:
+    def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
-        Constructs the logits over the possible outcomes given the conditioning information
+        Constructs the log-probabilities over the possible outcomes given the conditioning information.
 
         Parameters
         ----------
@@ -270,6 +270,9 @@ class FiniteBranchingKernel(FiniteKernelInterface, BranchingKernel):
 
         return branched_evaluation(
             branching_idxs,
-            [k.construct_logits for k in self.sub_kernels],
+            [k.construct_log_probs for k in self.sub_kernels],
             sub_kernel_cond,
         )[0]
+
+    def _draw(self, cond: Tensor) -> Tensor:
+        return BranchingKernel._draw(self, cond)

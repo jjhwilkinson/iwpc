@@ -3,6 +3,7 @@ from typing import Tuple, Optional
 import numpy as np
 import torch
 from lightning import LightningModule
+from matplotlib import pyplot as plt
 from torch import optim, Tensor
 from torch.nn import Module
 from torch.nn.functional import logsigmoid
@@ -10,110 +11,14 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torchmetrics import MeanMetric
 
+from calibration_chapter.unidirectional_cross_calibration.train_invmass import calculate_invmass_sq
+from iwpc.divergences import JensenShannonDivergence
+from iwpc.learn_dist.kernels.finite_kernel import FiniteKernel, FiniteKernelInterface
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
+from iwpc.learn_dist.kernels.unlabelled_kernel_trainer import KernelLRAdjustor
 
 
-class KernelLRAdjustor(LRScheduler):
-    """
-    Custom LR scheduler that performs a simple hypothesis test of whether the recent size of fluctuations in the
-    divergence predicted by the discriminating model are comparable in size to the actual predicted divergence. If so
-    this is interpreted as the kernels changing to quickly for the discriminating model to keep up, and so the kernel
-    optimizer learning rate is dropped
-
-    The hypothesis test performs a least-squares linear fit to the recent losses. If the standard deviation of the
-    fluctuations around the best fit model are greater than a certain multiple of the constant of the fit, then the
-    fluctuations are considered too large and the kernel's LR is dropped
-
-    When the LR is dropped, the LR cannot be dropped again for window_size number of epochs
-    """
-    def __init__(
-        self,
-        kernel_optimizer: Optimizer,
-        window_size: int,
-        noise_multiple: float = 3.,
-        decay_factor: float = 0.25,
-        warmup: int = 10,
-        last_epoch: int = -1,
-    ):
-        """
-        Parameters
-        ----------
-        kernel_optimizer
-            The optimizer responsible for training the kernel
-        window_size
-            The window, in number of epochs, over which the discriminator divergence hypothesis test is performed
-        noise_multiple
-            The threshold number of standard deviations of the noise below which the kernel's LR is dropped
-        decay_factor
-            The factor by which the kernel's LR is dropped
-        warmup
-            The number of epochs to wait before the LR scheduler begins monitoring the predicted divergence. The first
-            drop opportunity is at warmup + window_size epochs
-        last_epoch
-            Check LRScheduler docstring
-        """
-        self.window_size = window_size
-        self.divergence_history = []
-        self.noise_multiple = noise_multiple
-        self.decay_factor = decay_factor
-        self.warmup = warmup
-
-        self._last_lr = [kernel_optimizer.param_groups[0]["lr"]]
-        super().__init__(kernel_optimizer, last_epoch)
-
-    def step(self, divergence: Tensor | None = None) -> None:
-        """
-        Performs a step of the scheduler, recording the next discriminator-predicted divergence depending on the current
-        epoch
-
-        Parameters
-        ----------
-        divergence
-            The current predicted divergence between the model and actual data by a discriminator classifier
-        """
-        self.last_epoch += 1
-        if divergence is None or self.last_epoch < self.warmup:
-            return None
-        self.divergence_history.append(float(divergence))
-        if len(self.divergence_history) > self.window_size:
-            self.divergence_history = self.divergence_history[-self.window_size:]
-        return super().step()
-
-    def should_drop_lr(self) -> bool:
-        """
-        Performs the hypothesis test described in the class docstring
-
-        Returns
-        -------
-        bool
-            Whether the LR should be dropped
-        """
-        if len(self.divergence_history) < self.window_size:
-            return False
-
-        cov = np.cov(range(self.window_size), self.divergence_history)
-        m = cov[0, 1] / cov[0, 0]
-        c = np.mean(self.divergence_history) - 0.5 * (self.window_size + 1) * m
-        divergence_std = np.std(self.divergence_history)
-
-        return c / divergence_std < self.noise_multiple
-
-    def get_lr(self) -> list[float | Tensor]:
-        """
-        Calculates the next value of the learning rate depending on the outcome of the hypothesis test
-
-        Returns
-        -------
-        list[float | Tensor]
-            The new LR group
-        """
-        if self.should_drop_lr():
-            self.divergence_history.clear()
-            return [self.get_last_lr()[0] * self.decay_factor]
-        return self.get_last_lr()
-
-
-class KernelKLDivergenceGradientLoss:
+class PartiallyExactKernelKLDivergenceGradientLoss:
     """
     Given a data distribution p, and a model q formed by convolving a base distribution with a kernel, the expected
     gradient of this loss w.r.t. kernel model parameters is equal to the gradient of the KL-divergence of the observed
@@ -130,11 +35,13 @@ class KernelKLDivergenceGradientLoss:
             gradient calculation, but this hasn't been careful explored
         """
         self.kernel_resample_rate = kernel_resample_rate
+        self.jsd = JensenShannonDivergence()
 
     def __call__(
         self,
         base_samples: Tensor,
-        kernel: TrainableKernelBase,
+        exact_kernel: FiniteKernelInterface,
+        sampled_kernel: TrainableKernelBase,
         log_p_over_q_model: Module,
         weights: Optional[Tensor] = None,
     ) -> Tensor:
@@ -158,38 +65,35 @@ class KernelKLDivergenceGradientLoss:
         if weights is None:
             weights = torch.ones(base_samples.shape[0], dtype=torch.float32, device=base_samples.device)
 
-        loss = 0
-        for i in range(self.kernel_resample_rate):
-            samples, log_prob = kernel.draw_with_log_prob(base_samples)
-            with torch.no_grad():
-                p_over_q = torch.exp(log_p_over_q_model(samples))[:, 0]
+        loss = torch.tensor(0., requires_grad=True, device=base_samples.device)
+        for outcome, outcome_log_prob in exact_kernel.outcomes_with_log_prob_iter(base_samples):
+            repeated_outcome = outcome[None, :].repeat((base_samples.shape[0], 1))
+            cond = torch.concat([
+                repeated_outcome,
+                base_samples,
+            ], dim=1)
 
-            loss += - (weights * log_prob * p_over_q.detach()).mean()
+            for i in range(self.kernel_resample_rate):
+                samples, log_prob = sampled_kernel.draw_with_log_prob(cond)
+                with torch.no_grad():
+                    log_p_over_q = log_p_over_q_model(samples)[:, 0]
+                    log_p_over_q = log_p_over_q - exact_kernel.log_prob(
+                        outcome.repeat((samples.shape[0], 1)), samples[:, [1, 2, 3, 5, 6, 7]]
+                    )
+
+                loss = loss + (weights * outcome_log_prob.detach().exp() * self.jsd._f_dash_given_log_torch(-log_p_over_q) * (outcome_log_prob + log_prob)).mean()
+                # loss = - (weights * outcome_log_prob.detach().exp() * p_over_q.detach() * (outcome_log_prob + log_prob)).mean()
 
         return loss / self.kernel_resample_rate
 
 
-class UnLabelledKernelTrainer(LightningModule):
+class PartiallyExactUnLabelledKernelTrainer(LightningModule):
     """
-    LightningModule implementation of the kernel training procedure that minimizes the KL-divergence between two
-    distributions as described in Jeremy's thesis. Trains a TrainableKernelBase to maximise the probability of data
-    samples within a model generated by convolving a base-distribution with a TrainableKernelBase. Only samples from the
-    base-distribution are required, the probability distribution itself is not required
-
-    A number of tricks are employed to increase training stability. Firstly, we would like to only train the kernel when
-    the classifier-predicted divergence is relatively saturated. To this end, we prevent the kernel changing too quickly
-    by only training the kernel if the current predicted divergence is greater than min_train_divergence. If the value
-    of the predicted divergence is determined to have saturated below min_train_divergence (as decided by
-    should_drop_train_divergence), then min_train_divergence is reduced by a factor divergence_saturation_decay.
-
-    Secondly, if the kernel's LR is too high, then the distribution of the samples from q change too quickly for the
-    discriminator to keep up. This often manifests as the loss of the discriminator fluctuating rapidly from
-    epoch-to-epoch. An instance of KernelLRAdjustor is used to monitor the size of fluctuations in the discriminator's
-    predicted divergence, and reduces the kernel's LR if required.
     """
     def __init__(
         self,
-        kernel: TrainableKernelBase,
+        exact_kernel: FiniteKernelInterface,
+        sampled_kernel: TrainableKernelBase,
         log_p_over_q_model,
         min_train_divergence: float = 1.0,
         divergence_saturation_patience: int = 10,
@@ -197,7 +101,10 @@ class UnLabelledKernelTrainer(LightningModule):
         drop_cooldown: int = 5,
         discriminator_lr: float = 1e-3,
         kernel_lr: float = 1e-4,
-        start_kernel_train_epoch: int = 0,
+        start_kernel_train_epoch: int = 1,
+        kernel_resample_rate: int = 1,
+        q_base = None,
+        p = None,
     ):
         """
         A LightningModule that
@@ -225,9 +132,10 @@ class UnLabelledKernelTrainer(LightningModule):
             The initial learning rate of the kernel
         """
         super().__init__()
-        self.kernel = kernel
+        self.exact_kernel = exact_kernel
+        self.sampled_kernel = sampled_kernel
         self.log_p_over_q_model = log_p_over_q_model
-        self.loss = KernelKLDivergenceGradientLoss(kernel_resample_rate=1)
+        self.loss = PartiallyExactKernelKLDivergenceGradientLoss(kernel_resample_rate=kernel_resample_rate)
         self.automatic_optimization = False
         self.register_buffer('log_two', torch.log(torch.tensor(2.)))
         self.discriminator_lr = discriminator_lr
@@ -241,6 +149,10 @@ class UnLabelledKernelTrainer(LightningModule):
         self.last_drop_epoch = 0
         self.drop_cooldown = drop_cooldown
         self.start_kernel_train_epoch = start_kernel_train_epoch
+
+        if q_base is not None:
+            self.q_base = torch.tensor(q_base, dtype=torch.float, device=self.device)
+            self.p = torch.tensor(p, dtype=torch.float, device=self.device)
 
     def should_drop_min_train_divergence(self) -> bool:
         """
@@ -275,9 +187,10 @@ class UnLabelledKernelTrainer(LightningModule):
             than min_train_divergence
         """
         return (
-            (len(self.train_divergence_record) > 0)
-            and (self.train_divergence_record[-1] > self.min_train_divergence)
-            and (self.current_epoch > self.start_kernel_train_epoch)
+            # (len(self.train_divergence_record) > 0)
+            # and (self.train_divergence_record[-1] > self.min_train_divergence)
+            (self.current_epoch >= self.start_kernel_train_epoch)
+            # and (np.random.random() < 0.2)
         )
 
     def calculate_cross_entropy(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> Tensor:
@@ -301,16 +214,25 @@ class UnLabelledKernelTrainer(LightningModule):
         base_samples, data_samples, labels, weights = batch
         mask = labels == 1
         p = data_samples[~mask]
-        q = self.kernel.draw(base_samples[mask]).detach()
+        # exact_samples = self.exact_kernel.draw(base_samples[mask])
+        # q = self.sampled_kernel.draw(torch.cat([exact_samples, base_samples[mask]], dim=1))
+        base_samples = base_samples[mask]
 
-        return -(
-            logsigmoid(self.log_p_over_q_model(p)).mean()
-            + logsigmoid(-self.log_p_over_q_model(q)).mean()
-        ) / 2
-        # return -(
-        #     logsigmoid(self.log_p_over_q_model(p)).sum()
-        #     + logsigmoid(-self.log_p_over_q_model(q)).sum()
-        # ) / (p.shape[0] + q.shape[0])
+
+        # p_loss = - logsigmoid(self.log_p_over_q_model(p)[:, 0] - self.exact_kernel.log_prob(p[:, [0, 4]], p[:, [1, 2, 3, 5, 6, 7]])).mean()
+        p_loss = - logsigmoid(self.log_p_over_q_model(p)[:, 0]).mean()
+        q_loss = torch.tensor(0.)
+        for outcome, outcome_log_prob in self.exact_kernel.outcomes_with_log_prob_iter(base_samples):
+            repeated_outcome = outcome[None, :].repeat((base_samples.shape[0], 1))
+            cond = torch.concat([
+                repeated_outcome,
+                base_samples,
+            ], dim=1)
+            q = self.sampled_kernel.draw(cond)
+            log_p_over_q = self.log_p_over_q_model(q)[:, 0] - self.exact_kernel.log_prob(outcome.repeat((q.shape[0], 1)), q[:, [1, 2, 3, 5, 6, 7]])
+            q_loss = q_loss - (outcome_log_prob.detach().exp() * logsigmoid(-log_p_over_q)).mean()
+
+        return (p_loss + q_loss) / 2
 
     def calculate_kernel_loss(self, batch: Tuple[Tensor, Tensor, Tensor]) -> Tensor:
         """
@@ -331,9 +253,15 @@ class UnLabelledKernelTrainer(LightningModule):
         """
         cond, samples, labels, weights = batch
         mask = labels == 1
-        return self.loss(cond[mask], self.kernel, self.log_p_over_q_model, weights[mask])
+        return self.loss(
+            cond[mask],
+            self.exact_kernel,
+            self.sampled_kernel,
+            self.log_p_over_q_model,
+            weights[mask],
+        )
 
-    def training_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> None:
+    def training_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor], batch_idx) -> None:
         """
         Optimizes log_p_over_q_model and the parameters in self.kernel to maximise the probability of the p samples
         in q. Logs the current learned divergence between p and q
@@ -349,8 +277,8 @@ class UnLabelledKernelTrainer(LightningModule):
         discriminator_optimizer, kernel_optimizer = self.optimizers()
 
         if self.is_kernel_training():
-            kernel_loss = self.calculate_kernel_loss(batch)
             kernel_optimizer.zero_grad()
+            kernel_loss = self.calculate_kernel_loss(batch)
             kernel_loss.backward()
             self.log('train_kernel_loss', kernel_loss, on_step=True, on_epoch=True, prog_bar=False)
             kernel_optimizer.step()
@@ -359,17 +287,56 @@ class UnLabelledKernelTrainer(LightningModule):
         train_divergence = 1 - bce / self.log_two
         self.log('train_divergence', train_divergence, on_step=True, on_epoch=True, prog_bar=True)
         self.log('epoch_train_divergence', self.train_divergence, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('is_kernel_training', int(self.is_kernel_training()), on_step=False, on_epoch=True, prog_bar=True)
+        self.log('is_kernel_training', int(self.is_kernel_training()), on_step=True, on_epoch=False, prog_bar=True)
         self.log('min_train_divergence', self.min_train_divergence, on_step=False, on_epoch=True, prog_bar=True)
+        # if not self.is_kernel_training():
         discriminator_optimizer.zero_grad()
         bce.backward()
         discriminator_optimizer.step()
 
         self.train_divergence(train_divergence)
 
+        # if batch_idx % 10 == 0:
+        # self.make_plot(batch_idx)
+
+    def make_plot(self, batch_idx):
+        """
+        Debug helper that draws a fresh batch from the current kernel and dumps a histogram comparing the dimuon
+        invariant masses of the benchmark p, the base distribution, the learned q, and q reweighted by exp(log_p_over_q)
+        to a hard-coded path on disk. Intended only for one-off animation frames during development; not part of any
+        training loop and likely to need rewiring before reuse
+
+        Parameters
+        ----------
+        batch_idx
+            Index of the current batch, used in the output filename
+        """
+        with torch.no_grad():
+            q = self.sampled_kernel.draw(torch.concat([self.exact_kernel.draw(self.q_base), self.q_base], dim=1))
+            log_p_over_q = self.log_p_over_q_model(q)[:, 0]
+        q_mass = torch.sqrt(calculate_invmass_sq(q[:, [2, 1, 3]], q[:, [6, 5, 7]]))
+        p_mass = torch.sqrt(calculate_invmass_sq(self.p[:, [2, 1, 3]], self.p[:, [6, 5, 7]]))
+        base_mass = torch.sqrt(calculate_invmass_sq(self.q_base[:, [1, 0, 2]], self.q_base[:, [4, 3, 5]]))
+
+        plt.figure(figsize=(6, 5), layout='constrained')
+        vals, bins, _ = plt.hist(p_mass, range=(61e3, 121e3), bins=100, histtype='step', label='Benchmark', linewidth='2', color='red')
+        plt.hist(base_mass, bins=bins, histtype='step', label='Truth')
+        plt.hist(q_mass, bins=bins, histtype='step', label='Learned')
+        plt.hist(q_mass, bins=bins, weights=torch.exp(log_p_over_q), histtype='step', label='Learned Reweighted', color='k')
+        plt.xlabel('mll')
+        plt.legend()
+        plt.savefig(f'/Users/jeremywilkinson/PycharmProjects/Thesis/minKL/benchmark/anim/{self.current_epoch}_{batch_idx}.png')
+        plt.close()
+
     def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> None:
         """
-        Calculates the validation learned divergence between p and q
+        Calculates the validation learned divergence between p and q via the discriminator's BCE loss and logs it as
+        `val_divergence`
+
+        Parameters
+        ----------
+        batch
+            (base_samples, data_samples, labels, weights). Same convention as training_step
         """
         bce = self.calculate_cross_entropy(batch)
         self.log('val_divergence', 1 - bce / self.log_two, on_step=False, on_epoch=True, prog_bar=True)
@@ -382,7 +349,7 @@ class UnLabelledKernelTrainer(LightningModule):
             The classifier's and kernel's optimizer
         """
         discriminator_optimizer = optim.Adam(self.log_p_over_q_model.parameters(), lr=self.discriminator_lr)
-        kernel_optimizer = optim.Adam(self.kernel.parameters(), lr=self.kernel_lr)
+        kernel_optimizer = optim.Adam([*self.exact_kernel.parameters(), *self.sampled_kernel.parameters()], lr=self.kernel_lr)
 
         return [
             {'optimizer': discriminator_optimizer},

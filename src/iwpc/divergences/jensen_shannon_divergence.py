@@ -25,8 +25,7 @@ class JensenShannonDivergence(DifferentiableFDivergence):
         return - 0.5 * (np.log(2.) + np.log1p(-0.5 * np.exp(2 * x)))
 
     def _f_dash_given_log_torch(self, log_x):
-        log_x = torch.clip(log_x, -10, 10)
-        return 0.5 * (self.log_two + log_x - torch.logsumexp(torch.stack([log_x, torch.zeros_like(log_x)], dim=1), dim=1))
+        return 0.5 * (self.log_two + log_x - torch.logaddexp(log_x, torch.tensor(0., dtype=log_x.dtype, device=log_x.device)))
 
     def _f_dash_given_log_np(self, log_x):
         return 0.5 * (np.log(2) + log_x - np.logaddexp(log_x, 0.))

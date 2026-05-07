@@ -3,7 +3,7 @@ from numpy._typing import ArrayLike
 from torch import Tensor
 
 from iwpc.encodings.encoding_base import Encoding
-from iwpc.learn_dist.kernels.finite_kernel import FiniteKernelInterface
+from iwpc.learn_dist.kernels.finite_kernel_interface import FiniteKernelInterface
 from iwpc.learn_dist.kernels.finite_sample_space import ExplicitFiniteSampleSpace
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
@@ -69,7 +69,7 @@ class ConstantKernel(FiniteKernelInterface, TrainableKernelBase):
         """
         return self.constant_value.repeat(cond.shape[0], 1)
 
-    def construct_logits(self, cond: Tensor) -> Tensor:
+    def construct_log_probs(self, cond: Tensor) -> Tensor:
         """
         Parameters
         ----------
@@ -79,6 +79,6 @@ class ConstantKernel(FiniteKernelInterface, TrainableKernelBase):
         Returns
         -------
         Tensor
-            A tensor of shape (N, 1) of zeros
+            A tensor of shape (N, 1) of zeros — log p(constant_value) = log(1) = 0. See log_prob docstring
         """
         return torch.zeros((cond.shape[0], 1), dtype=torch.float32, device=cond.device)
