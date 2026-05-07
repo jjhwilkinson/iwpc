@@ -117,8 +117,9 @@ class PandasDirDataModule(LightningDataModule):
             Whether to shuffle the data within each file during training
         use_in_memory_dataset
             If True, all files are concatenated into a single PandasDataset with tensors pinned in shared memory during
-            setup(). The train DataLoader shuffles across the full dataset. Faster than file-by-file loading when the
-            data fits in RAM.
+            setup(). The train and val DataLoaders are then constructed with `pin_memory=True` defaulted on (overridable
+            via dataloader_kwargs), the train loader additionally with `shuffle=True` so it shuffles across the full
+            dataset, and the val loader with `shuffle=False`. Faster than file-by-file loading when the data fits in RAM
         """
         super().__init__()
         self.dataset_dir = Path(dataset_dir)
@@ -321,7 +322,11 @@ class PandasDirDataModule(LightningDataModule):
 
     def train_dataloader(self) -> DataLoader:
         """
-        Returns a DataLoader which iterates over the samples in the training files
+        Returns a DataLoader which iterates over the samples in the training files. When
+        use_in_memory_dataset is True the loader is built over the pre-loaded shared-memory PandasDataset and defaults
+        `pin_memory=True` and `shuffle=True` on top of self.dataloader_kwargs (both overridable by the user via
+        dataloader_kwargs). Otherwise iteration is file-by-file via PandasFileListDataset with `shuffle=False` (within-
+        file shuffling is controlled by shuffle_in_train_files instead)
         """
         if self.use_in_memory_dataset:
             kwargs = {**self.dataloader_kwargs}
@@ -332,7 +337,10 @@ class PandasDirDataModule(LightningDataModule):
 
     def val_dataloader(self) -> DataLoader:
         """
-        Returns a DataLoader which iterates over the samples in the validation files
+        Returns a DataLoader which iterates over the samples in the validation files. When use_in_memory_dataset is True
+        the loader is built over the pre-loaded shared-memory PandasDataset and defaults `pin_memory=True` and
+        `shuffle=False` on top of self.dataloader_kwargs (both overridable by the user via dataloader_kwargs). Otherwise
+        iteration is file-by-file via PandasFileListDataset with `shuffle=False`
         """
         if self.use_in_memory_dataset:
             kwargs = {**self.dataloader_kwargs}
