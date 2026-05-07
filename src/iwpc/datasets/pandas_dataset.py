@@ -54,6 +54,22 @@ def recursive_slice_structured_data(
     return tuple(recursive_slice_structured_data(entry, idx) for entry in structured_data)
 
 
+def recursive_share_memory(structured_data: StructuredData | Tensor) -> None:
+    """
+    Recursively calls share_memory_() on all tensors in a StructuredData instance
+
+    Parameters
+    ----------
+    structured_data
+        A Tensor or arbitrarily nested list of Tensors
+    """
+    if isinstance(structured_data, Tensor):
+        structured_data.share_memory_()
+        return
+    for entry in structured_data:
+        recursive_share_memory(entry)
+
+
 class PandasDataset(Dataset):
     """
     Dataset implementation that returns data from rows of a pandas DataFrame in a structured format
@@ -115,6 +131,19 @@ class PandasDataset(Dataset):
         """
         return recursive_slice_structured_data(self.structured_data, idx)
 
+    def share_memory_(self) -> "PandasDataset":
+        """
+        Recursively moves all tensors backing this dataset into shared memory in-place. Useful when the dataset will be
+        consumed by DataLoader worker processes so that the underlying storage is not duplicated per worker
+
+        Returns
+        -------
+        PandasDataset
+            self, to allow chaining
+        """
+        recursive_share_memory(self.structured_data)
+        return self
+
     @property
     def num_features(self) -> int:
         """
@@ -124,11 +153,3 @@ class PandasDataset(Dataset):
             The number of features in the data
         """
         return len(self.feature_cols)
-
-
-if __name__ == '__main__':
-    ds = PandasDataset(
-        pd.read_pickle("/Users/jeremywilkinson/research_data/MPA/MPA_SingleTruthProbe_v1/file_0.pkl"),
-        [['probe_theta', 'probe_phi'], ['probe_matched_IDTracks', 'probe_matched_MSTracks'], 'matchobj_id_phi'],
-    )
-    print(ds[[0, 1, 2]])

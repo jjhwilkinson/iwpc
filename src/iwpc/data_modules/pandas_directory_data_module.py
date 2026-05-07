@@ -9,10 +9,9 @@ from typing import Callable, Iterable, Any, Generator
 
 import numpy as np
 import pandas as pd
-import torch
 from lightning import LightningDataModule
 from pandas import DataFrame
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from torchmetrics import MeanMetric
 from tqdm import tqdm
 
@@ -22,22 +21,6 @@ from ..types import PathLike, TensorOrNDArray
 from ..utils import read_yaml, temp_directory, dump_yaml
 
 logger = logging.getLogger(__name__)
-
-
-def _recursive_share_memory(data: torch.Tensor | list) -> None:
-    """
-    Recursively calls share_memory_() on all tensors in a nested list structure.
-
-    Parameters
-    ----------
-    data
-        A Tensor or arbitrarily nested list of Tensors
-    """
-    if isinstance(data, torch.Tensor):
-        data.share_memory_()
-    elif isinstance(data, list):
-        for item in data:
-            _recursive_share_memory(item)
 
 
 def batched_df_pickles_iter(in_dir: Path, batch_size: int) -> Generator[DataFrame, None, None]:
@@ -308,10 +291,7 @@ class PandasDirDataModule(LightningDataModule):
             [pd.read_pickle(f) for f in tqdm(files, desc=f"Loading {name} data into shared memory")],
             ignore_index=True,
         )
-        ds = PandasDataset(df, self.feature_spec, self.weight_col)
-        for item in ds.structured_data:
-            _recursive_share_memory(item)
-        return ds
+        return PandasDataset(df, self.feature_spec, self.weight_col).share_memory_()
 
     def setup(self, stage: str | None = None) -> None:
         """
