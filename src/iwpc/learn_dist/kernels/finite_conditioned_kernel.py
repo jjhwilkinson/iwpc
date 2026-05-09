@@ -11,7 +11,7 @@ class FiniteConditionedKernel(IndexedInterface, FiniteKernelInterface, Condition
     """
     ConditionedKernel implementation that also satisfies the FiniteKernelInterface.
 
-    Models p(A, B2 | z, [B1]) = p(A | B2, [B1], z) p(B2 | [B1], z). When the conditioning_kernel itself satisfies
+    Models p(A, B2 | [B1], z) = p(A | B2, [B1], z) p(B2 | [B1], z). When the conditioning_kernel itself satisfies
     IndexedInterface, the joint kernel inherits its index space (B1) and exposes ``construct_log_prob_table`` so it
     can in turn be composed as the conditioning kernel of a deeper chain. Otherwise B1 is absent and the joint
     kernel still implements IndexedInterface trivially with K_B1 = 1

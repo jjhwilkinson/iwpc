@@ -24,10 +24,9 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
     number of values said variables can take less one. In the above ABC example, samples are vectors of length three
     and entries equal to 0 or 1.
 
-    Optionally models p(A | B=b, x) directly by exposing a full M×K logit table over all K index outcomes b in a
-    single forward pass — pass ``index_cond_indices`` and ``index_sample_space`` to enable. The non-indexed case is
-    the K=1 specialisation: a single trivial 1-outcome index space is used internally and the table collapses to the
-    standard (N, M) log-prob output. This unifies the previously separate ``IndexedFiniteKernel`` into ``FiniteKernel``
+    Offers an optional 'fast path' for modeling p(A | B=b, x) when B is a discrete variable by exposing a full M×K
+    logit table over all K index outcomes b in a single forward pass. Use ``index_cond_indices`` and
+    ``index_sample_space`` to enable.
     """
     def __init__(
         self,
