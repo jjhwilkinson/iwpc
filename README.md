@@ -1,138 +1,169 @@
-# IWPC #
+# IWPC
 
-This package implements the methods described in the research paper https://arxiv.org/abs/2405.06397 for estimating a 
-lower bound on the divergence between any two distributions, p and q, using samples from each distribution.
+`iwpc` implements the methods of [arXiv:2405.06397](https://arxiv.org/abs/2405.06397) for estimating a lower bound on the f-divergence (Kullback–Leibler, Jensen–Shannon, ...) between two distributions p and q from samples drawn from each. The same machinery is reused for **dataset reweighting** and **distribution learning** (density estimation and conditional kernels).
 
-Install using `pip install iwpc`
+Install with `pip install iwpc`. The package is organised around [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/) — some familiarity with `LightningModule` / `LightningDataModule` / `Trainer` is recommended.
 
-The machine learning code in this package is organised using the fantastic [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/)
-package. Some familiarity with the structure of lightning is recommended.
+The plots in the [original paper](https://arxiv.org/abs/2405.06397) are reproduced by [`examples/parity_example.py`](examples/parity_example.py).
 
-The plots shown in the [original divergences paper](https://arxiv.org/abs/2405.06397) may be reproduced by running [parity_example.py](examples%2Fparity_example.py)
+---
 
-# Basic Usage #
+## What's in the package
 
-The most basic usage of this package is for calculating an estimator for a lower bound on an f-divergence (such as the 
-KL-divergence) between two distribution, p and q. Each example below assumes one is provided with a set of samples from
-drawn from distribution p and from distribution q labelled 0 and 1 respectively.
+`iwpc` is split into focused sub-packages. Each has its own `README.md` (human-oriented) and `AGENTS.md` (terse notes for coding agents).
 
-## [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) ##
+| Sub-package | What it does |
+|---|---|
+| [`divergences/`](src/iwpc/divergences/README.md) | Abstract `DifferentiableFDivergence` interface + `KLDivergence`, `JensenShannonDivergence`. Pure math, with both numpy and torch backends auto-dispatched on input type. |
+| [`modules/`](src/iwpc/modules/README.md) | The `FDivergenceEstimator` `LightningModule` hierarchy that learns the variational lower bound. Includes `NaiveVariationalFDivergenceEstimator`, `GenericNaiveVariationalFDivergenceEstimator`, and the symmetry-aware `AsymmetryEstimator`. |
+| [`data_modules/`](src/iwpc/data_modules/README.md) | `LightningDataModule` adapters: `BinaryPandasDataModule` (in-memory DataFrames), `BinaryNumpyDataModule` (ndarrays), and `PandasDirDataModule` (sharded pickle directory, required for the reweight loop). |
+| [`datasets/`](src/iwpc/datasets/README.md) | `torch.utils.data.Dataset` implementations backing the data modules. |
+| [`encodings/`](src/iwpc/encodings/README.md) | Composable `nn.Module` feature rewrites (periodic, even/odd, log/exp, matrix-shape, ...). Used as the first/last layer of a network to bake in priors like periodicity or evenness. |
+| [`models/`](src/iwpc/models/README.md) | `basic_model_factory` — the canonical builder that wires an input `Encoding`, a normalised MLP body, an output `Encoding`, and optional symmetry wrappers into a single `nn.Sequential`. |
+| [`symmetries/`](src/iwpc/symmetries/README.md) | Haar-averaging wrappers (`SymmetrizedModel`, `ComplementModel`) that make a network invariant under (or orthogonal to) a user-declared `GroupAction`. |
+| [`metrics/`](src/iwpc/metrics/README.md) | Lightweight `torchmetrics.Metric` accumulators (`WeightedMeanMetric`, `StatMetric`) used to produce `val_Df` and `val_Df_err`. |
+| [`accumulators/`](src/iwpc/accumulators/README.md) | Post-hoc divergence estimation from precomputed log-ratios with proper standard errors. `BinnedDfAccumulator` produces the 1D / 2D diagnostic plots shown below. |
+| [`visualise/`](src/iwpc/visualise/README.md) | Interactive 1D / 2D sweep plotters (matplotlib + Bokeh backends) for sanity-checking a trained estimator's learned function. |
+| [`scalars/`](src/iwpc/scalars/README.md) | Tiny value-objects bundling a label, LaTeX label, and bin array — used as plotting / binning metadata by the visualisers and the binned accumulator. |
+| [`learn_dist/`](src/iwpc/learn_dist/README.md) | The distribution-learning side of `iwpc`: trainable conditional kernels `k(y\|x)`, sampleable base distributions, and an f-divergence-minimising training loop. Independent of `calculate_divergence` but reuses the divergence machinery. |
+| [`learn_dist/kernels/`](src/iwpc/learn_dist/kernels/README.md) | ~25 trainable kernels (Gaussian, mixture, finite-support, branching, ...) + adversarial trainers. |
+| [`learn_dist/base_distributions/`](src/iwpc/learn_dist/base_distributions/README.md) | Fixed sampleable distributions (uniform, Cauchy, exponential, multivariate normal, histogram) used as latent noise sources for kernels. |
+| [`learn_dist/fdivergence_minimization/`](src/iwpc/learn_dist/fdivergence_minimization/README.md) | Adversarial trainer that fits a kernel to minimise a chosen `DifferentiableFDivergence` against a target. |
 
-The example script [continuous_example_2D.py](examples%2Fcontinuous_example_2D.py) shows the most basic usage of the [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) function
-run on the components of 2D vectors drawn from the distribution `N(r | 1.0, 0.1) * (1 + eps * cos(theta)) / 2 / pi` for
-the two values `eps = 0.` and `eps = 0.2`. The script shows how to calculate estimates for lower bounds on both the Kullback-Leibler
-divergence and the Jensen-Shannon divergence between the two distributions and compares these to numerically integrated
-values. At the most basic level, all [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) requires is a [LightningDataModule](https://lightning.ai/docs/pytorch/stable/data/datamodule.html), in this case an
-instance of [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_data_module.py), to provide the data and an instance of [FDivergenceEstimator](src%2Fiwpc%2Fmodules%2Ffdivergence_base.py), in this case an
-instance of [GenericNaiveVariationalFDivergenceEstimator](src%2Fiwpc%2Fmodules%2Fnaive.py), to provide the machine learning model.
+Top-level files: [`calculate_divergence.py`](src/iwpc/calculate_divergence.py) (main entry point), [`reweight_loop.py`](src/iwpc/reweight_loop.py) (iterative reweighting driver), [`utils.py`](src/iwpc/utils.py).
 
-### [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_data_module.py) ###
+---
 
-Given two Pandas data frames containing the samples from p and q, the [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_data_module.py) class provides a
-convenient wrapper that casts the data into the form expected by [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py). In addition to the two 
-dataframes, the [BinaryPandasDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_data_module.py) requires the user to specify which features columns to use, the two
-cartesian components 'x' and 'y' in this case, as well as the name of a weight column if one exists. By default, all
-data modules in this package provide a 50-50 train-validation split.
+## Conventions
 
-### [GenericNaiveVariationalFDivergenceEstimator](src%2Fiwpc%2Fmodules%2Fnaive.py) ###
+A handful of conventions are assumed everywhere in the divergence-estimation flow. Worth memorising before reading any sub-package docs:
 
-For generic data without any specific structures to inspire the topology of the machine learning model, the [LightningModule](https://lightning.ai/docs/pytorch/stable/common/lightning_module.html)
-subclass [GenericNaiveVariationalFDivergenceEstimator](src%2Fiwpc%2Fmodules%2Fnaive.py) provides a generic N to 1 dimensional
-function approximator needed for the divergence calculation. The only information required is the number of training 
-features and a [DifferentiableFDivergence](src%2Fiwpc%2Fdivergences%2Fbase.py) instance to tell the module which divergence to calculate.
+- **Batch contract:** `(features, labels, weights)`. **`labels == 0` marks samples from `p`, `labels == 1` marks samples from `q`.** The reweight loop, accumulators, and `split_by_mask` all assume this layout.
+- **Validation metric:** `val_Df` (the divergence lower bound — higher is better) and `val_Df_err` (its standard error). Early stopping, `ModelCheckpoint`, and the LR scheduler all monitor `val_Df` with `mode="max"`.
+- **Numerical stability:** `log(p/q)` is clipped to `[-14, 14]` before exponentiation in the naive estimator and in accumulators. Stay consistent with this in any new estimator or accumulator.
+- **Banner suppression:** set `DISABLE_IWPC_WELCOME=1` to silence the ASCII banner printed from `iwpc/__init__.py`.
 
-### Output ###
+The `learn_dist/` sub-package uses different per-trainer batch contracts and logs `val_loss` / `val_divergence` instead of `val_Df` — see its README.
 
-The calculate_divergence trains the provided LightningDataModule while logging, by default, to a `lightning_logs` directory 
-placed into the same directory as the main script. A subdirectory is created inside the `lightning_logs` directory each time the
-[calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) function is run which contains the training results, logs,
-and model checkpoints for the given run. The progress of the training may be monitored in your browser using
-`tensorboard --logdir .../lightning_logs`. [calculate_divergence](src%2Fiwpc%2Fcalculate_divergence.py) returns an
-instance of [DivergenceResult](src%2Fiwpc%2Fcalculate_divergence.py) which contains the final divergence lower bound estimate, 
-its error, as well as the best version of the trained model and some other useful properties.
+---
 
-The script renders these results as a function of the number of samples provided in two plots:
+## Quick start: estimating a divergence
 
-![KL-divergence-sample-size.png](images%2FKL-divergence-sample-size.png)
+The simplest workflow uses [`calculate_divergence`](src/iwpc/calculate_divergence.py). The example [`examples/continuous_example_2D.py`](examples/continuous_example_2D.py) runs it on 2D vectors drawn from `N(r | 1.0, 0.1) * (1 + eps * cos(theta)) / (2π)` for two values of `eps` and compares the estimated KL and Jensen–Shannon lower bounds to numerically integrated values.
 
-## [run_reweight_loop](src%2Fiwpc%2Freweight_loop.py) ##
+At minimum `calculate_divergence` needs a `LightningDataModule` and an `FDivergenceEstimator`:
 
-The example script [example_reweight_loop.py](examples%2Fexample_reweight_loop.py) shows a more sophisticated
-implementation of the divergence framework. Typically, datasets are too large to fit into memory at once and so
-complicated that machine learning models tend to get caught up in local minima when training. To alleviate these two
-problems this script demonstrates the usage of [PandasDirDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_directory_data_module.py)
-for splitting datasets up into manageable chunks dynamically loaded into memory, and the [run_reweight_loop](src%2Fiwpc%2Freweight_loop.py)
-function that iteratively reweights the data when training stagnates and restarts training afresh to allow the network
-to focus on other features. The data in this example was drawn from the same distribution as the previous example, so
-the reweight loop is most certainly overkill for the given data complexity, however the reweighting procedure has been
-very useful within our own work with significantly more complicated data.
+```python
+from iwpc.calculate_divergence import calculate_divergence
+from iwpc.data_modules.pandas_data_module import BinaryPandasDataModule
+from iwpc.modules.naive import GenericNaiveVariationalFDivergenceEstimator
+from iwpc.divergences.kl_divergence import KLDivergence
 
-### [PandasDirDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_directory_data_module.py) ###
+dm = BinaryPandasDataModule(
+    p_df=p_df, q_df=q_df,
+    feature_cols=["x", "y"],
+    weight_col="weight",      # optional
+)
+estimator = GenericNaiveVariationalFDivergenceEstimator(
+    input=2, divergence=KLDivergence(),
+)
+result = calculate_divergence(estimator, dm, trainer_kwargs={"max_epochs": 200})
+print(result.divergence, "±", result.divergence_stderr)
+```
 
-The [PandasDirDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_directory_data_module.py) class provides an extremely
-generic implementation of a dataset which is stored on disk in separate pickle files containing Pandas dataframes that
-are automatically and efficiently loaded into memory as needed. See the [PandasDirDataModule](src%2Fiwpc%2Fdata_modules%2Fpandas_directory_data_module.py)
-docstring for more information. This DataModule is recommended, even when working with smaller datasets, as the data is
-stored in a convenient portable form with relevant metadata.
+`calculate_divergence` wires up a Lightning `Trainer` with `ModelCheckpoint(monitor="val_Df", mode="max")`, `EarlyStopping`, and `LearningRateMonitor`, runs `trainer.fit`, reloads the best checkpoint, validates, and returns a `DivergenceResult` containing the divergence estimate, its standard error, the best module, the trainer, and the checkpoint path.
 
-### [BinnedDfAccumulator](src%2Fiwpc%2Faccumulators%2Fbinned_Df_accumulator.py) ###
+Logs and checkpoints land under `<log_dir>/lightning_logs/<run>/` (default `log_dir=cwd`). Monitor in your browser with `tensorboard --logdir lightning_logs`.
 
-Once trained to find a difference between p and q, the natural question becomes, _how exactly is the machine learning 
-model telling the two distributions apart_. This is an extremely important question as the conclusion that some difference
-exists is typically uninformative, as the network is free to pick up on **any** differences between p and q, including
-those we might deem uninteresting. The [BinnedDfAccumulator](src%2Fiwpc%2Faccumulators%2Fbinned_Df_accumulator.py) class assists in this process by calculating the 
-degree to which the obtained degree of divergence can be explained by the marginal distribution in a given set of
-variables alone, as well as how the degree of divergence changes as a function of these values. Although the 
-[BinnedDfAccumulator](src%2Fiwpc%2Faccumulators%2Fbinned_Df_accumulator.py) is generically written for any number of dimensions, the plotting features are only
-implemented in 1D and 2D currently. As a result, the examples given in [example_reweight_loop.py](examples%2Fexample_reweight_loop.py) are 1D and 2D.
+![KL-divergence-sample-size.png](images/KL-divergence-sample-size.png)
 
-The first plot below shows how the divergence behaves as a function of the radius, r, of the samples. For 1D plots, the
-top left plot shows the (weighted) distribution of the variable in the validation dataset. Since the radius of the
-samples from p and q were drawn from the same gaussian, these two histograms unsurprisingly show no signs of
-disagreement and the estimated divergence in r alone is consistent with 0. The top right plot shows an estimate, derived
-from the same network trained in the reweight loop, of the divergence of the distributions of the samples which landed
-within each bin. In this case, since the only other variable orthogonal to r is theta, this amounts to the divergence in
-the theta distributions at each fixed value of r. This plot suggests that the divergence is constant as a function of r,
-once again unsurprising given the form of p and q.
+For input data with known structure — angles, even / odd dependences, matrix-shaped features — wrap or replace the integer `input=` with an [`Encoding`](src/iwpc/encodings/README.md), e.g. `input=TrivialEncoding(1) & ContinuousPeriodicEncoding()` for an `(r, θ)` input. The factory automatically inserts the encoding as the first layer and sizes the network from `encoding.output_shape`.
 
-![divergence_vs_r.png](images%2Fdivergence_vs_r.png)
+To bake in a symmetry of `p` and `q` (e.g. invariance under reflection), pass `symmetries=[my_action]` through `basic_model_factory` — see [`symmetries/`](src/iwpc/symmetries/README.md).
 
-The source of the divergence is obvious in the theta plots below. The estimate of the marginalised divergence
-(ie the divergence attributable to the theta distribution alone) is consistent with the global divergence, confirming
-this to be the only source of divergence between p and q. This is also clearly visible in the top right as the divergence
-conditioned on theta is consistent with 0 in all cases. The bottom left and bottom right plots confirm that the network
-has in fact learnt the features in the data. The full explanation of how these plots are calculated is a little involved,
-but suffice to say, they demonstrate the ways in which the network believes the distributions look in the given variable.
-The error bars on the 'learned' quantities indicate uncertainty on how well we are able to reconstruct what the network
-believes the distribution to be. These should not be interpreted as error-bars indicating how far the truth may be from
-what the network has learnt, and these 'learned' quantities may well demonstrate hallucinations.
+---
 
-![divergence_vs_theta.png](images%2Fdivergence_vs_theta.png)
+## Reweighting large or hard datasets
 
-The 2D plot in theta and r is mostly redundant in this case, but we can clearly see many of the features discussed in 
-the 1D plots. Top left shows the ratio of the two distributions in validation. Top right shows the divergence within
-each bin. Bottom left shows an estimate for what the net believes the ratio of the two distributions is, and
-the bottom right is simple a histogram of the p distribution in the validation dataset.
+For datasets that don't fit in memory, or networks that get stuck in local minima, use [`run_reweight_loop`](src/iwpc/reweight_loop.py) together with [`PandasDirDataModule`](src/iwpc/data_modules/README.md). [`examples/example_reweight_loop.py`](examples/example_reweight_loop.py) demonstrates the workflow.
 
-![divergence_vs_r_theta.png](images%2Fdivergence_vs_r_theta.png)
+`PandasDirDataModule` reads a directory of `file_0.pkl ... file_{N-1}.pkl` shards plus a `ds_info.yml` index, lazily loading shards into memory. Train / validation split is **by file** (first `ceil(N * split)` files for training), so the on-disk ordering must already be unbiased — use the builder's `shuffle=True`.
 
-# Other Utilities
+`run_reweight_loop` repeatedly calls `calculate_divergence`. Whenever the resulting significance exceeds `min_sig`, it adds a new `p_over_q_{i}` column to the dataset, multiplies the weight column by `min(p/q, q/p)` (clipped at 1) to wipe out the learnt feature, and re-runs with a decayed learning rate. The final dataset carries a chain of reweight columns; `calculate_total_divergence` reconstructs the cumulative divergence by taking their product.
 
-## Encoding layers
+Only `PandasDirDataModule` supports `run_reweight_loop` (the in-memory modules lack the `.transform` / `.reweight` / `.copy` / `tags` machinery).
 
-See [Encoding](src%2Fiwpc%2Fencodings%2Fencoding_base.py) docstring.
+### Diagnostic plots
 
-TODO: Elaborate
+Once trained, `BinnedDfAccumulator` answers the natural follow-up question: **how exactly is the network telling p and q apart?** It partitions samples by user-chosen variables and attributes the global divergence to each bin.
 
-## Multidimensional Function Visualisers
+See [`examples/example_reweight_loop.py`](examples/example_reweight_loop.py) for the full setup; the accumulator is constructed with a list of [`ScalarFunction`s](src/iwpc/scalars/README.md) (one per axis to bin) and a `DifferentiableFDivergence`, then `.evaluate(datamodule, p_over_q_cols)` walks the validation shards before `.plot()` renders the panels below.
 
-See [MultidimensionalFunctionVisualiser](src%2Fiwpc%2Fvisualise%2Fmultidimensional_function_visualiser.py) docstring and [multidimensional_function_visualiser_example.py](examples%2Fmultidimensional_function_visualiser_example.py).
-Multidimensional function visualisers are extremely useful for verifying the output of a learnt function which is typically high-dimensional.
+The first plot below shows the divergence as a function of radius `r`. The top-left panel is the validation histogram of `r` under p and q; since both were drawn from the same Gaussian, they agree. The top-right panel is the divergence within each `r` bin — flat in `r`, as expected.
 
-TODO: Elaborate
+![divergence_vs_r.png](images/divergence_vs_r.png)
 
-# Help and Suggestions #
+The source of the divergence becomes obvious in the `θ` plots: the marginalised divergence matches the global value, confirming that all of the divergence comes from `θ`. The bottom panels show the network's learnt distributions in `θ` (with reconstruction error bars — these say how well we can read out what the network believes, **not** how close that belief is to the truth).
 
-For any suggestions or questions please reach out to [Jeremy J. H. Wilkinson](mailto:jero.wilkinson@gmail.com).
+![divergence_vs_theta.png](images/divergence_vs_theta.png)
 
-If this tool has been helpful in your research, please consider citing https://arxiv.org/abs/2405.06397.
+The 2D plot in `(θ, r)` is mostly redundant for this dataset, but confirms the same features. Top-left: ratio of the two distributions in validation. Top-right: divergence within each bin. Bottom-left: the network's learnt ratio. Bottom-right: a histogram of p.
+
+![divergence_vs_r_theta.png](images/divergence_vs_r_theta.png)
+
+`BinnedDfAccumulator`'s plotting currently supports 1D and 2D only.
+
+---
+
+## Distribution learning: `iwpc.learn_dist`
+
+The [`learn_dist/`](src/iwpc/learn_dist/README.md) sub-package uses the same divergence machinery for the **inverse** problem: fitting a parametric distribution to a set of target samples. Two workflows:
+
+- **`DistributionApproximator`** ([`learn_dist/classifier_reweighting.py`](src/iwpc/learn_dist/classifier_reweighting.py)) — learns an unconditional density by training a classifier that reweights a tractable proposal (a [`SamplableBaseModel`](src/iwpc/learn_dist/base_distributions/README.md)) to match the target samples.
+- **`FDivergenceMinimizingKernelTrainer`** ([`learn_dist/fdivergence_minimization/`](src/iwpc/learn_dist/fdivergence_minimization/README.md)) — trains a [trainable kernel](src/iwpc/learn_dist/kernels/README.md) `k(y|x)` (Gaussian, mixture, finite-support, branching, ...) by minimising a chosen `DifferentiableFDivergence` against samples from a target, using a learned `log(p/q)` discriminator and a score-function surrogate.
+
+The kernel library composes flexibly: `GaussianKernel & GaussianKernel` builds an independent product, `MixtureKernel([k1, k2], weights)` builds a mixture, `ConditionedKernel` makes any kernel conditional on additional inputs, and the parallel `FiniteKernelInterface` family supports discrete sample spaces with exact `log_prob` evaluation.
+
+`learn_dist/` reuses `DifferentiableFDivergence`, `basic_model_factory`, and `Encoding` from the main flow, but **does not** use `calculate_divergence` or `run_reweight_loop`, and its trainers define their own per-batch contracts and metrics (typically `val_loss` rather than `val_Df`).
+
+---
+
+## Encodings
+
+[`iwpc.encodings`](src/iwpc/encodings/README.md) provides composable `nn.Module` feature rewrites that bake in structural priors. Examples:
+
+- `TrivialEncoding(d)` — identity passthrough of `d` features.
+- `ContinuousPeriodicEncoding()` — maps `θ → (cos θ, sin θ)`, enforcing strict periodicity.
+- `AbsEncoding()`, `SignEncoding()` — enforce even / odd dependence in the learnt function.
+- `LogEncoding`, `ExponentialEncoding`, `ReciprocalEncoding` — `x → log x` etc., for distributions spanning many orders of magnitude.
+- `MatrixEncoding`, `AntiSymmetricMatrixEncoding` — reshape flat feature vectors into matrices to feed structured downstream models.
+- `LogSoftmaxEncoding`, `SphericalUnitVectorEncoding` — outputs constrained to a simplex / sphere.
+
+Encodings compose with `&` (concatenation onto adjacent slices), e.g. `TrivialEncoding(1) & ContinuousPeriodicEncoding()` for `(r, θ)`. `basic_model_factory` accepts an `Encoding` (or an int) as its `input=` and as its `output=`.
+
+---
+
+## Symmetries
+
+[`iwpc.symmetries`](src/iwpc/symmetries/README.md) makes a network invariant under (or orthogonal to) a user-declared `GroupAction`, by Haar-averaging the model over a batch of group elements per forward pass. `GroupAction.symmetrize(model)` produces an invariant wrapper; `.complement(model)` produces the orthogonal-complement wrapper. Group actions compose with `&` (disjoint product on different feature slices) and `*` (joint composition on the same space).
+
+`basic_model_factory` accepts `symmetries=[...]` and `complement_symmetries=[...]` and applies the wrappers after MLP construction. `AsymmetryEstimator` ([`modules/`](src/iwpc/modules/README.md)) uses the same machinery to symmetrise the log-ratio summands rather than the network itself.
+
+---
+
+## Visualising learnt functions
+
+[`iwpc.visualise`](src/iwpc/visualise/README.md) provides 1D and 2D function sweepers in two backends:
+
+- **matplotlib** (`MultidimensionalFunctionVisualiser1D` / `2D`) — local scripts, static plots. Bind the visualiser to a variable to keep its GUI sliders alive.
+- **Bokeh** (`BokehFunctionVisualiser1D` / `2D`) — interactive HTML; the 2D heatmap auto-spawns a 1D tab when you click an axis label.
+
+Useful for sanity-checking what the divergence estimator (or a trained kernel) has actually learnt. See [`examples/multidimensional_function_visualiser_example.py`](examples/multidimensional_function_visualiser_example.py).
+
+---
+
+## Help and citation
+
+For questions or suggestions please reach out to [Jeremy J. H. Wilkinson](mailto:jero.wilkinson@gmail.com).
+
+If `iwpc` has been helpful in your research, please cite [arXiv:2405.06397](https://arxiv.org/abs/2405.06397).
