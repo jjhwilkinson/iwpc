@@ -2,7 +2,9 @@
 
 A PyTorch Lightning framework for modelling experiments — composing trainable conditional kernels (detector responses, smearing, instrument models), sampleable base distributions, physical symmetries, and feature encodings — plus the original divergence-estimation toolkit for quantifying differences between modelled and observed distributions.
 
-Originated in collider physics, but every piece is generic and operates on plain `R^D` tensors. Install with `pip install iwpc`. Some familiarity with [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/) (`LightningModule` / `LightningDataModule` / `Trainer`) is recommended.
+Originated in collider physics, but every piece is generic and operates on plain `R^D` tensors. Install with `pip install iwpc`. Some familiarity with [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/) is recommended.
+
+Set `DISABLE_IWPC_WELCOME=1` to silence the ASCII banner printed from `iwpc/__init__.py`.
 
 ---
 
@@ -29,20 +31,6 @@ Each sub-package has its own `README.md` (human-oriented) and `AGENTS.md` (terse
 | [`metrics/`](src/iwpc/metrics/README.md) | `torchmetrics.Metric` accumulators (`WeightedMeanMetric`, `StatMetric`) — produce `val_Df` and `val_Df_err` for the divergence flow. |
 
 Examples live in [`examples/`](examples/) — `parity_example.py` reproduces the paper plots; `example_reweight_loop.py` is the canonical reweight-loop walkthrough; `multidimensional_function_visualiser_example.py` demos the visualisers.
-
----
-
-## Conventions
-
-In the **divergence-estimation flow** (`iwpc.divergences`, `iwpc.accumulators`, `iwpc.data_modules`, `iwpc.metrics`):
-
-- **Batch contract:** `(features, labels, weights)`. **`labels == 0` marks samples from `p`, `labels == 1` marks samples from `q`.** The reweight loop, accumulators, and `split_by_mask` all assume this layout.
-- **Validation metric:** `val_Df` (the divergence lower bound — higher is better) and `val_Df_err` (its standard error). Early stopping, `ModelCheckpoint`, and the LR scheduler all monitor `val_Df` with `mode="max"`.
-- **Numerical stability:** `log(p/q)` is clipped to `[-14, 14]` before exponentiation in the naive estimator and in accumulators. Stay consistent with this in any new estimator or accumulator.
-
-`iwpc.learn_dist` uses its own per-trainer batch contracts and logs `val_loss` / `val_divergence` — see its README.
-
-Banner suppression: set `DISABLE_IWPC_WELCOME=1` to silence the ASCII banner printed from `iwpc/__init__.py`.
 
 ---
 
