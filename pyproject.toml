@@ -6,7 +6,7 @@ authors = [
 ]
 description = "An implementation of the divergence framework as described here https://arxiv.org/abs/2405.06397 and much more..."
 readme = "PYPI_README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
