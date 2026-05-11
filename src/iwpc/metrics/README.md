@@ -19,7 +19,7 @@ metric.update(weights, log_p_over_q)        # any (N,) tensors
 mean, stderr = metric.compute()
 ```
 
-`NaiveVariationalFDivergenceEstimator` keeps two of these to track the two summands of the variational lower bound and logs their difference as `val_Df` (see `src/iwpc/modules/naive.py`).
+`NaiveVariationalFDivergenceEstimator` keeps two of these to track the two summands of the variational lower bound and logs their difference as `val_Df` (see `src/iwpc/divergences/naive.py`).
 
 `StatMetric` can be used directly when you want both means and a covariance, e.g. to monitor running statistics of a multidimensional feature:
 

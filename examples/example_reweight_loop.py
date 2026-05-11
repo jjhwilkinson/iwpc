@@ -7,8 +7,8 @@ from matplotlib import pyplot as plt
 from iwpc.accumulators.binned_Df_accumulator import BinnedDfAccumulator
 from iwpc.data_modules.pandas_directory_data_module import PandasDirDataModule
 from iwpc.divergences import JensenShannonDivergence
-from iwpc.modules.naive import GenericNaiveVariationalFDivergenceEstimator
-from iwpc.reweight_loop import run_reweight_loop
+from iwpc.divergences.naive import GenericNaiveVariationalFDivergenceEstimator
+from iwpc.divergences.reweight_loop import run_reweight_loop
 from iwpc.scalars.scalar_function import ScalarFunction
 
 

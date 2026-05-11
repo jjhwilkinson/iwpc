@@ -10,8 +10,8 @@
 
 ## Cross-package consumers
 
-- `src/iwpc/modules/naive.py` — `NaiveVariationalFDivergenceEstimator` keeps two `WeightedMeanMetric`s for the two variational summands; this is how `val_Df` and `val_Df_err` are produced.
-- `src/iwpc/modules/asymmetry_estimator.py` — same pattern for the asymmetry estimator.
+- `src/iwpc/divergences/naive.py` — `NaiveVariationalFDivergenceEstimator` keeps two `WeightedMeanMetric`s for the two variational summands; this is how `val_Df` and `val_Df_err` are produced.
+- `src/iwpc/divergences/asymmetry_estimator.py` — same pattern for the asymmetry estimator.
 - `src/iwpc/accumulators/Df_accumulator.py` — `DfAccumulator` uses `WeightedMeanMetric` to roll up offline divergence estimates with stderrs.
 
 Nothing else imports from this package; new estimators that need `val_Df` should follow the naive module's pattern and log `(mean, stderr)` from one of these.

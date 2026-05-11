@@ -10,8 +10,8 @@ from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from .modules.fdivergence_base import FDivergenceEstimator
-from .types import PathLike
+from .fdivergence_base import FDivergenceEstimator
+from ..types import PathLike
 
 
 @dataclass
