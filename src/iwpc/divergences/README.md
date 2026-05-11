@@ -92,7 +92,7 @@ Always call `f`, `f_conj`, `f_dash_given_log`; the underscore-prefixed `_f_torch
 
 ### Reweight loop on a large sharded dataset
 
-`PandasDirDataModule` reads a directory of `file_0.pkl … file_{N-1}.pkl` shards plus a `ds_info.yml` index. The reweight loop iteratively peels off learnt features.
+For datasets that don't fit in memory, or networks that get stuck in local minima, use `run_reweight_loop` with `PandasDirDataModule`. The directory module reads a layout of `file_0.pkl … file_{N-1}.pkl` shards plus a `ds_info.yml` index, and the reweight loop iteratively peels off learnt features so the network can focus on the residuals.
 
 ```python
 from iwpc.data_modules.pandas_directory_data_module import PandasDirDataModule
@@ -109,7 +109,27 @@ estimator = GenericNaiveVariationalFDivergenceEstimator(
 results = run_reweight_loop(estimator, dm, min_sig=3.0, max_iterations=10)
 ```
 
-After the loop, the dataset carries a chain of `p_over_q_{i}` columns; `calculate_total_divergence` reconstructs the cumulative divergence from their product. See [`examples/example_reweight_loop.py`](../../../examples/example_reweight_loop.py) for the full diagnostic walkthrough (with the 1D / 2D `BinnedDfAccumulator` plots).
+Each iteration that beats the significance threshold appends a new `p_over_q_{i}` column to the dataset; `calculate_total_divergence` reconstructs the cumulative divergence from their product. The full walkthrough — including the diagnostic plots — lives in [`examples/example_reweight_loop.py`](../../../examples/example_reweight_loop.py).
+
+### Diagnostic plots
+
+Once a network is trained, `BinnedDfAccumulator` answers the follow-up question: **how is the network telling p and q apart?** It partitions samples by user-chosen variables and attributes the global divergence to each bin.
+
+The example below trains on 2D vectors from `N(r | 1.0, 0.1) * (1 + eps cos theta) / (2π)` for two values of `eps`, then bins the validation set by `r` (panel 1), `theta` (panel 2), and `(r, theta)` jointly (panel 3).
+
+In the `r` panel, top-left shows the val histogram of `r` under p and q (they agree — both Gaussian in `r`), so the marginalised divergence in `r` alone is consistent with zero. Top-right shows the divergence within each `r` bin, flat as expected.
+
+![divergence_vs_r.png](../../../images/divergence_vs_r.png)
+
+In the `theta` panel, the marginalised divergence matches the global value: all of the divergence comes from `theta`. The bottom panels show the network's reconstructed distributions in `theta`. Error bars indicate **how well we can read out what the network believes**, not how close that belief is to the truth — these "learned" quantities may well demonstrate hallucinations.
+
+![divergence_vs_theta.png](../../../images/divergence_vs_theta.png)
+
+The 2D `(theta, r)` panel is mostly redundant for this dataset, but confirms the same features. Top-left: ratio of the two distributions in validation. Top-right: divergence within each bin. Bottom-left: the network's learned ratio. Bottom-right: histogram of p.
+
+![divergence_vs_r_theta.png](../../../images/divergence_vs_r_theta.png)
+
+`BinnedDfAccumulator`'s plotting currently supports 1D and 2D only. See [`iwpc.accumulators`](../accumulators/README.md) for the constructor signature and other accumulators that work without an attached network.
 
 ### Measure the asymmetry of a distribution under a group action
 
