@@ -11,7 +11,6 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torchmetrics import MeanMetric
 
-from calibration_chapter.unidirectional_cross_calibration.train_invmass import calculate_invmass_sq
 from iwpc.divergences import JensenShannonDivergence
 from iwpc.learn_dist.kernels.finite_kernel import FiniteKernel, FiniteKernelInterface
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
@@ -39,12 +38,13 @@ class PartiallyExactKernelKLDivergenceGradientLoss:
 
     def __call__(
         self,
+        data_samples: Tensor,
         base_samples: Tensor,
+        labels:Tensor,
         exact_kernel: FiniteKernelInterface,
         sampled_kernel: TrainableKernelBase,
         log_p_over_q_model: Module,
-        weights: Optional[Tensor] = None,
-    ) -> Tensor:
+        weights: Optional[Tensor] = None) -> Tensor:
         """
         Parameters
         ----------
@@ -65,24 +65,22 @@ class PartiallyExactKernelKLDivergenceGradientLoss:
         if weights is None:
             weights = torch.ones(base_samples.shape[0], dtype=torch.float32, device=base_samples.device)
 
-        loss = torch.tensor(0., requires_grad=True, device=base_samples.device)
+        mask = labels == 1
+        base_samples = base_samples[mask]
+        weights= weights[mask]
+        loss = torch.zeros((), device=base_samples.device)
         for outcome, outcome_log_prob in exact_kernel.outcomes_with_log_prob_iter(base_samples):
             repeated_outcome = outcome[None, :].repeat((base_samples.shape[0], 1))
-            cond = torch.concat([
-                repeated_outcome,
-                base_samples,
-            ], dim=1)
 
             for i in range(self.kernel_resample_rate):
-                samples, log_prob = sampled_kernel.draw_with_log_prob(cond)
+                smear_samples, log_prob = sampled_kernel.draw_with_log_prob(torch.cat([repeated_outcome, base_samples], dim=-1))
+                q = torch.cat([base_samples+smear_samples, repeated_outcome], dim=-1) 
                 with torch.no_grad():
-                    log_p_over_q = log_p_over_q_model(samples)[:, 0]
-                    log_p_over_q = log_p_over_q - exact_kernel.log_prob(
-                        outcome.repeat((samples.shape[0], 1)), samples[:, [1, 2, 3, 5, 6, 7]]
-                    )
-
+                    log_p_over_q = log_p_over_q_model(q)[:, 0]
+                    # log_p_over_q = log_p_over_q - exact_kernel.log_prob(repeated_outcome, base_samples)
+                    
                 loss = loss + (weights * outcome_log_prob.detach().exp() * self.jsd._f_dash_given_log_torch(-log_p_over_q) * (outcome_log_prob + log_prob)).mean()
-                # loss = - (weights * outcome_log_prob.detach().exp() * p_over_q.detach() * (outcome_log_prob + log_prob)).mean()
+                # loss = - (weights * outcome_log_prob.detach().exp() * log_p_over_q.detach().exp() * (outcome_log_prob + log_prob)).mean()
 
         return loss / self.kernel_resample_rate
 
@@ -214,22 +212,18 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         base_samples, data_samples, labels, weights = batch
         mask = labels == 1
         p = data_samples[~mask]
-        # exact_samples = self.exact_kernel.draw(base_samples[mask])
-        # q = self.sampled_kernel.draw(torch.cat([exact_samples, base_samples[mask]], dim=1))
-        base_samples = base_samples[mask]
-
-
-        # p_loss = - logsigmoid(self.log_p_over_q_model(p)[:, 0] - self.exact_kernel.log_prob(p[:, [0, 4]], p[:, [1, 2, 3, 5, 6, 7]])).mean()
+       
         p_loss = - logsigmoid(self.log_p_over_q_model(p)[:, 0]).mean()
-        q_loss = torch.tensor(0.)
+        q_loss = torch.tensor(0., device=base_samples.device)
+
+        base_samples = base_samples[mask]
         for outcome, outcome_log_prob in self.exact_kernel.outcomes_with_log_prob_iter(base_samples):
             repeated_outcome = outcome[None, :].repeat((base_samples.shape[0], 1))
-            cond = torch.concat([
-                repeated_outcome,
-                base_samples,
-            ], dim=1)
-            q = self.sampled_kernel.draw(cond)
-            log_p_over_q = self.log_p_over_q_model(q)[:, 0] - self.exact_kernel.log_prob(outcome.repeat((q.shape[0], 1)), q[:, [1, 2, 3, 5, 6, 7]])
+     
+            smear_samples, log_prob = self.sampled_kernel.draw_with_log_prob(torch.cat([repeated_outcome, base_samples], dim=-1))
+            q = torch.cat([base_samples+smear_samples, repeated_outcome], dim=-1) 
+            # q = torch.cat([base_samples + self.sampled_kernel.draw(torch.cat([repeated_outcome, base_samples], dim=-1)), repeated_outcome], dim=-1)
+            log_p_over_q = self.log_p_over_q_model(q)[:, 0]
             q_loss = q_loss - (outcome_log_prob.detach().exp() * logsigmoid(-log_p_over_q)).mean()
 
         return (p_loss + q_loss) / 2
@@ -251,14 +245,15 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         Tensor
             The loss of the kernel
         """
-        cond, samples, labels, weights = batch
-        mask = labels == 1
+        base_samples, data_samples, labels, weights = batch
         return self.loss(
-            cond[mask],
+            data_samples, 
+            base_samples,
+            labels,
             self.exact_kernel,
             self.sampled_kernel,
             self.log_p_over_q_model,
-            weights[mask],
+            weights,
         )
 
     def training_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor], batch_idx) -> None:
@@ -291,8 +286,8 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         self.log('min_train_divergence', self.min_train_divergence, on_step=False, on_epoch=True, prog_bar=True)
         # if not self.is_kernel_training():
         discriminator_optimizer.zero_grad()
-        bce.backward()
-        discriminator_optimizer.step()
+        # bce.backward()
+        # discriminator_optimizer.step()
 
         self.train_divergence(train_divergence)
 
@@ -311,6 +306,7 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         batch_idx
             Index of the current batch, used in the output filename
         """
+        from calibration_chapter.unidirectional_cross_calibration.train_invmass import calculate_invmass_sq
         with torch.no_grad():
             q = self.sampled_kernel.draw(torch.concat([self.exact_kernel.draw(self.q_base), self.q_base], dim=1))
             log_p_over_q = self.log_p_over_q_model(q)[:, 0]
