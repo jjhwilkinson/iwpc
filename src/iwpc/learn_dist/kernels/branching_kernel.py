@@ -139,7 +139,7 @@ class BranchingKernel(TrainableKernelBase):
             A BranchingKernel that branches on the output of a finite kernel
         """
         sub_kernels = list(sub_kernels)
-        assert len(sub_kernels) == finite_kernel.num_outcomes
+        assert len(sub_kernels) == finite_kernel.sample_space.num_outcomes
         return cls(
             sub_kernels,
             list(range(finite_kernel.sample_dimension)),
