@@ -7,8 +7,8 @@ from scipy.integrate import quad
 
 from iwpc.data_modules.pandas_data_module import BinaryPandasDataModule
 from iwpc.divergences import JensenShannonDivergence, KLDivergence
-from iwpc.modules.naive import GenericNaiveVariationalFDivergenceEstimator
-from iwpc.calculate_divergence import calculate_divergence
+from iwpc.divergences.naive import GenericNaiveVariationalFDivergenceEstimator
+from iwpc.divergences.calculate_divergence import calculate_divergence
 
 
 def make_continuous_samples(num_samples, eps):

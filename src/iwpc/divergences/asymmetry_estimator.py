@@ -5,7 +5,7 @@ from torch import Tensor
 from torch.nn import Module
 
 from iwpc.metrics.weighted_mean_metric import WeightedMeanMetric
-from iwpc.modules.fdivergence_base import FDivergenceEstimator
+from .fdivergence_base import FDivergenceEstimator
 from iwpc.symmetries.group_action import GroupAction
 
 

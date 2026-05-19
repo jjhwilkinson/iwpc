@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 
 from .fdivergence_base import FDivergenceEstimator
-from ..divergences import DifferentiableFDivergence
+from .base import DifferentiableFDivergence
 from ..encodings.encoding_base import Encoding
 from ..metrics.weighted_mean_metric import WeightedMeanMetric
 from ..models.utils import basic_model_factory

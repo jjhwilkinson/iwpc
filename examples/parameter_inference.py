@@ -7,8 +7,8 @@ from scipy.stats import expon
 
 from iwpc.data_modules.pandas_data_module import PandasDataModule, BinaryPandasDataModule
 from iwpc.divergences import JensenShannonDivergence
-from iwpc.modules.naive import GenericNaiveVariationalFDivergenceEstimator
-from iwpc.calculate_divergence import calculate_divergence
+from iwpc.divergences.naive import GenericNaiveVariationalFDivergenceEstimator
+from iwpc.divergences.calculate_divergence import calculate_divergence
 
 
 def generate_samples(num_samples, lambda_):

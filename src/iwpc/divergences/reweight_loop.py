@@ -8,12 +8,12 @@ from numpy._typing import NDArray
 from pandas import DataFrame
 from torch.utils.data import DataLoader
 
-from iwpc.calculate_divergence import calculate_divergence, DivergenceResult
+from iwpc.divergences.calculate_divergence import calculate_divergence, DivergenceResult
 from iwpc.datasets.pandas_dataset import PandasDataset
 from iwpc.divergences import DifferentiableFDivergence
-from iwpc.modules.fdivergence_base import FDivergenceEstimator
-from .accumulators.Df_accumulator import LabeledBinaryNaiveDfAccumulator
-from .data_modules.pandas_directory_data_module import PandasDirDataModule
+from iwpc.divergences.fdivergence_base import FDivergenceEstimator
+from ..accumulators.Df_accumulator import LabeledBinaryNaiveDfAccumulator
+from ..data_modules.pandas_directory_data_module import PandasDirDataModule
 
 
 def add_p_over_q_transformation(
