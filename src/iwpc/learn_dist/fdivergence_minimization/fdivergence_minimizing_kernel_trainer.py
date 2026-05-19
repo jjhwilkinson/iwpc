@@ -206,7 +206,8 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         q_loss = torch.tensor(0.)
         q_weights = weights[q_mask]
         for sampled_kernel_cond, exact_outcome_log_prob in self.sampled_kernel_cond_iter(q_base_samples):
-            q = q_init_samples + self.sampled_kernel.draw(sampled_kernel_cond)
+            samples = self.sampled_kernel.draw(sampled_kernel_cond)
+            q = q_init_samples + torch.cat([samples, torch.zeros(*samples.shape[:-1], 2, device=samples.device)], dim=-1)
             log_p_over_q = self.calculate_log_p_over_q(q)
             q_loss = q_loss - (q_weights * exact_outcome_log_prob.detach().exp() * logsigmoid(-log_p_over_q)).mean()
 
@@ -241,7 +242,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         for sampled_kernel_cond, exact_outcome_log_prob in self.sampled_kernel_cond_iter(q_base_samples):
             for i in range(self.kernel_resample_rate):
                 samples, log_prob = self.sampled_kernel.draw_with_log_prob(sampled_kernel_cond)
-                q_samples = q_init_samples + samples
+                q_samples = q_init_samples + torch.cat([samples, torch.zeros(*samples.shape[:-1], 2, device=samples.device)], dim=-1)
                 with torch.no_grad():
                     log_p_over_q = self.calculate_log_p_over_q(q_samples)
 
