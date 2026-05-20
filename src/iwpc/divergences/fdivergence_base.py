@@ -8,7 +8,7 @@ from torch.nn import Module
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from iwpc.divergences import DifferentiableFDivergence
+from .base import DifferentiableFDivergence
 
 
 class FDivergenceEstimator(LightningModule, ABC):

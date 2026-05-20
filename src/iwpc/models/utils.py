@@ -9,7 +9,7 @@ from torch.nn import BatchNorm1d, LeakyReLU, Linear, Dropout, Module, Sequential
 from .layers import RunningNormLayer, LambdaLayer
 from ..encodings.encoding_base import Encoding
 from ..encodings.trivial_encoding import TrivialEncoding
-from ..modules.utility_modules.independent_sum_module import IndependentSumModule
+from ..utility_modules.independent_sum_module import IndependentSumModule
 from ..symmetries.group_action import GroupAction
 from ..types import Shape
 

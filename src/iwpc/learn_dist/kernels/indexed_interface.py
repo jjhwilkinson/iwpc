@@ -5,7 +5,24 @@ import torch
 from torch import Tensor
 
 from iwpc.learn_dist.kernels.finite_kernel_interface import FiniteKernelInterface
-from iwpc.learn_dist.kernels.finite_sample_space import FiniteSampleSpace
+from iwpc.learn_dist.kernels.finite_sample_space import ExplicitFiniteSampleSpace, FiniteSampleSpace
+
+
+def trivial_index_sample_space() -> ExplicitFiniteSampleSpace:
+    """
+    Constructs a 1-outcome 0-dimensional FiniteSampleSpace, used as a placeholder index space when an indexed kernel
+    is not actually indexed (K = 1). Collapses the (N, M, K) log-prob table to (N, M, 1) so the indexed and
+    non-indexed paths share a single implementation
+
+    Returns
+    -------
+    ExplicitFiniteSampleSpace
+        A FiniteSampleSpace with a single outcome of dimension 0
+    """
+    return ExplicitFiniteSampleSpace(
+        torch.zeros(1, 0),
+        lambda outcomes: torch.zeros(outcomes.shape[0], dtype=torch.long, device=outcomes.device),
+    )
 
 
 class IndexedInterface(ABC):
@@ -23,6 +40,11 @@ class IndexedInterface(ABC):
     construct_log_prob_table(x) takes the standard conditioning x — the full cond with the
     index_cond_indices columns removed — and returns a (N, M, K) tensor of normalised log-probabilities,
     where column k holds ``log p(A=m | B=k, x)``.
+
+    Non-indexed kernels can satisfy this interface by passing ``index_cond_indices=[]`` and a 1-outcome
+    placeholder index_sample_space (see ``trivial_index_sample_space``); ``construct_log_prob_table`` then
+    returns a (N, M, 1) tensor whose only column is the standard (N, M) log-prob output. This unifies the
+    indexed and non-indexed code paths
     """
     def __init__(
         self,
@@ -68,27 +90,53 @@ class IndexedInterface(ABC):
         """
         pass
 
-    def __or__(self, other) -> 'IndexedFiniteConditionedKernel | FiniteConditionedKernel':
+    @staticmethod
+    def expected_sample_index_cond_indices(conditioning_kernel: 'FiniteKernelInterface') -> list[int]:
         """
-        If other is an indexed kernel `compatible` with self as a sample kernel, returns an
-        IndexedFiniteConditionedKernel modelling p(A, B2 | B1, z). Compatibility requires
-        self.index_cond_indices == list(range(dim_B2)) + [dim_B2 + i for i in other.index_cond_indices], i.e. self must
-        be indexed on the sample space of other, and the index space of other. Falls back to super().__or__ (the generic
-        FiniteConditionedKernel composition) otherwise
+        For a given conditioning kernel, returns the list of index_cond_indices that any compatible sample_kernel must
+        satisfy for the fast aligned-table composition path
 
         Parameters
         ----------
-        other
-            The conditioning kernel. If it is an IndexedInterface compatible with self, the fast indexed-table
-            composition is used; otherwise the generic enumeration path is taken
+        conditioning_kernel
+            A FiniteKernelInterface, optionally also an IndexedInterface
 
         Returns
         -------
-        IndexedFiniteConditionedKernel | FiniteConditionedKernel
-            The composed conditioned kernel
+        list[int]
+            The list of index_cond_indices that any compatible sample_kernel must have. When conditioning_kernel is a
+            non-indexed FiniteKernelInterface (or an IndexedInterface with empty index_cond_indices), this is just
+            list(range(conditioning_kernel.sample_dimension)) — the sample_kernel is indexed only on the prepended
+            B2 outcome columns. When conditioning_kernel is itself indexed (B1), this extends with shifted copies of
+            its index_cond_indices so the sample_kernel is indexed on both B2 and B1
         """
-        from iwpc.learn_dist.kernels.indexed_finite_conditioned_kernel import IndexedFiniteConditionedKernel
-        if isinstance(other, FiniteKernelInterface) and isinstance(other, IndexedInterface):
-            if list(self.index_cond_indices) == IndexedFiniteConditionedKernel.expected_sample_index_cond_indices(other):
-                return IndexedFiniteConditionedKernel(self, other)
-        return super().__or__(other)
+        dim_B2 = conditioning_kernel.sample_dimension
+        if isinstance(conditioning_kernel, IndexedInterface):
+            return list(range(dim_B2)) + [dim_B2 + int(i) for i in conditioning_kernel.index_cond_indices]
+        return list(range(dim_B2))
+
+    @staticmethod
+    def is_aligned(sample_kernel, conditioning_kernel: 'FiniteKernelInterface') -> bool:
+        """
+        Whether the given sample_kernel is index-aligned with conditioning_kernel for the fast composition path
+
+        Parameters
+        ----------
+        sample_kernel
+            Candidate sample kernel
+        conditioning_kernel
+            Candidate conditioning kernel
+
+        Returns
+        -------
+        bool
+            True iff sample_kernel is an IndexedInterface and its index_cond_indices match
+            expected_sample_index_cond_indices(conditioning_kernel)
+        """
+        if not isinstance(sample_kernel, IndexedInterface):
+            return False
+        return (
+            list(int(i) for i in sample_kernel.index_cond_indices)
+            == IndexedInterface.expected_sample_index_cond_indices(conditioning_kernel)
+        )
+

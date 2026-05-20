@@ -206,7 +206,6 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         q_loss = torch.tensor(0.)
         q_weights = weights[q_mask]
         for sampled_kernel_cond, exact_outcome_log_prob in self.sampled_kernel_cond_iter(q_base_samples):
-
             samples = self.sampled_kernel.draw(sampled_kernel_cond)
             q = q_init_samples + torch.cat([samples, self.exact_kernel.draw(sampled_kernel_cond)], dim=-1)
             log_p_over_q = self.calculate_log_p_over_q(q)

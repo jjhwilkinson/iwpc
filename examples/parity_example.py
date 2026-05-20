@@ -13,10 +13,10 @@ from numpy._typing import NDArray
 from scipy import stats
 
 from iwpc.accumulators.binned_Df_accumulator import BinnedDfAccumulator
-from iwpc.calculate_divergence import DivergenceResult, calculate_divergence
+from iwpc.divergences.calculate_divergence import DivergenceResult, calculate_divergence
 from iwpc.data_modules.numpy_data_module import BinaryNumpyDataModule
 from iwpc.divergences import KLDivergence, DifferentiableFDivergence
-from iwpc.modules.naive import GenericNaiveVariationalFDivergenceEstimator
+from iwpc.divergences.naive import GenericNaiveVariationalFDivergenceEstimator
 from iwpc.scalars.scalar_function import ScalarFunction
 from iwpc.utils import format_quantity_with_uncertainty
 
