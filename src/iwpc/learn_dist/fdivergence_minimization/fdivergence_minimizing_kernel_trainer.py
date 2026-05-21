@@ -1,3 +1,4 @@
+import math
 from collections import namedtuple
 from typing import Tuple, Iterator, NamedTuple
 
@@ -182,9 +183,10 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         exact_outcome_log_prob_iter, cut_pass_log_prob = self.exact_kernel.outcome_with_log_prob_iter_and_cut_pass_log_prob(q_base_samples)
         def full_sample_iter():
             for exact_outcome, exact_log_prob in exact_outcome_log_prob_iter:
-                sampled_kernel_cond = torch.concat([exact_outcome.repeat((q_base_samples.shape[0], 1)), q_base_samples], dim=1)
+                repeated_exact_outcome = exact_outcome.repeat((q_base_samples.shape[0], 1))
+                sampled_kernel_cond = torch.concat([repeated_exact_outcome, q_base_samples], dim=1)
                 sampled_kernel_samples, sampled_log_prob = self.sampled_kernel.draw_with_log_prob(sampled_kernel_cond)
-                q = q_init_samples + sampled_kernel_samples
+                q = q_init_samples + torch.concat([sampled_kernel_samples, repeated_exact_outcome], dim=1)
                 sample_log_prob = sampled_log_prob + exact_log_prob
                 yield q, sample_log_prob, exact_outcome, exact_log_prob
 
@@ -213,7 +215,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         q_weights = weights[q_mask]
         p_weights = weights[~q_mask]
 
-        weighted_log_sigmoids = torch.tensor(0.)
+        weighted_log_sigmoids = torch.tensor(0., device=self.device)
         full_sample_iter, cut_pass_log_prob = self.full_sample_iter_and_cut_pass_log_prob(base_samples[q_mask], samples[q_mask])
         for q, sample_log_prob, exact_outcome, exact_log_prob in full_sample_iter:
             log_p_over_q = self.calculate_log_p_over_q(q)
@@ -247,10 +249,10 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
 
         full_sample_iter, cut_pass_log_prob = self.full_sample_iter_and_cut_pass_log_prob(base_samples[q_mask], samples[q_mask])
         loss = torch.tensor(0., device=base_samples.device, requires_grad=True)
+        average_cut_pass_log_prob = (cut_pass_log_prob + torch.log(q_weights)).logsumexp(0) - math.log(q_weights.shape[0])
         for q, sample_log_prob, exact_outcome, exact_log_prob in full_sample_iter:
             with torch.no_grad():
                 log_p_over_q = self.calculate_log_p_over_q(q)
-            average_cut_pass_log_prob = cut_pass_log_prob.logsumexp(0) + torch.log(q_weights)
             total_q_weight = q_weights * (exact_log_prob.detach() + cut_pass_log_prob.detach() - average_cut_pass_log_prob.detach()).exp()
             loss = loss + (total_q_weight * self.divergence.f_dash_given_log(-log_p_over_q) * (sample_log_prob - average_cut_pass_log_prob)).mean()
         return loss
