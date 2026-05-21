@@ -86,7 +86,7 @@ class FiniteCutKernel(CutKernelInterface, FiniteKernelInterface, TrainableKernel
         """
         return self.base_kernel.construct_log_probs(cond)[:, self.disallowed_indices].logsumexp(dim=-1)
 
-    def outcome_with_log_prob_iter_and_cut_pass_log_prob(self, cond: Tensor) -> Tuple[Tensor, Iterator[tuple[Tensor, Tensor]]]:
+    def outcome_with_log_prob_iter_and_cut_pass_log_prob(self, cond: Tensor) -> Tuple[Iterator[tuple[Tensor, Tensor]], Tensor]:
         base_log_probs = self.base_kernel.construct_log_probs(cond)
         cut_pass_log_probs = base_log_probs[:, self.allowed_indices].logsumexp(dim=-1)
         log_probs = base_log_probs[:, self.allowed_indices] - cut_pass_log_probs[:, None]

@@ -175,7 +175,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
                     ], dim=1
                 ), exact_outcome_log_prob
 
-    def full_sample_iter_and_cut_pass_log_prob(self, q_base_samples, q_init_samples) -> tuple[Tensor, Iterator[tuple[Tensor, Tensor, Tensor, Tensor]]]:
+    def full_sample_iter_and_cut_pass_log_prob(self, q_base_samples, q_init_samples) -> tuple[Iterator[tuple[Tensor, Tensor, Tensor, Tensor]], Tensor]:
         if self.zero_out_init_q_samples:
             q_init_samples = torch.zeros_like(q_init_samples)
 
