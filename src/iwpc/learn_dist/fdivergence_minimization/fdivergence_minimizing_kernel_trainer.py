@@ -1,4 +1,5 @@
-from typing import Tuple, Iterator
+from collections import namedtuple
+from typing import Tuple, Iterator, NamedTuple
 
 import torch
 from lightning import LightningModule
@@ -174,6 +175,21 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
                     ], dim=1
                 ), exact_outcome_log_prob
 
+    def full_sample_iter_and_cut_pass_log_prob(self, q_base_samples, q_init_samples) -> tuple[Tensor, Iterator[tuple[Tensor, Tensor, Tensor, Tensor]]]:
+        if self.zero_out_init_q_samples:
+            q_init_samples = torch.zeros_like(q_init_samples)
+
+        exact_outcome_log_prob_iter, cut_pass_log_prob = self.exact_kernel.outcome_with_log_prob_iter_and_cut_pass_log_prob(q_base_samples)
+        def full_sample_iter():
+            for exact_outcome, exact_log_prob in exact_outcome_log_prob_iter:
+                sampled_kernel_cond = torch.concat([exact_outcome.repeat((q_base_samples.shape[0], 1)), q_base_samples], dim=1)
+                sampled_kernel_samples, sampled_log_prob = self.sampled_kernel.draw_with_log_prob(sampled_kernel_cond)
+                q = q_init_samples + sampled_kernel_samples
+                sample_log_prob = sampled_log_prob + exact_log_prob
+                yield q, sample_log_prob, exact_outcome, exact_log_prob
+
+        return full_sample_iter(), cut_pass_log_prob
+
     def calculate_cross_entropy(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> Tensor:
         """
         Calculates the binary cross entropy loss of the predictions made by self.log_p_over_q_model classifying between
@@ -193,24 +209,19 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
             The binary cross entropy loss of self.log_p_over_q_model
         """
         base_samples, samples, labels, weights = batch
-
         q_mask = labels == 1
-        p_samples = samples[~q_mask]
-        q_base_samples = base_samples[q_mask]
-        q_init_samples = samples[q_mask]
-        if self.zero_out_init_q_samples:
-            q_init_samples = torch.zeros_like(q_init_samples)
-
-        p_loss = - (weights[~q_mask] * logsigmoid(self.calculate_log_p_over_q(p_samples))).mean()
-
-        q_loss = torch.tensor(0.)
         q_weights = weights[q_mask]
-        for sampled_kernel_cond, exact_outcome_log_prob in self.sampled_kernel_cond_iter(q_base_samples):
-            samples = self.sampled_kernel.draw(sampled_kernel_cond)
-            q = q_init_samples + torch.cat([samples, self.exact_kernel.draw(sampled_kernel_cond)], dim=-1)
-            log_p_over_q = self.calculate_log_p_over_q(q)
-            q_loss = q_loss - (q_weights * exact_outcome_log_prob.detach().exp() * logsigmoid(-log_p_over_q)).mean()
+        p_weights = weights[~q_mask]
 
+        weighted_log_sigmoids = torch.tensor(0.)
+        full_sample_iter, cut_pass_log_prob = self.full_sample_iter_and_cut_pass_log_prob(base_samples[q_mask], samples[q_mask])
+        for q, sample_log_prob, exact_outcome, exact_log_prob in full_sample_iter:
+            log_p_over_q = self.calculate_log_p_over_q(q)
+            weighted_log_sigmoids = weighted_log_sigmoids + exact_log_prob.detach().exp() * logsigmoid(-log_p_over_q)
+
+        cut_pass_probs = cut_pass_log_prob.exp().detach()
+        q_loss = - (q_weights * cut_pass_probs * weighted_log_sigmoids).mean() / (q_weights * cut_pass_probs).mean()
+        p_loss = - (p_weights * logsigmoid(self.calculate_log_p_over_q(samples[~q_mask]))).mean()
         return (p_loss + q_loss) / 2
 
     def calculate_kernel_loss(self, batch: Tuple[Tensor, Tensor, Tensor]) -> Tensor:
@@ -233,25 +244,16 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         base_samples, samples, labels, weights = batch
         q_mask = labels == 1
         q_weights = weights[q_mask]
-        q_base_samples = base_samples[q_mask]
-        q_init_samples = samples[q_mask]
-        if self.zero_out_init_q_samples:
-            q_init_samples = torch.zeros_like(q_init_samples)
 
-        loss = torch.tensor(0., requires_grad=True, device=base_samples.device)
-        for sampled_kernel_cond, exact_outcome_log_prob in self.sampled_kernel_cond_iter(q_base_samples):
-            for i in range(self.kernel_resample_rate):
-                samples, log_prob = self.sampled_kernel.draw_with_log_prob(sampled_kernel_cond)
-                q_samples = q_init_samples + torch.cat([samples, self.exact_kernel.draw(sampled_kernel_cond)], dim=-1)
-                with torch.no_grad():
-                    log_p_over_q = self.calculate_log_p_over_q(q_samples)
-
-                # loss = loss + (q_weights * exact_outcome_log_prob.detach().exp() * self.divergence.f_dash_given_log(-log_p_over_q) * (exact_outcome_log_prob + log_prob)).mean()
-                loss = loss + (q_weights * log_prob.detach().exp() * exact_outcome_log_prob.detach().exp() * self.divergence.f_dash_given_log(-log_p_over_q) * (-exact_outcome_log_prob + log_prob)).mean()
-                # loss = loss / (exact_outcome_log_prob.detach().exp().mean())
-                # loss = loss + (q_weights * exact_outcome_log_prob.detach().exp() * torch.exp((-log_p_over_q))).mean()
-
-        return loss / self.kernel_resample_rate
+        full_sample_iter, cut_pass_log_prob = self.full_sample_iter_and_cut_pass_log_prob(base_samples[q_mask], samples[q_mask])
+        loss = torch.tensor(0., device=base_samples.device, requires_grad=True)
+        for q, sample_log_prob, exact_outcome, exact_log_prob in full_sample_iter:
+            with torch.no_grad():
+                log_p_over_q = self.calculate_log_p_over_q(q)
+            average_cut_pass_log_prob = cut_pass_log_prob.logsumexp(0) + torch.log(q_weights)
+            total_q_weight = q_weights * (exact_log_prob.detach() + cut_pass_log_prob.detach() - average_cut_pass_log_prob.detach()).exp()
+            loss = loss + (total_q_weight * self.divergence.f_dash_given_log(-log_p_over_q) * (sample_log_prob - average_cut_pass_log_prob)).mean()
+        return loss
 
     def training_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor], batch_idx) -> None:
         """
