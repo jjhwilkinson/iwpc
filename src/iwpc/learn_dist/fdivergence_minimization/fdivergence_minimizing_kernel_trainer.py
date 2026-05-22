@@ -1,6 +1,5 @@
 import math
-from collections import namedtuple
-from typing import Tuple, Iterator, NamedTuple
+from typing import Tuple, Iterator
 
 import torch
 from lightning import LightningModule
@@ -176,12 +175,47 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
                     ], dim=1
                 ), exact_outcome_log_prob
 
-    def full_sample_iter_and_cut_pass_log_prob(self, q_base_samples, q_init_samples) -> tuple[Iterator[tuple[Tensor, Tensor, Tensor, Tensor]], Tensor]:
+    def full_sample_iter_and_cut_pass_log_prob(
+        self,
+        q_base_samples: Tensor,
+        q_init_samples: Tensor,
+    ) -> Tuple[Iterator[Tuple[Tensor, Tensor, Tensor, Tensor]], Tensor]:
+        """
+        For each discrete outcome of the exact (cut) kernel, yields a corresponding draw of the full q sample together
+        with the log-probabilities needed for the cross-entropy and kernel losses. Also returns the per-row
+        log-probability that a draw from the exact kernel's base distribution would have passed the cut, used to
+        reweight terms so that expectations under the cut distribution can be recovered from samples drawn under the
+        un-cut base distribution
+
+        Parameters
+        ----------
+        q_base_samples
+            Base-distribution samples for the q-side of the batch, of shape (N, base_dim). Used as conditioning
+            information for both the exact and sampled kernels
+        q_init_samples
+            Initial q samples to which the kernel output is added, of shape (N, sample_dim). Zeroed if
+            self.zero_out_init_q_samples is True
+
+        Returns
+        -------
+        Tuple[Iterator[Tuple[Tensor, Tensor, Tensor, Tensor]], Tensor]
+            1. An iterator over the exact kernel's allowed outcomes yielding tuples of
+                (q, sample_log_prob, exact_outcome, exact_log_prob) where:
+                - q is the full q sample of shape (N, sample_dim)
+                - sample_log_prob is the joint log-probability of the sampled kernel draw and the exact outcome,
+                  of shape (N,)
+                - exact_outcome is the single discrete outcome of the exact kernel for this iteration, of shape
+                  (exact_outcome_dim,)
+                - exact_log_prob is the per-row log-probability of the exact outcome conditional on passing the cut,
+                  of shape (N,)
+            2. cut_pass_log_prob: the per-row log-probability that a sample from the exact kernel's base distribution
+                would pass the cut, of shape (N,)
+        """
         if self.zero_out_init_q_samples:
             q_init_samples = torch.zeros_like(q_init_samples)
 
         exact_outcome_log_prob_iter, cut_pass_log_prob = self.exact_kernel.outcome_with_log_prob_iter_and_cut_pass_log_prob(q_base_samples)
-        def full_sample_iter():
+        def full_sample_iter() -> Iterator[Tuple[Tensor, Tensor, Tensor, Tensor]]:
             for exact_outcome, exact_log_prob in exact_outcome_log_prob_iter:
                 repeated_exact_outcome = exact_outcome.repeat((q_base_samples.shape[0], 1))
                 sampled_kernel_cond = torch.concat([repeated_exact_outcome, q_base_samples], dim=1)
@@ -226,7 +260,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         p_loss = - (p_weights * logsigmoid(self.calculate_log_p_over_q(samples[~q_mask]))).mean()
         return (p_loss + q_loss) / 2
 
-    def calculate_kernel_loss(self, batch: Tuple[Tensor, Tensor, Tensor]) -> Tensor:
+    def calculate_kernel_loss(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> Tensor:
         """
         Calculates the kernel loss given the learned values of self.log_p_over_q_model
 

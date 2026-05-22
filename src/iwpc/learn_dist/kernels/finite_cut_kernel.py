@@ -86,7 +86,26 @@ class FiniteCutKernel(CutKernelInterface, FiniteKernelInterface, TrainableKernel
         """
         return self.base_kernel.construct_log_probs(cond)[:, self.disallowed_indices].logsumexp(dim=-1)
 
-    def outcome_with_log_prob_iter_and_cut_pass_log_prob(self, cond: Tensor) -> Tuple[Iterator[tuple[Tensor, Tensor]], Tensor]:
+    def outcome_with_log_prob_iter_and_cut_pass_log_prob(self, cond: Tensor) -> Tuple[Iterator[Tuple[Tensor, Tensor]], Tensor]:
+        """
+        Computes the base kernel's log-probs once and reuses them to produce both the per-outcome
+        cut-conditional log-probabilities and the log-probability that a base sample passes the cut. Sharing the
+        computation is more efficient and preserves gradient information through cut_pass_log_prob, which downstream
+        losses use to reweight samples drawn under the un-cut distribution
+
+        Parameters
+        ----------
+        cond
+            The conditioning information of shape (N, self.cond_dimension)
+
+        Returns
+        -------
+        Tuple[Iterator[Tuple[Tensor, Tensor]], Tensor]
+            1. An iterator over the allowed outcomes of the cut-kernel, yielding (outcome, log_prob) pairs where
+                outcome has shape (self.sample_dimension,) and log_prob has shape (N,) giving the log-probability of
+                that outcome conditional on passing the cut
+            2. The log-probability that a sample drawn from the base kernel passes the cut, of shape (N,)
+        """
         base_log_probs = self.base_kernel.construct_log_probs(cond)
         cut_pass_log_probs = base_log_probs[:, self.allowed_indices].logsumexp(dim=-1)
         log_probs = base_log_probs[:, self.allowed_indices] - cut_pass_log_probs[:, None]
