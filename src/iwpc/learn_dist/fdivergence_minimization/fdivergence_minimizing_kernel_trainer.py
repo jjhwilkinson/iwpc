@@ -28,6 +28,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         kernel_resample_rate: int = 1,
         zero_out_init_q_samples: bool = False,
         accumulate_kernel_batches: int = -1,
+        target_cut_pass_prob: float = None,
     ):
         """
         Parameters
@@ -76,6 +77,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         self.zero_out_init_q_samples = zero_out_init_q_samples
         self.accumulate_kernel_batches = accumulate_kernel_batches
         self.num_accumulated_kernel_batches = 0
+        self.target_cut_pass_prob = target_cut_pass_prob
 
         self.automatic_optimization = False
         self.register_buffer('log_two', torch.log(torch.tensor(2.)))
@@ -260,7 +262,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         p_loss = - (p_weights * logsigmoid(self.calculate_log_p_over_q(samples[~q_mask]))).mean()
         return (p_loss + q_loss) / 2
 
-    def calculate_kernel_loss(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> Tensor:
+    def calculate_kernel_loss(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor], stage) -> Tensor:
         """
         Calculates the kernel loss given the learned values of self.log_p_over_q_model
 
@@ -283,12 +285,28 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
 
         full_sample_iter, cut_pass_log_prob = self.full_sample_iter_and_cut_pass_log_prob(base_samples[q_mask], samples[q_mask])
         loss = torch.tensor(0., device=base_samples.device, requires_grad=True)
-        average_cut_pass_log_prob = (cut_pass_log_prob + torch.log(q_weights)).logsumexp(0) - math.log(q_weights.shape[0])
+        log_summand = cut_pass_log_prob + torch.log(q_weights.abs())
+        neg_inf = torch.full_like(log_summand, float('-inf'))
+        log_pos = torch.where(q_weights > 0, log_summand, neg_inf).logsumexp(0)
+        log_neg = torch.where(q_weights < 0, log_summand, neg_inf).logsumexp(0)
+        log_average_cut_pass_prob = (
+            log_pos + torch.log1p(-torch.exp(log_neg - log_pos))
+        ) - math.log(q_weights.shape[0])
         for q, sample_log_prob, exact_outcome, exact_log_prob in full_sample_iter:
             with torch.no_grad():
                 log_p_over_q = self.calculate_log_p_over_q(q)
-            total_q_weight = q_weights * (exact_log_prob.detach() + cut_pass_log_prob.detach() - average_cut_pass_log_prob.detach()).exp()
-            loss = loss + (total_q_weight * self.divergence.f_dash_given_log(-log_p_over_q) * (sample_log_prob + cut_pass_log_prob - average_cut_pass_log_prob)).mean()
+            total_q_weight = q_weights * (exact_log_prob.detach() + cut_pass_log_prob.detach() - log_average_cut_pass_prob.detach()).exp()
+            loss = loss + (total_q_weight * self.divergence.f_dash_given_log(-log_p_over_q) * (sample_log_prob + cut_pass_log_prob - log_average_cut_pass_prob)).mean()
+
+        normalized_log_poisson_term = - (
+            self.target_cut_pass_prob * log_average_cut_pass_prob - log_average_cut_pass_prob.exp()
+            - (self.target_cut_pass_prob * torch.log(self.target_cut_pass_prob) - self.target_cut_pass_prob)
+        )
+        loss = loss + normalized_log_poisson_term
+
+        self.log(f"{stage}_kernel_loss", loss, on_step=True, on_epoch=True, prog_bar=False)
+        self.log(f"{stage}_average_cut_pass_prob", log_average_cut_pass_prob.exp(), on_step=False, on_epoch=True, prog_bar=False)
+        self.log(f"{stage}_normalized_log_poisson_term", normalized_log_poisson_term, on_step=False, on_epoch=True, prog_bar=False)
         return loss
 
     def training_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor], batch_idx) -> None:
@@ -307,9 +325,8 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         discriminator_optimizer, kernel_optimizer = self.optimizers()
 
         if self.is_kernel_training():
-            kernel_loss = self.calculate_kernel_loss(batch)
+            kernel_loss = self.calculate_kernel_loss(batch, 'train')
             kernel_loss.backward()
-            self.log('train_kernel_loss', kernel_loss, on_step=True, on_epoch=True, prog_bar=False)
             self.num_accumulated_kernel_batches += 1
             self.log(
                 "kernel params grad sum",
