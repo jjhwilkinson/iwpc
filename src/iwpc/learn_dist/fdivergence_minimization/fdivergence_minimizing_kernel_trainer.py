@@ -70,6 +70,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         self.log_p_over_q_model = log_p_over_q_model
         self.divergence = divergence
         self.exact_kernel = exact_kernel
+        self._exact_sample_dim = 0 if exact_kernel is None else exact_kernel.sample_dimension
         self.discriminator_opt_lr = discriminator_opt_lr
         self.kernel_opt_lr = kernel_opt_lr
         self.start_kernel_train_epoch = start_kernel_train_epoch
