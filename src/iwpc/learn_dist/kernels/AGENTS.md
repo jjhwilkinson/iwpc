@@ -49,11 +49,13 @@ What composes with what:
 - `AddCondKernel` — `y = cond + base.sample`; requires
   `base.sample_dimension == base.cond_dimension`. Honour
   `custom_encoding` for circular features.
-- `CutKernelInterface` — defines `cut_pass_log_prob`,
-  `cut_fail_log_prob`, `draw_with_log_prob_and_cut_pass_log_prob`,
-  `pass_log_prob_and_outcomes_with_log_prob_iter`. `FiniteCutKernel` is
-  the concrete finite implementation (built via `finite.cut(fn)` or
-  `sample_space.cut(fn)`).
+- `CutKernelInterface` — defines `cut_pass_log_prob` and
+  `cut_fail_log_prob`. `FiniteCutKernel` is the concrete finite
+  implementation (built via `finite.cut(fn)` or `sample_space.cut(fn)`)
+  and additionally exposes
+  `outcome_with_log_prob_iter_and_cut_pass_log_prob(cond)`, which shares
+  the base kernel's log-probs between the per-outcome iterator and the
+  cut-pass log-probability so gradients flow through both.
 
 ## Finite kernels
 

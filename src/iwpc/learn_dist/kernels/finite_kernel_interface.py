@@ -144,8 +144,7 @@ class FiniteKernelInterface(ABC):
             Iterator over the set of possible outcomes alongside the associated log-probability
         """
         log_probs = self.construct_log_probs(cond)
-        for outcome, log_prob in zip(self.sample_space.outcomes_iter(), log_probs.T):
-            yield outcome, log_prob
+        return zip(self.sample_space.outcomes_iter(), log_probs.T)
 
     def __and__(self, other: TrainableKernelBase) -> 'FiniteConcatenatedKernel | ConcatenatedKernel':
         """

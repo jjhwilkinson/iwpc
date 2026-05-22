@@ -86,56 +86,30 @@ class FiniteCutKernel(CutKernelInterface, FiniteKernelInterface, TrainableKernel
         """
         return self.base_kernel.construct_log_probs(cond)[:, self.disallowed_indices].logsumexp(dim=-1)
 
-    def draw_with_log_prob_and_cut_pass_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+    def outcome_with_log_prob_iter_and_cut_pass_log_prob(self, cond: Tensor) -> Tuple[Iterator[Tuple[Tensor, Tensor]], Tensor]:
         """
+        Computes the base kernel's log-probs once and reuses them to produce both the per-outcome
+        cut-conditional log-probabilities and the log-probability that a base sample passes the cut. Sharing the
+        computation is more efficient and preserves gradient information through cut_pass_log_prob, which downstream
+        losses use to reweight samples drawn under the un-cut distribution
+
         Parameters
         ----------
         cond
-            The conditioning information
+            The conditioning information of shape (N, self.cond_dimension)
 
         Returns
         -------
-        Tuple[Tensor, Tensor, Tensor]
-            1. A sample drawn from the cut-kernel for each row of conditioning information
-            2. The log-probability of observing the above sample for the given conditioning information
-            3. The log-probability that a sample from the base kernel passes the cut for each row of conditioning information
+        Tuple[Iterator[Tuple[Tensor, Tensor]], Tensor]
+            1. An iterator over the allowed outcomes of the cut-kernel, yielding (outcome, log_prob) pairs where
+                outcome has shape (self.sample_dimension,) and log_prob has shape (N,) giving the log-probability of
+                that outcome conditional on passing the cut
+            2. The log-probability that a sample drawn from the base kernel passes the cut, of shape (N,)
         """
         base_log_probs = self.base_kernel.construct_log_probs(cond)
         cut_pass_log_probs = base_log_probs[:, self.allowed_indices].logsumexp(dim=-1)
-        log_probs = base_log_probs[:, self.allowed_indices] - cut_pass_log_probs
-        sample_idxs = sample_idx_from_log_probs(log_probs)
-        return self.outcomes[sample_idxs], log_probs, cut_pass_log_probs
-
-    def pass_log_prob_and_outcomes_with_log_prob_iter(self, cond: Tensor) -> tuple[Tensor, Iterator[tuple[Tensor, Tensor]]]:
-        """
-        Parameters
-        ----------
-        cond
-            The conditioning information
-
-        Returns
-        -------
-        1. The probability that a sample from the base kernel passes the cut for each row of conditioning information
-        2. An iterator over the allowed outcomes of the cut-kernel for each row of conditioning information and the
-            log-probability of observing said outcome
-        """
-        base_log_probs = self.base_kernel.construct_log_probs(cond)
-        pass_log_probs = base_log_probs[:, self.allowed_indices].logsumexp(dim=-1)
-        log_probs = base_log_probs[:, self.allowed_indices] - pass_log_probs
-
-        def outcomes_with_log_prob_iter() -> Iterator[tuple[Tensor, Tensor]]:
-            """
-            Wrapper that iterates over the allowed outcomes of the cut-kernel for each row of conditioning information
-
-            Returns
-            -------
-            Iterator[tuple[Tensor, Tensor]]
-                An iterator over the allowed outcomes of the cut-kernel for each row of conditioning information and the
-                log-probability of observing said outcome
-            """
-            for outcome, log_prob in zip(self.outcomes, log_probs.T):
-                yield outcome, log_prob
-        return pass_log_probs, outcomes_with_log_prob_iter()
+        log_probs = base_log_probs[:, self.allowed_indices] - cut_pass_log_probs[:, None]
+        return zip(self.sample_space.outcomes_iter(), log_probs.T), cut_pass_log_probs
 
     def log_prob(self, samples: Tensor, cond: Tensor) -> Tensor:
         """

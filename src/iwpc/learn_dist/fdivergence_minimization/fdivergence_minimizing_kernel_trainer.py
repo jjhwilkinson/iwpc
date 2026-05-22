@@ -1,4 +1,5 @@
-from typing import Tuple, Iterator
+import math
+from typing import Dict, Iterator, List, Tuple
 
 import torch
 from lightning import LightningModule
@@ -9,11 +10,75 @@ from torch.optim import Optimizer
 from torchmetrics import MeanMetric
 
 from iwpc.divergences import DifferentiableFDivergence
+from iwpc.learn_dist.kernels.finite_cut_kernel import FiniteCutKernel
 from iwpc.learn_dist.kernels.finite_kernel import FiniteKernelInterface
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
 
 class FDivergenceMinimizingKernelTrainer(LightningModule):
+    """
+    LightningModule that trains a kernel to model a target distribution p by minimising an f-divergence
+    Df(p || q) between p and the kernel-induced distribution q. q is constructed using samples from
+    some predetermined 'base' distribution that we do not assume to have the analytic form of. q is
+    obtained by applying the given kernel to the base distribution. This archetype often arises when
+    doing detector calibration in physics since one measures some data (p) which one believes arises from
+    some truth distribution (the base) convolved with a detector response (roughly the kernel).
+
+    Architecture
+    ------------
+    Two networks train side by side under manual optimisation (`automatic_optimization = False`):
+
+    - `log_p_over_q_model` (the discriminator) is trained as a binary classifier between p and q samples
+      via weighted binary cross-entropy. Its scalar output is interpreted as log(p / q), evaluated by
+      `calculate_log_p_over_q`
+    - `sampled_kernel` (and optionally `exact_kernel`) is trained against a score-function surrogate
+      whose gradient w.r.t. the kernel parameters equals the gradient of Df(p || q)
+    
+    Although this resembles a GAN-type network, it is fundamentally very different.
+
+    The exact kernel is optional and can take three forms, each handled by
+    `full_sample_iter_and_cut_pass_log_prob`:
+
+    - `None`: q is produced by the sampled kernel alone
+    - A non-cut `FiniteKernelInterface`: q's discrete factor enumerates outcomes exactly instead of being
+      sampled, reducing variance
+    - A `FiniteCutKernel`: as above, but additionally the exact kernel restricts a base distribution to a
+      subset of outcomes. Per-row cut-pass probabilities are propagated through the loss so that
+      gradients pull the cut-pass mass toward the value implied by the data weights, and an optional
+      log-Poisson penalty (`target_cut_pass_prob`) lets that target be set explicitly
+
+    Batch contract
+    --------------
+    Every batch is a 4-tuple `(base_samples, samples, labels, weights)`:
+
+    - `labels == 0` rows are p samples; `samples[~q_mask]` is the actual p sample used by the
+      discriminator
+    - `labels == 1` rows are q samples; `base_samples[q_mask]` are draws from the base
+      distribution and `samples[q_mask]` are used as an value for q samples to which the kernel output
+      is added (zeroed when `zero_out_init_q_samples=True`)
+    - `weights` are per-row sample weights; negative weights are supported (signed logsumexp is used in
+      the kernel loss) though may cause training instability
+
+    Assumptions
+    -----------
+    - The discriminator's forward returns a tensor of shape (N, 1) interpretable as a per-sample
+      log(p / q) estimate
+    - The mean of the p-side weights and the mean of the q-side weights are each 1.
+      Both losses divide by `.mean()` rather than `sum / weight_sum`, so unbalanced weight
+      normalisations re-scale the p / q balance and break the discriminator's interpretation as a
+      log(p / q) estimator. Pre-normalise upstream so that average p_weights = average q_weights = 1
+    - When `target_cut_pass_prob` is supplied with a `FiniteCutKernel`, it should be set to the ratio
+      `sum(p_weights) / sum(q_weights)` over the dataset — the cut-pass probability of q that makes the
+      integrated weights of p and q match
+
+    Logged metrics
+    --------------
+    - `train_divergence` / `val_divergence`: `1 - BCE / log 2`, a Jensen-Shannon-style lower bound from
+      the discriminator, regardless of the configured `divergence`
+    - `{train,val}_kernel_loss`, `{train,val}_average_cut_pass_prob`, and (when active)
+      `{train,val}_normalized_log_poisson_term`
+    - `is_kernel_training`, `kernel params grad sum`, and `epoch_train_divergence` as diagnostic streams
+    """
     def __init__(
         self,
         sampled_kernel: TrainableKernelBase,
@@ -24,9 +89,9 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         kernel_opt_lr: float = 1e-4,
         start_kernel_train_epoch: int = 1,
         start_discriminator_train_epoch: int = 0,
-        kernel_resample_rate: int = 1,
         zero_out_init_q_samples: bool = False,
         accumulate_kernel_batches: int = -1,
+        target_cut_pass_prob: float | None = None,
     ):
         """
         Parameters
@@ -51,15 +116,16 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
             Epoch from which the kernel begins training. Earlier epochs only train the discriminator
         start_discriminator_train_epoch
             Epoch from which the discriminator begins training
-        kernel_resample_rate
-            Number of fresh kernel draws per batch when computing the kernel loss. Higher values reduce gradient
-            variance at proportional compute cost
         zero_out_init_q_samples
             If True, the q-side input samples are zeroed before being added to the kernel draw. Used when the kernel
             output is to be interpreted as the full sample rather than a residual on top of an initial guess
         accumulate_kernel_batches
             Number of batches over which to accumulate kernel gradients before stepping the kernel optimiser. -1 steps
             every batch
+        target_cut_pass_prob
+            Optional target value of the average cut-pass probability over the q batch. When set together with a
+            FiniteCutKernel exact_kernel, a normalised log-Poisson penalty is added to the kernel loss that pulls
+            the realised average cut-pass probability toward this target. When None, no penalty is applied
         """
         super().__init__()
 
@@ -72,10 +138,10 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         self.kernel_opt_lr = kernel_opt_lr
         self.start_kernel_train_epoch = start_kernel_train_epoch
         self.start_discriminator_train_epoch = start_discriminator_train_epoch
-        self.kernel_resample_rate = kernel_resample_rate
         self.zero_out_init_q_samples = zero_out_init_q_samples
         self.accumulate_kernel_batches = accumulate_kernel_batches
         self.num_accumulated_kernel_batches = 0
+        self.target_cut_pass_prob = target_cut_pass_prob
 
         self.automatic_optimization = False
         self.register_buffer('log_two', torch.log(torch.tensor(2.)))
@@ -86,8 +152,8 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         Returns
         -------
         bool
-            Whether the kernel is currently training or not based on whether the last train_divergence value is greater
-            than min_train_divergence
+            Whether the kernel should be trained on the current step. True once self.current_epoch has reached
+            self.start_kernel_train_epoch
         """
         return (
             (self.current_epoch >= self.start_kernel_train_epoch)
@@ -99,15 +165,15 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         Returns
         -------
         bool
-            Whether the kernel is currently training or not based on whether the last train_divergence value is greater
-            than min_train_divergence
+            Whether the discriminator should be trained on the current step. True once self.current_epoch has reached
+            self.start_discriminator_train_epoch
         """
         return (
             (self.current_epoch >= self.start_discriminator_train_epoch)
             # and (np.random.random() < 0.2)
         )
 
-    def calculate_log_p_over_q(self, samples) -> torch.Tensor:
+    def calculate_log_p_over_q(self, samples: Tensor) -> Tensor:
         """
         Evaluates the discriminator on the given samples and returns the scalar log(p / q) estimate per sample
 
@@ -118,62 +184,85 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
 
         Returns
         -------
-        torch.Tensor
+        Tensor
             A tensor of shape (N,) of log(p / q) estimates
         """
         return self.log_p_over_q_model(samples)[:, 0]
 
-    def exact_outcomes_with_log_prob_iter(self, q_base_samples) -> Iterator[tuple[Tensor, Tensor]]:
+    def full_sample_iter_and_cut_pass_log_prob(
+        self,
+        q_base_samples: Tensor,
+        q_init_samples: Tensor,
+    ) -> Tuple[Iterator[Tuple[Tensor, Tensor, Tensor, Tensor]], Tensor]:
         """
-        Enumerates the outcomes of the exact kernel and the corresponding log probability for each base sample. If no
-        exact kernel is configured, returns a single trivial (zero-width outcome, zero log-prob) pair so callers can
-        treat both code paths uniformly
+        Yields the draws of the full q sample needed for the cross-entropy and kernel losses, alongside per-row
+        log-probabilities. Three configurations are supported:
+
+        - No exact kernel: a single iteration draws from the sampled kernel conditioned on q_base_samples alone
+        - Finite cut exact kernel (FiniteCutKernel): iterates over allowed outcomes; cut_pass_log_prob is the per-row
+          log-probability that a draw from the exact kernel's base distribution survives the cut, used to reweight
+          terms so that expectations under the cut distribution can be recovered from samples drawn under the un-cut
+          base distribution
+        - Uncut finite exact kernel (FiniteKernelInterface): iterates over outcomes; cut_pass_log_prob is identically
+          zero (every outcome is allowed)
 
         Parameters
         ----------
         q_base_samples
-            Base samples used as conditioning information for the exact kernel, shape (N, base_dim)
+            Base-distribution samples for the q-side of the batch, of shape (N, base_dim). Used as conditioning
+            information for both the exact and sampled kernels
+        q_init_samples
+            Initial q samples to which the kernel output is added, of shape (N, sample_dim). Zeroed if
+            self.zero_out_init_q_samples is True
 
         Returns
         -------
-        Iterator[tuple[Tensor, Tensor]]
-            Iterator yielding (outcome, log_prob) pairs over the exact kernel's discrete outcomes
+        Tuple[Iterator[Tuple[Tensor, Tensor, Tensor, Tensor]], Tensor]
+            1. An iterator yielding tuples of (q, sample_log_prob, exact_outcome, exact_log_prob) where:
+                - q is the full q sample of shape (N, sample_dim)
+                - sample_log_prob is the joint log-probability of the sampled kernel draw and the exact outcome,
+                  of shape (N,)
+                - exact_outcome is the single discrete outcome of the exact kernel for this iteration, of shape
+                  (exact_outcome_dim,) — empty (shape (0,)) when no exact kernel is configured
+                - exact_log_prob is the per-row log-probability of the exact outcome conditional on passing the cut,
+                  of shape (N,) — identically zero when no exact kernel is configured
+            2. cut_pass_log_prob: the per-row log-probability that a sample from the exact kernel's base distribution
+                would pass the cut, of shape (N,). Identically zero when no exact kernel is configured or when the
+                exact kernel does not implement a cut
         """
-        return (
-            self.exact_kernel.outcomes_with_log_prob_iter(q_base_samples) if self.exact_kernel is not None
-            else [
-                torch.zeros((q_base_samples.shape[0], 0), dtype=torch.float32, device=self.device),
-                torch.zeros(q_base_samples.shape[0], dtype=torch.float32, device=self.device)
-            ]
-        )
+        if self.zero_out_init_q_samples:
+            q_init_samples = torch.zeros_like(q_init_samples)
 
-    def sampled_kernel_cond_iter(self, q_base_samples) -> Iterator[tuple[Tensor, Tensor]]:
-        """
-        Yields the conditioning vector that should be fed into the sampled kernel for each exact-kernel outcome,
-        together with the log probability of that outcome. When no exact kernel is configured, yields the base samples
-        themselves with a zero log-prob so the caller iterates exactly once
-
-        Parameters
-        ----------
-        q_base_samples
-            Base samples used as conditioning information for both kernels, shape (N, base_dim)
-
-        Yields
-        ------
-        tuple[Tensor, Tensor]
-            (conditioning tensor of shape (N, exact_outcome_dim + base_dim), exact-outcome log probability of shape (N,))
-        """
         if self.exact_kernel is None:
-            yield q_base_samples, torch.zeros(q_base_samples.shape[0], dtype=torch.float32, device=self.device)
+            cut_pass_log_prob = torch.zeros(q_base_samples.shape[0], device=self.device)
+
+            def full_sample_iter() -> Iterator[Tuple[Tensor, Tensor, Tensor, Tensor]]:
+                sampled_kernel_samples, sampled_log_prob = self.sampled_kernel.draw_with_log_prob(q_base_samples)
+                q = q_init_samples + sampled_kernel_samples
+                yield (
+                    q,
+                    sampled_log_prob,
+                    torch.zeros(0, device=self.device),
+                    torch.zeros(q_base_samples.shape[0], device=self.device),
+                )
+
+            return full_sample_iter(), cut_pass_log_prob
+
+        if isinstance(self.exact_kernel, FiniteCutKernel):
+            exact_outcome_log_prob_iter, cut_pass_log_prob = self.exact_kernel.outcome_with_log_prob_iter_and_cut_pass_log_prob(q_base_samples)
         else:
-            for exact_outcome, exact_outcome_log_prob in self.exact_kernel.outcomes_with_log_prob_iter(q_base_samples):
-                repeated_outcome = exact_outcome.repeat((q_base_samples.shape[0], 1))
-                yield torch.concat(
-                    [
-                        repeated_outcome,
-                        q_base_samples,
-                    ], dim=1
-                ), exact_outcome_log_prob
+            exact_outcome_log_prob_iter = self.exact_kernel.outcomes_with_log_prob_iter(q_base_samples)
+            cut_pass_log_prob = torch.zeros(q_base_samples.shape[0], device=self.device)
+
+        def full_sample_iter() -> Iterator[Tuple[Tensor, Tensor, Tensor, Tensor]]:
+            for exact_outcome, exact_log_prob in exact_outcome_log_prob_iter:
+                repeated_exact_outcome = exact_outcome.repeat((q_base_samples.shape[0], 1))
+                sampled_kernel_cond = torch.concat([repeated_exact_outcome, q_base_samples], dim=1)
+                sampled_kernel_samples, sampled_log_prob = self.sampled_kernel.draw_with_log_prob(sampled_kernel_cond)
+                q = q_init_samples + torch.concat([sampled_kernel_samples, repeated_exact_outcome], dim=1)
+                yield q, sampled_log_prob + exact_log_prob, exact_outcome, exact_log_prob
+
+        return full_sample_iter(), cut_pass_log_prob
 
     def calculate_cross_entropy(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> Tensor:
         """
@@ -183,9 +272,9 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         Parameters
         ----------
         batch
-            The q_base_samples, p_samples, labels, and weights in the batch. Label 0 corresponds to actual data (p) and
-            label 1 to model samples (q). Base samples are samples form the base distribution, not used when label==0.
-            p_samples correspond to the reconstructed value, not used when label==1 (may change in future for
+            The base_samples, samples, labels, and weights in the batch. Label 0 corresponds to actual data (p) and
+            label 1 to model samples (q). Base samples are samples from the base distribution, not used when label==0.
+            samples correspond to the reconstructed value, not used when label==1 (may change in future for
             cross-calibration)
 
         Returns
@@ -194,37 +283,34 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
             The binary cross entropy loss of self.log_p_over_q_model
         """
         base_samples, samples, labels, weights = batch
-
         q_mask = labels == 1
-        p_samples = samples[~q_mask]
-        q_base_samples = base_samples[q_mask]
-        q_init_samples = samples[q_mask]
-        if self.zero_out_init_q_samples:
-            q_init_samples = torch.zeros_like(q_init_samples)
-
-        p_loss = - (weights[~q_mask] * logsigmoid(self.calculate_log_p_over_q(p_samples))).mean()
-
-        q_loss = torch.tensor(0.)
         q_weights = weights[q_mask]
-        for sampled_kernel_cond, exact_outcome_log_prob in self.sampled_kernel_cond_iter(q_base_samples):
-            samples = self.sampled_kernel.draw(sampled_kernel_cond)
-            q = q_init_samples + torch.cat([samples, sampled_kernel_cond[:, :self._exact_sample_dim]], dim=-1)
-            log_p_over_q = self.calculate_log_p_over_q(q)
-            q_loss = q_loss - (q_weights * exact_outcome_log_prob.detach().exp() * logsigmoid(-log_p_over_q)).mean()
+        p_weights = weights[~q_mask]
 
+        weighted_log_sigmoids = torch.tensor(0., device=self.device)
+        full_sample_iter, cut_pass_log_prob = self.full_sample_iter_and_cut_pass_log_prob(base_samples[q_mask], samples[q_mask])
+        for q, sample_log_prob, exact_outcome, exact_log_prob in full_sample_iter:
+            log_p_over_q = self.calculate_log_p_over_q(q)
+            weighted_log_sigmoids = weighted_log_sigmoids + exact_log_prob.detach().exp() * logsigmoid(-log_p_over_q)
+
+        cut_pass_probs = cut_pass_log_prob.exp().detach()
+        q_loss = - (q_weights * cut_pass_probs * weighted_log_sigmoids).mean() / (q_weights * cut_pass_probs).mean()
+        p_loss = - (p_weights * logsigmoid(self.calculate_log_p_over_q(samples[~q_mask]))).mean()
         return (p_loss + q_loss) / 2
 
-    def calculate_kernel_loss(self, batch: Tuple[Tensor, Tensor, Tensor]) -> Tensor:
+    def calculate_kernel_loss(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor], stage: str) -> Tensor:
         """
         Calculates the kernel loss given the learned values of self.log_p_over_q_model
 
         Parameters
         ----------
         batch
-            The base_samples, data_samples, labels, and weights in the batch. Label 0 corresponds to actual data (p) and
-            label 1 to model samples (q). Base samples are samples form the base distribution, not used when label==0.
-            data_samples correspond to the reconstructed value, not used when label==1 (may change in future for
+            The base_samples, samples, labels, and weights in the batch. Label 0 corresponds to actual data (p) and
+            label 1 to model samples (q). Base samples are samples from the base distribution, not used when label==0.
+            samples correspond to the reconstructed value, not used when label==1 (may change in future for
             cross-calibration)
+        stage
+            Prefix used to namespace the metrics logged from this method (e.g. 'train' produces 'train_kernel_loss')
 
         Returns
         -------
@@ -234,24 +320,35 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         base_samples, samples, labels, weights = batch
         q_mask = labels == 1
         q_weights = weights[q_mask]
-        q_base_samples = base_samples[q_mask]
-        q_init_samples = samples[q_mask]
-        if self.zero_out_init_q_samples:
-            q_init_samples = torch.zeros_like(q_init_samples)
 
-        loss = torch.tensor(0., requires_grad=True, device=base_samples.device)
-        for sampled_kernel_cond, exact_outcome_log_prob in self.sampled_kernel_cond_iter(q_base_samples):
-            for i in range(self.kernel_resample_rate):
-                samples, log_prob = self.sampled_kernel.draw_with_log_prob(sampled_kernel_cond)
-                q_samples = q_init_samples + torch.cat([samples, sampled_kernel_cond[:, :self._exact_sample_dim]], dim=-1)
-                with torch.no_grad():
-                    log_p_over_q = self.calculate_log_p_over_q(q_samples)
+        full_sample_iter, cut_pass_log_prob = self.full_sample_iter_and_cut_pass_log_prob(base_samples[q_mask], samples[q_mask])
+        loss = torch.tensor(0., device=base_samples.device, requires_grad=True)
+        log_summand = cut_pass_log_prob + torch.log(q_weights.abs())
+        neg_inf = torch.full_like(log_summand, float('-inf'))
+        log_pos = torch.where(q_weights > 0, log_summand, neg_inf).logsumexp(0)
+        log_neg = torch.where(q_weights < 0, log_summand, neg_inf).logsumexp(0)
+        log_average_cut_pass_prob = (
+            log_pos + torch.log1p(-torch.exp(log_neg - log_pos))
+        ) - math.log(q_weights.shape[0])
+        for q, sample_log_prob, exact_outcome, exact_log_prob in full_sample_iter:
+            with torch.no_grad():
+                log_p_over_q = self.calculate_log_p_over_q(q)
+            total_q_weight = q_weights * (exact_log_prob.detach() + cut_pass_log_prob.detach() - log_average_cut_pass_prob.detach()).exp()
+            loss = loss + (total_q_weight * self.divergence.f_dash_given_log(-log_p_over_q) * (sample_log_prob + cut_pass_log_prob - log_average_cut_pass_prob)).mean()
 
-                loss = loss + (q_weights * exact_outcome_log_prob.detach().exp() * self.divergence.f_dash_given_log(-log_p_over_q) * (exact_outcome_log_prob + log_prob)).mean()
+        if isinstance(self.exact_kernel, FiniteCutKernel) and self.target_cut_pass_prob is not None:
+            normalized_log_poisson_term = - (
+                self.target_cut_pass_prob * log_average_cut_pass_prob - log_average_cut_pass_prob.exp()
+                - (self.target_cut_pass_prob * torch.log(self.target_cut_pass_prob) - self.target_cut_pass_prob)
+            )
+            loss = loss + normalized_log_poisson_term
+            self.log(f"{stage}_normalized_log_poisson_term", normalized_log_poisson_term, on_step=False, on_epoch=True, prog_bar=False)
 
-        return loss / self.kernel_resample_rate
+        self.log(f"{stage}_kernel_loss", loss, on_step=True, on_epoch=True, prog_bar=False)
+        self.log(f"{stage}_average_cut_pass_prob", log_average_cut_pass_prob.exp(), on_step=False, on_epoch=True, prog_bar=False)
+        return loss
 
-    def training_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor], batch_idx) -> None:
+    def training_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> None:
         """
         Optimizes log_p_over_q_model and the parameters in self.kernel to maximise the probability of the p samples
         in q. Logs the current learned divergence between p and q
@@ -267,9 +364,8 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         discriminator_optimizer, kernel_optimizer = self.optimizers()
 
         if self.is_kernel_training():
-            kernel_loss = self.calculate_kernel_loss(batch)
+            kernel_loss = self.calculate_kernel_loss(batch, 'train')
             kernel_loss.backward()
-            self.log('train_kernel_loss', kernel_loss, on_step=True, on_epoch=True, prog_bar=False)
             self.num_accumulated_kernel_batches += 1
             self.log(
                 "kernel params grad sum",
@@ -305,12 +401,13 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         bce = self.calculate_cross_entropy(batch)
         self.log('val_divergence', 1 - bce / self.log_two, on_step=False, on_epoch=True, prog_bar=True)
 
-    def configure_optimizers(self) -> Tuple[Optimizer, Optimizer]:
+    def configure_optimizers(self) -> List[Dict[str, Optimizer]]:
         """
         Returns
         -------
-        Tuple[Optimizer, Optimizer]
-            The classifier's and kernel's optimizer
+        List[Dict[str, Optimizer]]
+            A two-element list of Lightning optimizer-spec dicts: the discriminator's Adam optimizer followed by the
+            kernel's Adam optimizer
         """
         discriminator_optimizer = optim.Adam(self.log_p_over_q_model.parameters(), lr=self.discriminator_opt_lr)
         kernel_params = [*self.sampled_kernel.parameters()]

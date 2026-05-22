@@ -9,12 +9,14 @@ the companion of the f-divergence-*estimation* flow in the main package: there
 the divergence is the quantity of interest, here it is the loss that drives the
 generative model.
 
-The trainer follows an adversarial schedule. A discriminator
-`log_p_over_q_model` is trained as a binary classifier between `p` and `q`
-samples (label `0 = p`, `1 = q`) and produces a detached estimate of
-`log(p/q)`. The kernel is then updated against a score-function surrogate whose
-gradient matches the gradient of `Df(p || q)` with respect to the kernel
-parameters.
+The trainer alternates two steps. A discriminator `log_p_over_q_model` is
+trained as a binary classifier between `p` and `q` samples (label `0 = p`,
+`1 = q`) to produce a per-sample estimate of `log(p/q)`. The kernel is then
+updated against a score-function surrogate that consumes the detached
+`log(p/q)` estimate and whose gradient matches the gradient of
+`Df(p || q)` with respect to the kernel parameters. The kernel does not
+oppose the discriminator — it just uses the discriminator's output to drive
+the f-divergence down.
 
 ## Layout
 
@@ -55,7 +57,6 @@ module = FDivergenceMinimizingKernelTrainer(
     discriminator_opt_lr=1e-3,
     kernel_opt_lr=1e-4,
     start_kernel_train_epoch=1,    # warm up the discriminator first
-    kernel_resample_rate=4,        # variance reduction on the kernel step
 )
 
 trainer = L.Trainer(max_epochs=50)
@@ -69,11 +70,29 @@ instead of sampled and the surrogate is reweighted by `exp(log_prob)`:
 
 ```python
 module = FDivergenceMinimizingKernelTrainer(
-    sampled_kernel=continuous_part,
+    sampled_kernel=sampled_part,
     exact_kernel=discrete_part,
     log_p_over_q_model=discriminator,
     divergence=JensenShannonDivergence(),
     zero_out_init_q_samples=True,  # treat kernel draw as the full q sample
+)
+```
+
+If the `exact_kernel` is a `FiniteCutKernel` (i.e. its sample space has been
+restricted by a cut on an underlying base kernel), the trainer reweights the
+per-outcome terms by the per-row cut-pass probability and normalises by the
+batch-level average cut-pass probability. Optionally supply
+`target_cut_pass_prob` to add a normalised log-Poisson penalty that pulls the
+realised average cut-pass probability toward that target (typically chosen as
+`p_weight_sum / q_weight_sum`):
+
+```python
+module = FDivergenceMinimizingKernelTrainer(
+    sampled_kernel=sampled_part,
+    exact_kernel=cut_discrete_part,        # a FiniteCutKernel
+    log_p_over_q_model=discriminator,
+    divergence=JensenShannonDivergence(),
+    target_cut_pass_prob=0.3,
 )
 ```
 
