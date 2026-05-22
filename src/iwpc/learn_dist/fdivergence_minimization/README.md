@@ -9,12 +9,14 @@ the companion of the f-divergence-*estimation* flow in the main package: there
 the divergence is the quantity of interest, here it is the loss that drives the
 generative model.
 
-The trainer follows an adversarial schedule. A discriminator
-`log_p_over_q_model` is trained as a binary classifier between `p` and `q`
-samples (label `0 = p`, `1 = q`) and produces a detached estimate of
-`log(p/q)`. The kernel is then updated against a score-function surrogate whose
-gradient matches the gradient of `Df(p || q)` with respect to the kernel
-parameters.
+The trainer alternates two steps. A discriminator `log_p_over_q_model` is
+trained as a binary classifier between `p` and `q` samples (label `0 = p`,
+`1 = q`) to produce a per-sample estimate of `log(p/q)`. The kernel is then
+updated against a score-function surrogate that consumes the detached
+`log(p/q)` estimate and whose gradient matches the gradient of
+`Df(p || q)` with respect to the kernel parameters. The kernel does not
+oppose the discriminator — it just uses the discriminator's output to drive
+the f-divergence down.
 
 ## Layout
 

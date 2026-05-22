@@ -16,6 +16,69 @@ from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 
 
 class FDivergenceMinimizingKernelTrainer(LightningModule):
+    """
+    LightningModule that trains a kernel to model a target distribution p by minimising an f-divergence
+    Df(p || q) between p and the kernel-induced distribution q. q is constructed using samples from
+    some predetermined 'base' distribution that we do not assume to have the analytic form of. q is
+    obtained by applying the given kernel to the base distribution. This archetype often arises when
+    doing detector calibration in physics since one measures some data (p) which one believes arises from
+    some truth distribution (the base) convolved with a detector response (roughly the kernel).
+
+    Architecture
+    ------------
+    Two networks train side by side under manual optimisation (`automatic_optimization = False`):
+
+    - `log_p_over_q_model` (the discriminator) is trained as a binary classifier between p and q samples
+      via weighted binary cross-entropy. Its scalar output is interpreted as log(p / q), evaluated by
+      `calculate_log_p_over_q`
+    - `sampled_kernel` (and optionally `exact_kernel`) is trained against a score-function surrogate
+      whose gradient w.r.t. the kernel parameters equals the gradient of Df(p || q)
+    
+    Although this resembles a GAN-type network, it is fundamentally very different.
+
+    The exact kernel is optional and can take three forms, each handled by
+    `full_sample_iter_and_cut_pass_log_prob`:
+
+    - `None`: q is produced by the sampled kernel alone
+    - A non-cut `FiniteKernelInterface`: q's discrete factor enumerates outcomes exactly instead of being
+      sampled, reducing variance
+    - A `FiniteCutKernel`: as above, but additionally the exact kernel restricts a base distribution to a
+      subset of outcomes. Per-row cut-pass probabilities are propagated through the loss so that
+      gradients pull the cut-pass mass toward the value implied by the data weights, and an optional
+      log-Poisson penalty (`target_cut_pass_prob`) lets that target be set explicitly
+
+    Batch contract
+    --------------
+    Every batch is a 4-tuple `(base_samples, samples, labels, weights)`:
+
+    - `labels == 0` rows are p samples; `samples[~q_mask]` is the actual p sample used by the
+      discriminator
+    - `labels == 1` rows are q samples; `base_samples[q_mask]` are draws from the base
+      distribution and `samples[q_mask]` are used as an value for q samples to which the kernel output
+      is added (zeroed when `zero_out_init_q_samples=True`)
+    - `weights` are per-row sample weights; negative weights are supported (signed logsumexp is used in
+      the kernel loss) though may cause training instability
+
+    Assumptions
+    -----------
+    - The discriminator's forward returns a tensor of shape (N, 1) interpretable as a per-sample
+      log(p / q) estimate
+    - The mean of the p-side weights and the mean of the q-side weights are each 1.
+      Both losses divide by `.mean()` rather than `sum / weight_sum`, so unbalanced weight
+      normalisations re-scale the p / q balance and break the discriminator's interpretation as a
+      log(p / q) estimator. Pre-normalise upstream so that average p_weights = average q_weights = 1
+    - When `target_cut_pass_prob` is supplied with a `FiniteCutKernel`, it should be set to the ratio
+      `sum(p_weights) / sum(q_weights)` over the dataset — the cut-pass probability of q that makes the
+      integrated weights of p and q match
+
+    Logged metrics
+    --------------
+    - `train_divergence` / `val_divergence`: `1 - BCE / log 2`, a Jensen-Shannon-style lower bound from
+      the discriminator, regardless of the configured `divergence`
+    - `{train,val}_kernel_loss`, `{train,val}_average_cut_pass_prob`, and (when active)
+      `{train,val}_normalized_log_poisson_term`
+    - `is_kernel_training`, `kernel params grad sum`, and `epoch_train_divergence` as diagnostic streams
+    """
     def __init__(
         self,
         sampled_kernel: TrainableKernelBase,
