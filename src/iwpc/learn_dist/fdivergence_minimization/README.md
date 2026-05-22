@@ -55,7 +55,6 @@ module = FDivergenceMinimizingKernelTrainer(
     discriminator_opt_lr=1e-3,
     kernel_opt_lr=1e-4,
     start_kernel_train_epoch=1,    # warm up the discriminator first
-    kernel_resample_rate=4,        # variance reduction on the kernel step
 )
 
 trainer = L.Trainer(max_epochs=50)
@@ -74,6 +73,24 @@ module = FDivergenceMinimizingKernelTrainer(
     log_p_over_q_model=discriminator,
     divergence=JensenShannonDivergence(),
     zero_out_init_q_samples=True,  # treat kernel draw as the full q sample
+)
+```
+
+If the `exact_kernel` is a `FiniteCutKernel` (i.e. its sample space has been
+restricted by a cut on an underlying base kernel), the trainer reweights the
+per-outcome terms by the per-row cut-pass probability and normalises by the
+batch-level average cut-pass probability. Optionally supply
+`target_cut_pass_prob` to add a normalised log-Poisson penalty that pulls the
+realised average cut-pass probability toward that target (typically chosen as
+`p_weight_sum / q_weight_sum`):
+
+```python
+module = FDivergenceMinimizingKernelTrainer(
+    sampled_kernel=continuous_part,
+    exact_kernel=cut_discrete_part,        # a FiniteCutKernel
+    log_p_over_q_model=discriminator,
+    divergence=JensenShannonDivergence(),
+    target_cut_pass_prob=0.3,
 )
 ```
 
