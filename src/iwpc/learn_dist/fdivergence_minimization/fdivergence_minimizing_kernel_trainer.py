@@ -254,7 +254,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
             with torch.no_grad():
                 log_p_over_q = self.calculate_log_p_over_q(q)
             total_q_weight = q_weights * (exact_log_prob.detach() + cut_pass_log_prob.detach() - average_cut_pass_log_prob.detach()).exp()
-            loss = loss + (total_q_weight * self.divergence.f_dash_given_log(-log_p_over_q) * (sample_log_prob - average_cut_pass_log_prob)).mean()
+            loss = loss + (total_q_weight * self.divergence.f_dash_given_log(-log_p_over_q) * (sample_log_prob + cut_pass_log_prob - average_cut_pass_log_prob)).mean()
         return loss
 
     def training_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor], batch_idx) -> None:
