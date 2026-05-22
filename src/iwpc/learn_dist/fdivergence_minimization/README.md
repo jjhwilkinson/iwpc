@@ -68,7 +68,7 @@ instead of sampled and the surrogate is reweighted by `exp(log_prob)`:
 
 ```python
 module = FDivergenceMinimizingKernelTrainer(
-    sampled_kernel=continuous_part,
+    sampled_kernel=sampled_part,
     exact_kernel=discrete_part,
     log_p_over_q_model=discriminator,
     divergence=JensenShannonDivergence(),
@@ -86,7 +86,7 @@ realised average cut-pass probability toward that target (typically chosen as
 
 ```python
 module = FDivergenceMinimizingKernelTrainer(
-    sampled_kernel=continuous_part,
+    sampled_kernel=sampled_part,
     exact_kernel=cut_discrete_part,        # a FiniteCutKernel
     log_p_over_q_model=discriminator,
     divergence=JensenShannonDivergence(),
