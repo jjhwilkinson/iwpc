@@ -2,7 +2,7 @@
 
 A PyTorch Lightning framework for modelling experiments — composing trainable conditional kernels (detector responses, smearing, instrument models), sampleable base distributions, physical symmetries, and feature encodings — plus the original divergence-estimation toolkit for quantifying differences between modelled and observed distributions.
 
-Originated in collider physics, but every piece is generic and operates on plain `R^D` tensors. Install with `pip install iwpc`. Some familiarity with [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/) is recommended.
+Install with `pip install iwpc`. Some familiarity with [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/) is recommended.
 
 Set `DISABLE_IWPC_WELCOME=1` to silence the ASCII banner printed from `iwpc/__init__.py`.
 
