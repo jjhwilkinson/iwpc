@@ -28,13 +28,11 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
     ------------
     Two networks train side by side under manual optimisation (`automatic_optimization = False`):
 
-    - `log_p_over_q_model` (the discriminator) is trained as a binary classifier between p and q samples
-      via weighted binary cross-entropy. Its scalar output is interpreted as log(p / q), evaluated by
+    - `log_p_over_q_model` is trained to learn the log density ratio log(p / q) using a weighted
+      cross-entropy loss over p and q samples. Its scalar output is evaluated by
       `calculate_log_p_over_q`
     - `sampled_kernel` (and optionally `exact_kernel`) is trained against a score-function surrogate
       whose gradient w.r.t. the kernel parameters equals the gradient of Df(p || q)
-    
-    Although this resembles a GAN-type network, it is fundamentally very different.
 
     The exact kernel is optional and can take three forms, each handled by
     `full_sample_iter_and_cut_pass_log_prob`:
@@ -52,7 +50,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
     Every batch is a 4-tuple `(base_samples, samples, labels, weights)`:
 
     - `labels == 0` rows are p samples; `samples[~q_mask]` is the actual p sample used by the
-      discriminator
+      `log_p_over_q_model`
     - `labels == 1` rows are q samples; `base_samples[q_mask]` are draws from the base
       distribution and `samples[q_mask]` are used as an value for q samples to which the kernel output
       is added (zeroed when `zero_out_init_q_samples=True`)
@@ -61,11 +59,11 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
 
     Assumptions
     -----------
-    - The discriminator's forward returns a tensor of shape (N, 1) interpretable as a per-sample
+    - The `log_p_over_q_model`'s forward returns a tensor of shape (N, 1) interpretable as a per-sample
       log(p / q) estimate
     - The mean of the p-side weights and the mean of the q-side weights are each 1.
       Both losses divide by `.mean()` rather than `sum / weight_sum`, so unbalanced weight
-      normalisations re-scale the p / q balance and break the discriminator's interpretation as a
+      normalisations re-scale the p / q balance and break the `log_p_over_q_model`'s interpretation as a
       log(p / q) estimator. Pre-normalise upstream so that average p_weights = average q_weights = 1
     - When `target_cut_pass_prob` is supplied with a `FiniteCutKernel`, it should be set to the ratio
       `sum(p_weights) / sum(q_weights)` over the dataset — the cut-pass probability of q that makes the
@@ -74,7 +72,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
     Logged metrics
     --------------
     - `train_divergence` / `val_divergence`: `1 - BCE / log 2`, a Jensen-Shannon-style lower bound from
-      the discriminator, regardless of the configured `divergence`
+      the `log_p_over_q_model`, regardless of the configured `divergence`
     - `{train,val}_kernel_loss`, `{train,val}_average_cut_pass_prob`, and (when active)
       `{train,val}_normalized_log_poisson_term`
     - `is_kernel_training`, `kernel params grad sum`, and `epoch_train_divergence` as diagnostic streams
@@ -85,10 +83,10 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         log_p_over_q_model: Module,
         divergence: DifferentiableFDivergence,
         exact_kernel: FiniteKernelInterface | None = None,
-        discriminator_opt_lr: float = 1e-3,
+        log_p_over_q_model_opt_lr: float = 1e-3,
         kernel_opt_lr: float = 1e-4,
         start_kernel_train_epoch: int = 1,
-        start_discriminator_train_epoch: int = 0,
+        start_log_p_over_q_model_train_epoch: int = 0,
         zero_out_init_q_samples: bool = False,
         accumulate_kernel_batches: int = -1,
         target_cut_pass_prob: float | None = None,
@@ -100,22 +98,22 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
             The trainable kernel that produces q via convolution with the base distribution. Optimised to minimise the
             f-divergence between p and q
         log_p_over_q_model
-            A torch Module that maps a sample x to a scalar estimate of log(p(x) / q(x)). Trained as a binary classifier
-            between p and q samples
+            A torch Module that maps a sample x to a scalar estimate of log(p(x) / q(x)). Trained to learn the log
+            density ratio using a cross-entropy loss over p and q samples
         divergence
-            The DifferentiableFDivergence to minimise. Both the discriminator's BCE loss and the kernel's surrogate loss
+            The DifferentiableFDivergence to minimise. Both the `log_p_over_q_model`'s BCE loss and the kernel's surrogate loss
             are derived from it
         exact_kernel
             Optional FiniteKernelInterface representing a discrete component of q whose outcomes can be enumerated
             exactly rather than sampled. If provided, expectations over its outcomes are taken via summation
-        discriminator_opt_lr
-            Learning rate for the discriminator (log_p_over_q_model) Adam optimizer
+        log_p_over_q_model_opt_lr
+            Learning rate for the `log_p_over_q_model` Adam optimizer
         kernel_opt_lr
             Learning rate for the kernel Adam optimizer
         start_kernel_train_epoch
-            Epoch from which the kernel begins training. Earlier epochs only train the discriminator
-        start_discriminator_train_epoch
-            Epoch from which the discriminator begins training
+            Epoch from which the kernel begins training. Earlier epochs only train the `log_p_over_q_model`
+        start_log_p_over_q_model_train_epoch
+            Epoch from which the `log_p_over_q_model` begins training
         zero_out_init_q_samples
             If True, the q-side input samples are zeroed before being added to the kernel draw. Used when the kernel
             output is to be interpreted as the full sample rather than a residual on top of an initial guess
@@ -134,10 +132,10 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         self.divergence = divergence
         self.exact_kernel = exact_kernel
         self._exact_sample_dim = 0 if exact_kernel is None else exact_kernel.sample_dimension
-        self.discriminator_opt_lr = discriminator_opt_lr
+        self.log_p_over_q_model_opt_lr = log_p_over_q_model_opt_lr
         self.kernel_opt_lr = kernel_opt_lr
         self.start_kernel_train_epoch = start_kernel_train_epoch
-        self.start_discriminator_train_epoch = start_discriminator_train_epoch
+        self.start_log_p_over_q_model_train_epoch = start_log_p_over_q_model_train_epoch
         self.zero_out_init_q_samples = zero_out_init_q_samples
         self.accumulate_kernel_batches = accumulate_kernel_batches
         self.num_accumulated_kernel_batches = 0
@@ -160,22 +158,22 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
             # and (np.random.random() < 0.2)
         )
 
-    def is_discriminator_training(self) -> bool:
+    def is_log_p_over_q_model_training(self) -> bool:
         """
         Returns
         -------
         bool
-            Whether the discriminator should be trained on the current step. True once self.current_epoch has reached
-            self.start_discriminator_train_epoch
+            Whether the `log_p_over_q_model` should be trained on the current step. True once self.current_epoch has reached
+            self.start_log_p_over_q_model_train_epoch
         """
         return (
-            (self.current_epoch >= self.start_discriminator_train_epoch)
+            (self.current_epoch >= self.start_log_p_over_q_model_train_epoch)
             # and (np.random.random() < 0.2)
         )
 
     def calculate_log_p_over_q(self, samples: Tensor) -> Tensor:
         """
-        Evaluates the discriminator on the given samples and returns the scalar log(p / q) estimate per sample
+        Evaluates the `log_p_over_q_model` on the given samples and returns the scalar log(p / q) estimate per sample
 
         Parameters
         ----------
@@ -361,7 +359,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
             data_samples correspond to the reconstructed value, not used when label==1 (may change in future for
             cross-calibration)
         """
-        discriminator_optimizer, kernel_optimizer = self.optimizers()
+        log_p_over_q_model_optimizer, kernel_optimizer = self.optimizers()
 
         if self.is_kernel_training():
             kernel_loss = self.calculate_kernel_loss(batch, 'train')
@@ -383,14 +381,14 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         self.log('epoch_train_divergence', self.train_divergence, on_step=False, on_epoch=True, prog_bar=True)
         self.log('is_kernel_training', int(self.is_kernel_training()), on_step=True, on_epoch=False, prog_bar=True)
         self.train_divergence(train_divergence)
-        if self.is_discriminator_training():
-            discriminator_optimizer.zero_grad()
+        if self.is_log_p_over_q_model_training():
+            log_p_over_q_model_optimizer.zero_grad()
             bce.backward()
-            discriminator_optimizer.step()
+            log_p_over_q_model_optimizer.step()
 
     def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> None:
         """
-        Calculates the validation learned divergence between p and q via the discriminator's BCE loss and logs it as
+        Calculates the validation learned divergence between p and q via the `log_p_over_q_model`'s BCE loss and logs it as
         `val_divergence`
 
         Parameters
@@ -406,16 +404,16 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         Returns
         -------
         List[Dict[str, Optimizer]]
-            A two-element list of Lightning optimizer-spec dicts: the discriminator's Adam optimizer followed by the
+            A two-element list of Lightning optimizer-spec dicts: the `log_p_over_q_model`'s Adam optimizer followed by the
             kernel's Adam optimizer
         """
-        discriminator_optimizer = optim.Adam(self.log_p_over_q_model.parameters(), lr=self.discriminator_opt_lr)
+        log_p_over_q_model_optimizer = optim.Adam(self.log_p_over_q_model.parameters(), lr=self.log_p_over_q_model_opt_lr)
         kernel_params = [*self.sampled_kernel.parameters()]
         if self.exact_kernel is not None:
             kernel_params.extend(self.exact_kernel.parameters())
         kernel_optimizer = optim.Adam(kernel_params, lr=self.kernel_opt_lr)
 
         return [
-            {'optimizer': discriminator_optimizer},
+            {'optimizer': log_p_over_q_model_optimizer},
             {'optimizer': kernel_optimizer},
         ]

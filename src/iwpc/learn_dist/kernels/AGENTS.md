@@ -97,15 +97,18 @@ the index variable has few outcomes and is read directly from `cond`.
 ## Trainers (which to pick)
 
 All three are `LightningModule`s that take an outer Lightning `Trainer`
-and a `log_p_over_q_model` adversary; batches are
-`(base_samples, data_samples, labels, weights)` with `label==0` for
-real data (`p`) and `label==1` for kernel samples (`q`).
+and a co-trained `log_p_over_q_model`; batches are
+`(base_samples, data_samples, labels, weights)` with `label==0` for real
+data (`p`) and `label==1` for kernel samples (`q`). The
+`log_p_over_q_model` is trained to learn the log density ratio using a
+cross-entropy loss; the kernel's loss consumes the detached `log(p/q)`
+estimate.
 
-- `UnLabelledKernelTrainer` — default. Alternates training the
-  discriminator and the kernel via `KernelKLDivergenceGradientLoss`
+- `UnLabelledKernelTrainer` — default. Alternates a `log_p_over_q_model` step
+  with a kernel step via `KernelKLDivergenceGradientLoss`
   (`-mean(weights * log_prob * stop_grad(p/q))` from kernel samples).
   Gates kernel updates on `train_divergence > min_train_divergence`;
-  decays `min_train_divergence` if the discriminator saturates; drops
+  decays `min_train_divergence` if the `log_p_over_q_model` saturates; drops
   `kernel_lr` via `KernelLRAdjustor` (fits a line to recent
   divergences, drops LR if the residual std rivals the intercept).
 - `PartiallyExactUnLabelledKernelTrainer` — for joint kernels of the
@@ -114,7 +117,7 @@ real data (`p`) and `label==1` for kernel samples (`q`).
   (uses a `JensenShannonDivergence._f_dash_given_log_torch` weighting).
   Lower-variance when applicable.
 - `UnlabelledMultiKernelTrainer` — for a `ConcatenatedKernel` whose
-  independent factors each have their own discriminator
+  independent factors each have their own `log_p_over_q_model`
   (`log_p_over_q_models: list`). Uses
   `MultiKernelKLDivergenceGradientLoss` which calls
   `combined_kernel.draw_with_separate_log_prob`.

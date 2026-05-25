@@ -16,8 +16,8 @@ from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 class KernelLRAdjustor(LRScheduler):
     """
     Custom LR scheduler that performs a simple hypothesis test of whether the recent size of fluctuations in the
-    divergence predicted by the discriminating model are comparable in size to the actual predicted divergence. If so
-    this is interpreted as the kernels changing to quickly for the discriminating model to keep up, and so the kernel
+    divergence predicted by the `log_p_over_q_model` are comparable in size to the actual predicted divergence. If so
+    this is interpreted as the kernels changing to quickly for the `log_p_over_q_model` to keep up, and so the kernel
     optimizer learning rate is dropped
 
     The hypothesis test performs a least-squares linear fit to the recent losses. If the standard deviation of the
@@ -41,7 +41,7 @@ class KernelLRAdjustor(LRScheduler):
         kernel_optimizer
             The optimizer responsible for training the kernel
         window_size
-            The window, in number of epochs, over which the discriminator divergence hypothesis test is performed
+            The window, in number of epochs, over which the `log_p_over_q_model` divergence hypothesis test is performed
         noise_multiple
             The threshold number of standard deviations of the noise below which the kernel's LR is dropped
         decay_factor
@@ -63,13 +63,13 @@ class KernelLRAdjustor(LRScheduler):
 
     def step(self, divergence: Tensor | None = None) -> None:
         """
-        Performs a step of the scheduler, recording the next discriminator-predicted divergence depending on the current
+        Performs a step of the scheduler, recording the next `log_p_over_q_model`-predicted divergence depending on the current
         epoch
 
         Parameters
         ----------
         divergence
-            The current predicted divergence between the model and actual data by a discriminator classifier
+            The current predicted divergence between the model and actual data by a `log_p_over_q_model`
         """
         self.last_epoch += 1
         if divergence is None or self.last_epoch < self.warmup:
@@ -146,7 +146,7 @@ class KernelKLDivergenceGradientLoss:
         kernel
             The TrainableKernelBase used to produce q
         log_p_over_q_model
-            A model that provides an estimate of log(p(x) / q(x)) usually obtained by training a classifier
+            A model that provides an estimate of log(p(x) / q(x)) usually obtained by training a model to learn the log density ratio using a cross-entropy loss
         weights
             An optional array of sample weights
 
@@ -177,14 +177,14 @@ class UnLabelledKernelTrainer(LightningModule):
     base-distribution are required, the probability distribution itself is not required
 
     A number of tricks are employed to increase training stability. Firstly, we would like to only train the kernel when
-    the classifier-predicted divergence is relatively saturated. To this end, we prevent the kernel changing too quickly
+    the `log_p_over_q_model`-predicted divergence is relatively saturated. To this end, we prevent the kernel changing too quickly
     by only training the kernel if the current predicted divergence is greater than min_train_divergence. If the value
     of the predicted divergence is determined to have saturated below min_train_divergence (as decided by
     should_drop_train_divergence), then min_train_divergence is reduced by a factor divergence_saturation_decay.
 
     Secondly, if the kernel's LR is too high, then the distribution of the samples from q change too quickly for the
-    discriminator to keep up. This often manifests as the loss of the discriminator fluctuating rapidly from
-    epoch-to-epoch. An instance of KernelLRAdjustor is used to monitor the size of fluctuations in the discriminator's
+    `log_p_over_q_model` to keep up. This often manifests as the loss of the `log_p_over_q_model` fluctuating rapidly from
+    epoch-to-epoch. An instance of KernelLRAdjustor is used to monitor the size of fluctuations in the `log_p_over_q_model`'s
     predicted divergence, and reduces the kernel's LR if required.
     """
     def __init__(
@@ -195,7 +195,7 @@ class UnLabelledKernelTrainer(LightningModule):
         divergence_saturation_patience: int = 10,
         divergence_saturation_decay: float = 0.5,
         drop_cooldown: int = 5,
-        discriminator_lr: float = 1e-3,
+        log_p_over_q_model_lr: float = 1e-3,
         kernel_lr: float = 1e-4,
         start_kernel_train_epoch: int = 0,
     ):
@@ -207,7 +207,7 @@ class UnLabelledKernelTrainer(LightningModule):
         kernel
             The TrainableKernelBase to train
         log_p_over_q_model
-            A classifier model used to continuously train to learn the probability ratio of a given sample originating
+            A model trained continuously via a cross-entropy loss to learn the log density ratio of a given sample originating
             from p or from q
         min_train_divergence
             The initial value of min_train_divergence, below which the kernel is not trained
@@ -219,8 +219,8 @@ class UnLabelledKernelTrainer(LightningModule):
             min_train_divergence
         drop_cooldown
             When min_train_divergence is dropped, the value cannot be dropped again for this many epochs
-        discriminator_lr
-            The learning rate of the discriminator
+        log_p_over_q_model_lr
+            The learning rate of the `log_p_over_q_model`
         kernel_lr
             The initial learning rate of the kernel
         """
@@ -230,7 +230,7 @@ class UnLabelledKernelTrainer(LightningModule):
         self.loss = KernelKLDivergenceGradientLoss(kernel_resample_rate=1)
         self.automatic_optimization = False
         self.register_buffer('log_two', torch.log(torch.tensor(2.)))
-        self.discriminator_lr = discriminator_lr
+        self.log_p_over_q_model_lr = log_p_over_q_model_lr
         self.kernel_lr = kernel_lr
 
         self.train_divergence = MeanMetric()
@@ -244,7 +244,7 @@ class UnLabelledKernelTrainer(LightningModule):
 
     def should_drop_min_train_divergence(self) -> bool:
         """
-        Decide whether the divergence predicted by the discriminator has saturated below min_train_divergence by
+        Decide whether the divergence predicted by the `log_p_over_q_model` has saturated below min_train_divergence by
         checking whether it has exceeded min_train_divergence by two standard deviations of the mean within the last
         divergence_saturation_patience epochs
 
@@ -346,7 +346,7 @@ class UnLabelledKernelTrainer(LightningModule):
             data_samples correspond to the reconstructed value, not used when label==1 (may change in future for
             cross-calibration)
         """
-        discriminator_optimizer, kernel_optimizer = self.optimizers()
+        log_p_over_q_model_optimizer, kernel_optimizer = self.optimizers()
 
         if self.is_kernel_training():
             kernel_loss = self.calculate_kernel_loss(batch)
@@ -361,9 +361,9 @@ class UnLabelledKernelTrainer(LightningModule):
         self.log('epoch_train_divergence', self.train_divergence, on_step=False, on_epoch=True, prog_bar=True)
         self.log('is_kernel_training', int(self.is_kernel_training()), on_step=False, on_epoch=True, prog_bar=True)
         self.log('min_train_divergence', self.min_train_divergence, on_step=False, on_epoch=True, prog_bar=True)
-        discriminator_optimizer.zero_grad()
+        log_p_over_q_model_optimizer.zero_grad()
         bce.backward()
-        discriminator_optimizer.step()
+        log_p_over_q_model_optimizer.step()
 
         self.train_divergence(train_divergence)
 
@@ -379,13 +379,13 @@ class UnLabelledKernelTrainer(LightningModule):
         Returns
         -------
         Tuple[Optimizer, Optimizer]
-            The classifier's and kernel's optimizer
+            The `log_p_over_q_model`'s and kernel's optimizer
         """
-        discriminator_optimizer = optim.Adam(self.log_p_over_q_model.parameters(), lr=self.discriminator_lr)
+        log_p_over_q_model_optimizer = optim.Adam(self.log_p_over_q_model.parameters(), lr=self.log_p_over_q_model_lr)
         kernel_optimizer = optim.Adam(self.kernel.parameters(), lr=self.kernel_lr)
 
         return [
-            {'optimizer': discriminator_optimizer},
+            {'optimizer': log_p_over_q_model_optimizer},
             {'optimizer': kernel_optimizer, 'lr_scheduler': KernelLRAdjustor(kernel_optimizer, -1, 10)},
         ]
 

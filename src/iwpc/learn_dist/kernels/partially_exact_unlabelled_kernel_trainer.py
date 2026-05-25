@@ -53,7 +53,7 @@ class PartiallyExactKernelKLDivergenceGradientLoss:
         kernel
             The TrainableKernelBase used to produce q
         log_p_over_q_model
-            A model that provides an estimate of log(p(x) / q(x)) usually obtained by training a classifier
+            A model that provides an estimate of log(p(x) / q(x)) usually obtained by training a model to learn the log density ratio using a cross-entropy loss
         weights
             An optional array of sample weights
 
@@ -97,7 +97,7 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         divergence_saturation_patience: int = 10,
         divergence_saturation_decay: float = 0.5,
         drop_cooldown: int = 5,
-        discriminator_lr: float = 1e-3,
+        log_p_over_q_model_lr: float = 1e-3,
         kernel_lr: float = 1e-4,
         start_kernel_train_epoch: int = 1,
         kernel_resample_rate: int = 1,
@@ -112,7 +112,7 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         kernel
             The TrainableKernelBase to train
         log_p_over_q_model
-            A classifier model used to continuously train to learn the probability ratio of a given sample originating
+            A model trained continuously via a cross-entropy loss to learn the log density ratio of a given sample originating
             from p or from q
         min_train_divergence
             The initial value of min_train_divergence, below which the kernel is not trained
@@ -124,8 +124,8 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
             min_train_divergence
         drop_cooldown
             When min_train_divergence is dropped, the value cannot be dropped again for this many epochs
-        discriminator_lr
-            The learning rate of the discriminator
+        log_p_over_q_model_lr
+            The learning rate of the `log_p_over_q_model`
         kernel_lr
             The initial learning rate of the kernel
         """
@@ -136,7 +136,7 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         self.loss = PartiallyExactKernelKLDivergenceGradientLoss(kernel_resample_rate=kernel_resample_rate)
         self.automatic_optimization = False
         self.register_buffer('log_two', torch.log(torch.tensor(2.)))
-        self.discriminator_lr = discriminator_lr
+        self.log_p_over_q_model_lr = log_p_over_q_model_lr
         self.kernel_lr = kernel_lr
 
         self.train_divergence = MeanMetric()
@@ -154,7 +154,7 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
 
     def should_drop_min_train_divergence(self) -> bool:
         """
-        Decide whether the divergence predicted by the discriminator has saturated below min_train_divergence by
+        Decide whether the divergence predicted by the `log_p_over_q_model` has saturated below min_train_divergence by
         checking whether it has exceeded min_train_divergence by two standard deviations of the mean within the last
         divergence_saturation_patience epochs
 
@@ -269,7 +269,7 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
             data_samples correspond to the reconstructed value, not used when label==1 (may change in future for
             cross-calibration)
         """
-        discriminator_optimizer, kernel_optimizer = self.optimizers()
+        log_p_over_q_model_optimizer, kernel_optimizer = self.optimizers()
 
         if self.is_kernel_training():
             kernel_optimizer.zero_grad()
@@ -285,9 +285,9 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         self.log('is_kernel_training', int(self.is_kernel_training()), on_step=True, on_epoch=False, prog_bar=True)
         self.log('min_train_divergence', self.min_train_divergence, on_step=False, on_epoch=True, prog_bar=True)
         # if not self.is_kernel_training():
-        discriminator_optimizer.zero_grad()
+        log_p_over_q_model_optimizer.zero_grad()
         # bce.backward()
-        # discriminator_optimizer.step()
+        # log_p_over_q_model_optimizer.step()
 
         self.train_divergence(train_divergence)
 
@@ -326,7 +326,7 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
 
     def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor]) -> None:
         """
-        Calculates the validation learned divergence between p and q via the discriminator's BCE loss and logs it as
+        Calculates the validation learned divergence between p and q via the `log_p_over_q_model`'s BCE loss and logs it as
         `val_divergence`
 
         Parameters
@@ -342,13 +342,13 @@ class PartiallyExactUnLabelledKernelTrainer(LightningModule):
         Returns
         -------
         Tuple[Optimizer, Optimizer]
-            The classifier's and kernel's optimizer
+            The `log_p_over_q_model`'s and kernel's optimizer
         """
-        discriminator_optimizer = optim.Adam(self.log_p_over_q_model.parameters(), lr=self.discriminator_lr)
+        log_p_over_q_model_optimizer = optim.Adam(self.log_p_over_q_model.parameters(), lr=self.log_p_over_q_model_lr)
         kernel_optimizer = optim.Adam([*self.exact_kernel.parameters(), *self.sampled_kernel.parameters()], lr=self.kernel_lr)
 
         return [
-            {'optimizer': discriminator_optimizer},
+            {'optimizer': log_p_over_q_model_optimizer},
             {'optimizer': kernel_optimizer, 'lr_scheduler': KernelLRAdjustor(kernel_optimizer, -1, 10)},
         ]
 

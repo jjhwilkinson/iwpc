@@ -36,7 +36,7 @@ class MultiKernelKLDivergenceGradientLoss:
         kernel
             The TrainableKernelBase used to produce q
         log_p_over_q_model
-            A model that provides an estimate of log(p(x) / q(x)) likely obtained by training a classifier
+            A model that provides an estimate of log(p(x) / q(x)) likely obtained by training a model to learn the log density ratio using a cross-entropy loss
         weights
             An optional array of sample weights
 
@@ -126,7 +126,7 @@ class UnlabelledMultiKernelTrainer(LightningModule):
         Optimizes log_p_over_q_model and the parameters in self.kernel to maximise the probability of the p samples
         in q. Logs the current learned divergence between p and q
         """
-        discriminator_optimizer, kernel_optimizer = self.optimizers()
+        log_p_over_q_model_optimizer, kernel_optimizer = self.optimizers()
 
         if self.current_epoch >= self.start_kernel_training_epoch:
             kernel_loss = self.calculate_kernel_loss(batch)
@@ -139,10 +139,10 @@ class UnlabelledMultiKernelTrainer(LightningModule):
         bce_losses = self.calculate_cross_entropies(batch, 'train')
         for i, bce in enumerate(bce_losses):
             self.log(f'train_divergence_{i}', 1 - bce / self.log_two, on_step=True, on_epoch=True, prog_bar=False)
-        discriminator_optimizer.zero_grad()
+        log_p_over_q_model_optimizer.zero_grad()
         self.log(f'train_divergence_mean', sum(1 - bce / self.log_two for bce in bce_losses) / len(bce_losses), on_step=True, on_epoch=True, prog_bar=True)
         sum(bce_losses).backward()
-        discriminator_optimizer.step()
+        log_p_over_q_model_optimizer.step()
 
     def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor]):
         """
@@ -161,8 +161,8 @@ class UnlabelledMultiKernelTrainer(LightningModule):
         Returns
         -------
         Tuple[Optimizer, Optimizer]
-            The classifier's and kernel's optimizer
+            The `log_p_over_q_model`'s and kernel's optimizer
         """
-        discriminator_optimizer = Adam(list(chain(*[log_p_over_q_model.parameters() for log_p_over_q_model in self.log_p_over_q_models])), lr=1e-3)
+        log_p_over_q_model_optimizer = Adam(list(chain(*[log_p_over_q_model.parameters() for log_p_over_q_model in self.log_p_over_q_models])), lr=1e-3)
         kernel_optimizer = Adam(self.combined_kernel.parameters(), lr=1e-4)
-        return discriminator_optimizer, kernel_optimizer
+        return log_p_over_q_model_optimizer, kernel_optimizer
