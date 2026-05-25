@@ -23,15 +23,19 @@ divergence flow — trainers here define their own batch layout.
 - `kernels/` also contains the **unlabelled trainers**
   (`UnlabelledKernelTrainer`, `UnlabelledMultiKernelTrainer`,
   `PartiallyExactUnlabelledKernelTrainer`) — Lightning modules that train a
-  kernel against unlabelled samples by alternating a kernel optimiser with a
-  classifier-style discriminator and a custom `KernelLRAdjustor` LR scheduler.
+  kernel against unlabelled samples by alternating a kernel update with a
+  step of a co-trained `log_p_over_q_model` that learns the log density
+  ratio via a cross-entropy loss. The kernel's loss consumes the detached
+  `log(p/q)` estimate. A custom `KernelLRAdjustor` LR scheduler drives the
+  kernel learning rate.
 - `fdivergence_minimization/FDivergenceMinimizingKernelTrainer` is the
   divergence-aware counterpart: given paired `(p_samples, q_input_samples)` it
   trains a kernel to minimise a chosen `DifferentiableFDivergence` between `p`
-  and the kernel-convolved `q`, with a co-trained `log_p_over_q_model`
-  discriminator. The kernel gradient comes from
+  and the kernel-convolved `q`, alongside a co-trained `log_p_over_q_model`
+  that estimates the density ratio. The kernel gradient comes from
   `fdivergence_gradient_surrogate_loss` (uses
-  `DifferentiableFDivergence.f_dash_given_log` for numerical stability).
+  `DifferentiableFDivergence.f_dash_given_log` for numerical stability) and
+  matches the gradient of `Df(p || q)` w.r.t. the kernel parameters.
 
 ## `classifier_reweighting.py` — `DistributionApproximator`
 

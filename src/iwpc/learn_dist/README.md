@@ -5,14 +5,15 @@ bounds on f-divergences between two empirical distributions, `learn_dist` reuses
 the same machinery to **learn a distribution** (or a conditional distribution
 `k(y|x)`) from samples — either by classifier reweighting, by training a kernel
 to minimise an f-divergence against a target, or by training a kernel against
-unlabelled data via a discriminator.
+unlabelled data using a co-trained `log_p_over_q_model` to estimate the density ratio
+`p/q` that appears in the kernel's loss.
 
 It is **independent** of `calculate_divergence` and `run_reweight_loop`, but
 shares:
 
 - `iwpc.divergences.DifferentiableFDivergence` — both the surrogate kernel loss
-  and the discriminator's BCE loss in `fdivergence_minimization` are derived
-  from a chosen `DifferentiableFDivergence`.
+  and the `log_p_over_q_model`'s BCE loss in `fdivergence_minimization` are
+  derived from a chosen `DifferentiableFDivergence`.
 - The PyTorch Lightning trainer scaffolding — every trainer in `learn_dist` is
   a `LightningModule`, so existing `Trainer`/`ModelCheckpoint`/`EarlyStopping`
   patterns transfer over.
@@ -28,9 +29,9 @@ information, or weighted samples from a target distribution).
 ### `classifier_reweighting.py` — `DistributionApproximator`
 
 A `LightningModule` that learns an unconditional density `p(x)` from samples by
-training a binary classifier between the data samples and samples drawn from a
-known `SamplableBaseModel`. The classifier output is interpreted as
-`log p(x)/q(x)`; combined with the base distribution's analytic
+training a `log_p_over_q_model` to learn the log density ratio between the
+data samples and samples drawn from a known `SamplableBaseModel` using a
+cross-entropy loss. Combined with the base distribution's analytic
 `log_prob`, this yields a tractable `learned_log_prob`, plus a `draw` method
 that returns weighted samples from the learned distribution. Optimiser is Adam
 with `ReduceLROnPlateau` on `val_loss`.
@@ -55,7 +56,8 @@ indexed-finite, plus structural kernels for composing simpler kernels
 the unlabelled trainers (`UnlabelledKernelTrainer`,
 `UnlabelledMultiKernelTrainer`,
 `PartiallyExactUnlabelledKernelTrainer`) that fit a kernel to unlabelled data
-by alternating a kernel optimiser with a discriminator. See
+by alternating a kernel update with a step of a co-trained `log_p_over_q_model` that
+estimates the density ratio `p/q` used in the kernel's loss. See
 `kernels/README.md`.
 
 ### `fdivergence_minimization/`
@@ -63,9 +65,11 @@ by alternating a kernel optimiser with a discriminator. See
 `FDivergenceMinimizingKernelTrainer` — Lightning trainer that optimises a
 `TrainableKernelBase` to minimise a chosen `DifferentiableFDivergence` between
 a target distribution `p` (provided through samples) and `q` (the kernel
-convolved against an input/base sample). A discriminator network estimates
-`log p/q` and is trained as a BCE classifier; the kernel is trained against a
-surrogate gradient loss derived from the divergence's `f_dash_given_log`. An
+convolved against an input/base sample). A co-trained `log_p_over_q_model`
+learns the log density ratio `log p/q` using a cross-entropy loss; the
+kernel consumes that (detached) ratio estimate in a surrogate gradient
+loss derived from the divergence's `f_dash_given_log`, whose gradient
+matches the gradient of `Df(p || q)` with respect to the kernel parameters. An
 optional `FiniteKernelInterface` lets a discrete component of `q` be summed
 exactly rather than sampled. See `fdivergence_minimization/README.md`.
 

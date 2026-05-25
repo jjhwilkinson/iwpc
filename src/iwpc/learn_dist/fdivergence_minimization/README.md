@@ -9,20 +9,18 @@ the companion of the f-divergence-*estimation* flow in the main package: there
 the divergence is the quantity of interest, here it is the loss that drives the
 generative model.
 
-The trainer alternates two steps. A discriminator `log_p_over_q_model` is
-trained as a binary classifier between `p` and `q` samples (label `0 = p`,
-`1 = q`) to produce a per-sample estimate of `log(p/q)`. The kernel is then
-updated against a score-function surrogate that consumes the detached
-`log(p/q)` estimate and whose gradient matches the gradient of
-`Df(p || q)` with respect to the kernel parameters. The kernel does not
-oppose the discriminator — it just uses the discriminator's output to drive
-the f-divergence down.
+The trainer alternates two steps. `log_p_over_q_model` is trained to learn
+the log density ratio `log(p/q)` using a cross-entropy loss over `p` and
+`q` samples (label `0 = p`, `1 = q`). The kernel is then updated against a
+score-function surrogate that consumes the detached `log(p/q)` estimate
+and whose gradient matches the gradient of `Df(p || q)` with respect to
+the kernel parameters.
 
 ## Layout
 
 - `fdivergence_minimizing_kernel_trainer.py` -
   `FDivergenceMinimizingKernelTrainer`, a `LightningModule` with manual
-  optimisation that alternates a discriminator step (BCE) and a kernel step
+  optimisation that alternates a `log_p_over_q_model` step (BCE) and a kernel step
   (gradient surrogate). Logs `train_divergence` / `val_divergence`
   (`1 - BCE / log 2`, a JS-style lower bound) and `train_kernel_loss`.
 - `fdivergence_gradient_surrogate_loss.py` -
@@ -47,16 +45,16 @@ from iwpc.learn_dist.fdivergence_minimization import (
 )
 from iwpc.models.utils import basic_model_factory
 
-kernel = GaussianKernel(cond=2)                             # trainable q (1D sample, 2D conditioning)
-discriminator = basic_model_factory(input=2, output=1)      # log(p/q) net
+kernel = GaussianKernel(cond=2)
+ratio_estimator = basic_model_factory(input=2, output=1)
 
 module = FDivergenceMinimizingKernelTrainer(
     sampled_kernel=kernel,
-    log_p_over_q_model=discriminator,
+    log_p_over_q_model=ratio_estimator,
     divergence=KLDivergence(),
-    discriminator_opt_lr=1e-3,
+    log_p_over_q_model_opt_lr=1e-3,
     kernel_opt_lr=1e-4,
-    start_kernel_train_epoch=1,    # warm up the discriminator first
+    start_kernel_train_epoch=1,
 )
 
 trainer = L.Trainer(max_epochs=50)
@@ -72,9 +70,9 @@ instead of sampled and the surrogate is reweighted by `exp(log_prob)`:
 module = FDivergenceMinimizingKernelTrainer(
     sampled_kernel=sampled_part,
     exact_kernel=discrete_part,
-    log_p_over_q_model=discriminator,
+    log_p_over_q_model=ratio_estimator,
     divergence=JensenShannonDivergence(),
-    zero_out_init_q_samples=True,  # treat kernel draw as the full q sample
+    zero_out_init_q_samples=True,
 )
 ```
 
@@ -89,12 +87,13 @@ realised average cut-pass probability toward that target (typically chosen as
 ```python
 module = FDivergenceMinimizingKernelTrainer(
     sampled_kernel=sampled_part,
-    exact_kernel=cut_discrete_part,        # a FiniteCutKernel
-    log_p_over_q_model=discriminator,
+    exact_kernel=cut_discrete_part,
+    log_p_over_q_model=ratio_estimator,
     divergence=JensenShannonDivergence(),
     target_cut_pass_prob=0.3,
 )
 ```
 
 Use `accumulate_kernel_batches > 0` to accumulate kernel gradients across
-several batches before stepping (the discriminator still steps every batch).
+several batches before stepping (the ratio estimator still steps every
+batch).

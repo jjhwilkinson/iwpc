@@ -36,7 +36,7 @@ class FDivergenceGradientSurrogateLoss:
         q_weights
             Sample weights for the q-batch, shape (N,)
         log_p_over_q
-            Detached estimate of log(p / q) at each sample, shape (N,), typically produced by a learned classifier
+            Detached estimate of log(p / q) at each sample, shape (N,), typically produced by a learned `log_p_over_q_model`
 
         Returns
         -------

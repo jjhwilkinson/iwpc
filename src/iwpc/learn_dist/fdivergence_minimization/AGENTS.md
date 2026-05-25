@@ -7,25 +7,28 @@ sampled_kernel: TrainableKernelBase,
 log_p_over_q_model: Module,
 divergence: DifferentiableFDivergence,
 exact_kernel: FiniteKernelInterface | None = None,
-discriminator_opt_lr: float = 1e-3,
+log_p_over_q_model_opt_lr: float = 1e-3,
 kernel_opt_lr: float = 1e-4,
 start_kernel_train_epoch: int = 1,
-start_discriminator_train_epoch: int = 0,
+start_log_p_over_q_model_train_epoch: int = 0,
 zero_out_init_q_samples: bool = False,
 accumulate_kernel_batches: int = -1,
 target_cut_pass_prob: float | None = None,
 ```
 
 `automatic_optimization = False`; `configure_optimizers` returns a two-element
-`list[dict[str, Optimizer]]` of Lightning optimiser-spec dicts (discriminator,
-then kernel + optional `exact_kernel`). Batch contract:
+`list[dict[str, Optimizer]]` of Lightning optimiser-spec dicts
+(`log_p_over_q_model`, then kernel + optional `exact_kernel`). The
+`log_p_over_q_model` is trained to learn the log density ratio using a
+cross-entropy loss; the kernel consumes its detached `log(p/q)` estimate.
+Batch contract:
 `(base_samples, samples, labels, weights)`, label `0 = p`, `1 = q`.
 `zero_out_init_q_samples` overrides the `q_init_samples = samples[q_mask]`
 residual term (kernel output becomes the full sample). The "divergence"
-logged (`val_divergence = 1 - BCE / log 2`) is the JS lower bound from the
-discriminator, regardless of `self.divergence`. `target_cut_pass_prob` is only
-active when `exact_kernel` is a `FiniteCutKernel` — see the Poisson penalty
-section below.
+logged (`val_divergence = 1 - BCE / log 2`) is the JS lower bound recovered
+from the `log_p_over_q_model`, regardless of `self.divergence`.
+`target_cut_pass_prob` is only active when `exact_kernel` is a
+`FiniteCutKernel` — see the Poisson penalty section below.
 
 ## Surrogate gradient identity
 
@@ -59,10 +62,10 @@ When `exact_kernel` is `None` or a non-cut `FiniteKernelInterface`,
 `cut_pass_log_prob` is identically zero (every sample passes), `r̄` reduces to
 `mean(w)`, and the expression collapses to the plain reweighted surrogate.
 
-The discriminator side uses standard BCE (`logsigmoid` on `+log_p_over_q` for
-p, on `-log_p_over_q` for q), sample-weighted by `exp(exact_log_prob)` per
-discrete branch, with the q-side ratio rescaled by `cut_pass_log_prob` so that
-the q expectation is over the cut distribution.
+The ratio-estimator side uses standard BCE (`logsigmoid` on `+log_p_over_q`
+for p, on `-log_p_over_q` for q), sample-weighted by `exp(exact_log_prob)`
+per discrete branch, with the q-side ratio rescaled by `cut_pass_log_prob` so
+that the q expectation is over the cut distribution.
 
 ### Poisson penalty (cut kernels only)
 

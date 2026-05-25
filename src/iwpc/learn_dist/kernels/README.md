@@ -117,8 +117,9 @@ implementing `log_prob` / `_draw` directly).
 
 LightningModules that train kernels in the **unlabelled** two-sample
 regime: only samples from `p` (real data) and from the base
-distribution feeding `q` are required; the kernel is trained against an
-adversarial classifier `log_p_over_q_model`.
+distribution feeding `q` are required. A co-trained `log_p_over_q_model`
+learns the log density ratio via a cross-entropy loss; the kernel's
+loss then consumes that (detached) `log(p/q)` estimate.
 
 - `unlabelled_kernel_trainer.py` — `UnLabelledKernelTrainer`,
   `KernelKLDivergenceGradientLoss`, and `KernelLRAdjustor` (the
@@ -128,8 +129,8 @@ adversarial classifier `log_p_over_q_model`.
   finite `exact_kernel` (whose outcomes are enumerated exactly) and a
   sampled remainder; reduces variance when one factor is discrete.
 - `unlabelled_multi_kernel_trainer.py` — `UnlabelledMultiKernelTrainer`.
-  Trains a `ConcatenatedKernel` against several discriminators
-  simultaneously.
+  Trains a `ConcatenatedKernel` alongside one `log_p_over_q_model`
+  per independent factor.
 
 ## Usage
 
@@ -155,7 +156,7 @@ y_given_xz  = MultivariateGaussianKernel(cond=2, sample_dim=2)  # p(y | x, z)
 joint = y_given_xz | x_given_z                          # p(x, y | z), 3D sample
 ```
 
-### Train against data with an adversarial discriminator
+### Train against unlabelled data with a co-trained `log_p_over_q_model`
 
 ```python
 import lightning as L
@@ -163,7 +164,7 @@ from iwpc.learn_dist.kernels.unlabelled_kernel_trainer import UnLabelledKernelTr
 
 trainer_module = UnLabelledKernelTrainer(
     kernel=k,
-    log_p_over_q_model=discriminator,   # any nn.Module mapping y -> log(p/q)
+    log_p_over_q_model=ratio_estimator,
     min_train_divergence=1.0,
     kernel_lr=1e-4,
 )
@@ -173,4 +174,4 @@ L.Trainer(max_epochs=200).fit(trainer_module, datamodule=dm)
 Use `PartiallyExactUnLabelledKernelTrainer` when part of the model is a
 finite-support kernel whose outcomes can be enumerated, and
 `UnlabelledMultiKernelTrainer` when several independent factors of a
-`ConcatenatedKernel` should each have their own discriminator.
+`ConcatenatedKernel` should each have their own `log_p_over_q_model`.
