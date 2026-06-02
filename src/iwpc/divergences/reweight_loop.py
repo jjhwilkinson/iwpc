@@ -45,8 +45,7 @@ def add_p_over_q_transformation(
     """
     ds = PandasDataset(
         df,
-        data_module.feature_cols,
-        data_module.target_cols,
+        data_module.feature_spec,
         data_module.weight_col,
     )
     trainer = Trainer(enable_checkpointing=False, logger=False)

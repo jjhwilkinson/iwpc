@@ -92,7 +92,7 @@ def run_continuous_example(
         dm = BinaryPandasDataModule(
             vecs1,
             vecs2,
-            feature_cols=['x', 'y'],
+            feature_spec=[['x', 'y'], ['__label']],
             dataloader_kwargs={'batch_size': 256, 'num_workers': 0}
         )
         module = GenericNaiveVariationalFDivergenceEstimator(dm.num_features, divergence)

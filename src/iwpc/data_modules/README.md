@@ -35,8 +35,8 @@ splits *by file* — see below.
 
 ### `BinaryPandasDataModule` from a `(p_df, q_df)` tuple
 
-`p_df` and `q_df` are concatenated and a `__label` column is added
-automatically (`0` for `p_df`, `1` for `q_df`).
+`p_df` and `q_df` are concatenated and the label column named by
+`feature_spec[1][0]` is added automatically (`0` for `p_df`, `1` for `q_df`).
 
 ```python
 from iwpc.data_modules.pandas_data_module import BinaryPandasDataModule
@@ -44,15 +44,15 @@ from iwpc.data_modules.pandas_data_module import BinaryPandasDataModule
 dm = BinaryPandasDataModule(
     p_df=p_df,
     q_df=q_df,
-    feature_cols=["x", "y"],
-    weight_col="w",                       # optional
+    feature_spec=[["x", "y"], ["__label"]],   # [feature_cols, [label_col, ...]]
+    weight_col="w",                            # optional
     validation_split=0.5,
     dataloader_kwargs={"batch_size": 2**15, "num_workers": 4},
 )
 ```
 
-The resulting data module yields `(features, __label, weight)` triples ready
-for `calculate_divergence`.
+The resulting data module yields `(features, label, weight)` triples ready for
+`calculate_divergence`.
 
 ### `BinaryNumpyDataModule` from two ndarrays
 

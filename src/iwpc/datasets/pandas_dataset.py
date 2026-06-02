@@ -84,7 +84,7 @@ class PandasDataset(Dataset):
         Parameters
         ----------
         df
-            A Pandas DataFrame containing all columns specified in feature_cols, target_cols, and weight_col
+            A Pandas DataFrame containing all columns referenced by feature_spec and weight_col
         feature_spec
             A recursive specification of the columns to serve and the shape in which to provide them referred to as a
             StructuredDataSpec. Each entry must be either a string or another StructuredData instance. For example,
@@ -103,8 +103,14 @@ class PandasDataset(Dataset):
             torch.as_tensor(df[weight_col].values, dtype=torch.float32) if weight_col
             else torch.ones(self.num_rows, dtype=torch.float32)
         )
-        self.structured_data: StructuredData = structure_data(df, feature_spec)
-        self.structured_data.append(self.weights)
+        structured = structure_data(df, feature_spec)
+        # Wrap a flat tensor (from a non-nested feature_spec) into a list so the weight
+        # tensor can always be appended uniformly; __getitem__ will then yield
+        # (features, ..., weight) tuples.
+        if isinstance(structured, Tensor):
+            structured = [structured]
+        structured.append(self.weights)
+        self.structured_data: StructuredData = structured
 
     def __len__(self) -> int:
         """
@@ -125,9 +131,9 @@ class PandasDataset(Dataset):
 
         Returns
         -------
-        Union[np.ndarray, Tuple]
-            The requested sample at the given idx. If self.target_cols is None, an array of shape (1, 0) is returned as
-            the target. If self.weight_col is None, 1. is returned as the weight
+        tuple
+            The requested sample at the given idx as a tuple ending in the per-sample weight. The intermediate
+            tensors are determined by self.feature_spec. If self.weight_col is None, 1. is returned as the weight
         """
         return recursive_slice_structured_data(self.structured_data, idx)
 
@@ -143,13 +149,3 @@ class PandasDataset(Dataset):
         """
         recursive_share_memory(self.structured_data)
         return self
-
-    @property
-    def num_features(self) -> int:
-        """
-        Returns
-        -------
-        int
-            The number of features in the data
-        """
-        return len(self.feature_cols)

@@ -51,7 +51,7 @@ from iwpc.divergences import (
 
 dm = BinaryPandasDataModule(
     p_df=p_df, q_df=q_df,
-    feature_cols=["x", "y"],
+    feature_spec=[["x", "y"], ["__label"]],
     weight_col="weight",      # optional
 )
 estimator = GenericNaiveVariationalFDivergenceEstimator(

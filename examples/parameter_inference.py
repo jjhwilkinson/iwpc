@@ -42,7 +42,7 @@ def run_inference_example(
         dm = BinaryPandasDataModule(
             true_samples,
             trial_samples,
-            feature_cols=['decay_time'],
+            feature_spec=[['decay_time'], ['__label']],
             dataloader_kwargs={'batch_size': 256, 'num_workers': 0}
         )
         module = GenericNaiveVariationalFDivergenceEstimator(dm.num_features, divergence)
