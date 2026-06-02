@@ -1,6 +1,6 @@
 import os
 
-welcome_message = """Thank you for using
+welcome_message = r"""Thank you for using
   ___  __        __  ____     ____ 
  |_ _| \ \      / / |  _ \   / ___|
   | |   \ \ /\ / /  | |_) | | |    

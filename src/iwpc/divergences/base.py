@@ -203,7 +203,7 @@ class DifferentiableFDivergence(ABC):
         return self._np_or_torch(log_x, self._f_dash_given_log_torch, self._f_dash_given_log_np)
 
     def calculate_naive_p_summands_given_log(self, log_p_over_q: TensorOrNDArray) -> TensorOrNDArray:
-        """
+        r"""
         Evaluates the function in the expectation value over the distribution p in the naive representation of the
         f-divergence (https://arxiv.org/abs/2405.06397)
 
@@ -219,7 +219,7 @@ class DifferentiableFDivergence(ABC):
         return self.f_dash_given_log(log_p_over_q)
 
     def calculate_naive_q_summands_given_log(self, log_p_over_q: TensorOrNDArray) -> TensorOrNDArray:
-        """
+        r"""
         Evaluates the function in the expectation value over the distribution q in the naive representation of the
         f-divergence (https://arxiv.org/abs/2405.06397)
 
@@ -239,17 +239,17 @@ class DifferentiableFDivergence(ABC):
         log_p_over_q: TensorOrNDArray,
         label: TensorOrNDArray,
     ) -> Tuple[TensorOrNDArray, TensorOrNDArray]:
-        """
+        r"""
         Calculates the two set of values averaged over in the naive representation of the f-divergence. Samples from
-        the distribution p are identified with the label 'False' and samples from q are identified with the label 'True'.
+        the distribution p are identified with the label 0 and samples from q are identified with the label 1.
 
         Parameters
         ----------
         log_p_over_q
             An estimator for the log-probability ratio $\log \frac{p(x)}{q(x)}$
         label
-            An array labelling samples in p_over_q from p with 'False' and samples from q are identified with the label
-            'True'
+            An array labelling samples in p_over_q from p with 0 and samples from q are identified with the label
+            1
 
         Returns
         -------
@@ -268,7 +268,7 @@ class DifferentiableFDivergence(ABC):
         label: TensorOrNDArray,
         weights: TensorOrNDArray
     ) -> TensorOrNDArray:
-        """
+        r"""
         Calculates an estimator for lower bound on the f-divergence between p and q given an estimate of the values of
         the probability ratio $\frac{p(x)}{q(x)}$. Used in the divergence training loop and does not provide an estimate
         of the error on the estimate. You likely want to use a Df accumulator for analysis instead
@@ -278,8 +278,8 @@ class DifferentiableFDivergence(ABC):
         log_p_over_q
             An estimate for the log-probability ratio $\frac{p(x)}{q(x)}$
         label
-            An array labelling samples in p_over_q from p with 'False' and samples from q are identified with the label
-            'True'
+            An array labelling samples in p_over_q from p with 0 and samples from q are identified with the label
+            1
         weights
             The weight associated with each sample. Note it is assumed that the global average weight has been
             normalised to 1
