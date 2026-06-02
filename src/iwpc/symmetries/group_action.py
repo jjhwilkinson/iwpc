@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Callable
+from typing import Tuple
 
-from torch import Tensor
 from torch.nn import Module
 
 from .group_action_element import GroupActionElement
@@ -9,10 +8,11 @@ from .group_action_element import GroupActionElement
 
 class GroupAction(ABC, Module):
     """
-    Abstract interface for group actions acting on the function space accessible to a NN from R^M -> R^N. We restrict
-    ourselves to actions that act separately on the input and output spaces, that is group actions that can be expressed
-    in the form [g⋅f](x) = g⋅(f(g⋅x)) for some action of G on R^M and R^N separately. In particular, provides the batch
-    method enabling averaging over the group by averaging over batches of its action.
+    Abstract interface for group actions acting on a single vector space R^dim. Provides the batch method enabling
+    averaging over the group by averaging over batches of its action. Concrete subclasses must implement :py:meth:`batch`
+
+    Two of these may be combined into a :py:class:`SeparableGroupAction` to recover the original separable
+    function-space action, where one GroupAction acts on the input space and the other on the output space
 
     GroupActions support declarative composition via Python operators
 
@@ -24,73 +24,35 @@ class GroupAction(ABC, Module):
     Nested compositions are automatically un-curried, so G1 & G2 & G3 yields a single ProductGroupAction with three
     sub-groups rather than a binary tree
     """
-    def __init__(self, input_dim: int, output_dim: int):
+
+    def __init__(self, dim: int):
         """
         Parameters
         ----------
-        input_dim
-            The dimensionality of the input space this group acts on
-        output_dim
-            The dimensionality of the output space this group acts on
+        dim
+            The dimensionality of the vector space this group acts on
         """
         super().__init__()
-        self.input_dim = input_dim
-        self.output_dim = output_dim
+        self.dim = dim
 
     @abstractmethod
-    def batch(self) -> Tuple[GroupActionElement]:
+    def batch(self) -> Tuple[GroupActionElement, ...]:
         """
         Provides a batch of group action elements sampled from the Haar measure of the group. Small finite groups
         should return all elements in every batch, but larger and even infinite groups should return a batch of samples
-        from the Haar measure of the group.
+        from the Haar measure of the group
 
         Returns
         -------
-        Tuple[GroupActionElement]
+        Tuple[GroupActionElement, ...]
         """
 
-    def symmetrize(self, base_function: Callable[..., Tensor]) -> "SymmetrizedModel":
+    def __and__(self, other: "GroupAction") -> "GroupAction":
         """
-        Helper function to wrap a function in a SymmetrizedModel resulting in a function symmetric with respect to this group
-        action
-
-        Parameters
-        ----------
-        base_function
-            A function to symmetrize
-
-        Returns
-        -------
-        SymmetrizedModel
-            A symmetrized function
-        """
-        from .symmetrized_model import SymmetrizedModel
-        return SymmetrizedModel(self, base_function)
-
-    def complement(self, base_function: Callable[..., Tensor]) -> "ComplementModel":
-        """
-        Helper function to wrap a function in a ComplementModel resulting in a function in the complement of the symmetrization
-        projection of this group action
-
-        Parameters
-        ----------
-        base_function
-            A function to symmetrize
-
-        Returns
-        -------
-        SymmetrizedModel
-            A function in the complement of the symmetrization projection of this group action
-        """
-        from .complement_model import ComplementModel
-        return ComplementModel(self, base_function)
-
-    def __and__(self, other: "GroupAction") -> "ProductGroupAction":
-        """
-        Forms the direct product of two GroupActions acting on disjoint input and output dim ranges. Both operands must
-        declare their input_dim and output_dim. When both operands are FiniteGroupActions, the full direct product is
-        enumerated as |self| * |other| ProductActionElements. Otherwise, batches are drawn jointly by zipping
-        self.batch() with other.batch(). Nested ProductGroupAction instances are automatically un-curried
+        Forms the direct product of two GroupActions acting on disjoint dim ranges. When both operands are
+        FiniteGroupActions the full direct product is enumerated as |self| * |other| ProductActionElements. Otherwise
+        batches are drawn jointly by zipping self.batch() with other.batch(). Nested ProductGroupAction instances are
+        automatically un-curried
 
         Parameters
         ----------
@@ -99,18 +61,18 @@ class GroupAction(ABC, Module):
 
         Returns
         -------
-        ProductGroupAction
+        GroupAction
             The direct product action
         """
         from .product_group_action import ProductGroupAction
         return ProductGroupAction.merge(self, other)
 
-    def __mul__(self, other: "GroupAction") -> "JointGroupAction":
+    def __mul__(self, other: "GroupAction") -> "GroupAction":
         """
-        Forms the joint action of two GroupActions acting on the same input and output space. When both operands are
-        FiniteGroupActions, the full Cartesian product of elements is enumerated as |self| * |other| ComposedActionElements.
-        Otherwise, batches are drawn jointly by zipping self.batch() with other.batch() and composing each pair. Nested
-        JointGroupAction instances are automatically un-curried
+        Forms the joint action of two GroupActions acting on the same space. When both operands are
+        FiniteGroupActions, the full Cartesian product of elements is enumerated as |self| * |other|
+        ComposedActionElements. Otherwise batches are drawn jointly by zipping self.batch() with other.batch() and
+        composing each pair. Nested JointGroupAction instances are automatically un-curried
 
         Parameters
         ----------
@@ -119,7 +81,7 @@ class GroupAction(ABC, Module):
 
         Returns
         -------
-        JointGroupAction
+        GroupAction
             The joint action
         """
         from .joint_group_action import JointGroupAction

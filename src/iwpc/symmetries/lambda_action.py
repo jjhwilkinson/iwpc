@@ -1,60 +1,32 @@
-from typing import Callable, Optional
+from typing import Callable
 
 from torch import Tensor
 
-from iwpc.symmetries.group_action_element import GroupActionElement, InputSpaceInvariantException
+from iwpc.symmetries.group_action_element import GroupActionElement
 
 
 class LambdaAction(GroupActionElement):
     """
-    Group action that acts using two arbitrary provided functions. Note that input_fn should be set to None if the
-    action does not affect the input space rather than using an identity function so model calls can be re-used
+    Group action element that acts on R^dim using an arbitrary provided function
     """
-    def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        input_fn: Optional[Callable[[Tensor], Tensor]] = None,
-        output_fn: Optional[Callable[[Tensor], Tensor]] = None,
-    ):
+
+    def __init__(self, dim: int, fn: Callable[[Tensor], Tensor]):
         """
         Parameters
         ----------
-        input_dim
-            The dimensionality of the input space this element acts on
-        output_dim
-            The dimensionality of the output space this element acts on
-        input_fn
-            A callable that acts on the input space. If this action is trivial, you should provide input_fn=None rather
-            than an identity function like lambda x: x
-        output_fn
-            A callable that acts on the output space
+        dim
+            The dimensionality of the vector space this element acts on
+        fn
+            A callable mapping a tensor in R^dim to a tensor in R^dim
         """
-        super().__init__(input_dim=input_dim, output_dim=output_dim)
+        super().__init__(dim=dim)
+        self.fn = fn
 
-        if output_fn is None:
-            output_fn = lambda x: x
-
-        self.input_fn = input_fn
-        self.output_fn = output_fn
-
-    def input_space_action(self, x: Tensor) -> Tensor:
+    def action(self, x: Tensor) -> Tensor:
         """
         Returns
         -------
         Tensor
-            Applies the specified function to the input space. Raises an InputSpaceInvariantException if no input_fn was
-            provided
+            self.fn(x)
         """
-        if self.input_fn is None:
-            raise InputSpaceInvariantException()
-        return self.input_fn(x)
-
-    def output_space_action(self, x: Tensor) -> Tensor:
-        """
-        Returns
-        -------
-        Tensor
-            Applies the specified function to the output space.
-        """
-        return self.output_fn(x)
+        return self.fn(x)

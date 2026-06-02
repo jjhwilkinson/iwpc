@@ -24,7 +24,7 @@ You pick a divergence (KL, JS, or a custom subclass of `DifferentiableFDivergenc
 
 - `fdivergence_base.py` — `FDivergenceEstimator`, the abstract Lightning base class that fixes the training contract, the Adam + `ReduceLROnPlateau(monitor="val_Df", mode="max")` optimiser, and the train / val step. Subclasses implement three abstract methods: `_configure_metrics` (must set `self.val_Df` and `self.val_Df_err`), `_calculate_batch_loss` (returns the negative of the train estimate), and `_accumulate_validation_Df`.
 - `naive.py` — `NaiveVariationalFDivergenceEstimator` implements the naive variational representation directly using two `WeightedMeanMetric` accumulators for the p- and q-side expectations. `GenericNaiveVariationalFDivergenceEstimator` wires it to a network built by `iwpc.models.basic_model_factory` and accepts either an int input dim or an `Encoding` as its `input` argument.
-- `asymmetry_estimator.py` — `AsymmetryEstimator` estimates the f-divergence between `p` and its image under a `GroupAction`, by Haar-averaging the q-side summand so the network only has to learn the asymmetric component.
+- `asymmetry_estimator.py` — `AsymmetryEstimator` estimates the f-divergence between `p` and its image under a `SeparableGroupAction`, by Haar-averaging the q-side summand so the network only has to learn the asymmetric component.
 
 ### Training entry points
 
@@ -133,7 +133,7 @@ The 2D `(theta, r)` panel is mostly redundant for this dataset, but confirms the
 
 ### Measure the asymmetry of a distribution under a group action
 
-`AsymmetryEstimator` estimates `D_f(p, g·p)` where `g·p` is the image of `p` under a `GroupAction`. The q-side summand is averaged over a Haar sample of the group at every evaluation, so the learnt scalar field captures only the asymmetric component.
+`AsymmetryEstimator` estimates `D_f(p, g·p)` where `g·p` is the image of `p` under a `SeparableGroupAction`. The q-side summand is averaged over a Haar sample of the group at every evaluation, so the learnt scalar field captures only the asymmetric component.
 
 ```python
 from iwpc.divergences import AsymmetryEstimator, KLDivergence
@@ -141,7 +141,7 @@ from iwpc.models.utils import basic_model_factory
 
 model = basic_model_factory(input=3, output=1)
 estimator = AsymmetryEstimator(
-    group=my_group_action,      # an iwpc.symmetries.GroupAction
+    group=my_group_action,      # an iwpc.symmetries.SeparableGroupAction
     model=model,
     divergence=KLDivergence(),
 )

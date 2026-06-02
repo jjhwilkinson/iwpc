@@ -8,6 +8,13 @@ from iwpc.symmetries.lambda_action import LambdaAction
 from iwpc.symmetries.prod_add_action import ProdAddAction
 from iwpc.symmetries.product_action_element import ProductActionElement
 from iwpc.symmetries.product_group_action import ProductGroupAction
+from iwpc.symmetries.separable_finite_group_action import SeparableFiniteGroupAction
+from iwpc.symmetries.separable_group_action import (
+    SeparableGroupAction,
+    SeparableJointGroupAction,
+    SeparableProductGroupAction,
+)
+from iwpc.symmetries.separable_group_action_element import SeparableGroupActionElement
 from iwpc.symmetries.symmetrized_model import SymmetrizedModel
 
 __all__ = [
@@ -23,5 +30,10 @@ __all__ = [
     'ProdAddAction',
     'ProductActionElement',
     'ProductGroupAction',
+    'SeparableFiniteGroupAction',
+    'SeparableGroupAction',
+    'SeparableGroupActionElement',
+    'SeparableJointGroupAction',
+    'SeparableProductGroupAction',
     'SymmetrizedModel',
 ]

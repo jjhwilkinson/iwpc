@@ -6,22 +6,22 @@ from torch.nn import Module
 
 from iwpc.metrics.weighted_mean_metric import WeightedMeanMetric
 from .fdivergence_base import FDivergenceEstimator
-from iwpc.symmetries.group_action import GroupAction
+from iwpc.symmetries.separable_group_action import SeparableGroupAction
 
 
 class AsymmetryEstimator(FDivergenceEstimator):
     """
     FDivergenceEstimator variant that estimates the f-divergence between a distribution p and its symmetrised image
-    under a GroupAction (i.e. the asymmetry of p with respect to the group). The q-side summand is averaged over the
-    group action so the model only needs to learn the asymmetric component of log(p / q)
+    under a SeparableGroupAction (i.e. the asymmetry of p with respect to the group). The q-side summand is averaged
+    over the group action so the model only needs to learn the asymmetric component of log(p / q)
     """
-    def __init__(self, group: GroupAction, *args, **kwargs):
+    def __init__(self, group: SeparableGroupAction, *args, **kwargs):
         """
         Parameters
         ----------
         group
-            The GroupAction under which the asymmetry is being measured. The q-side summand is averaged over a Haar
-            sample of this group at every evaluation
+            The SeparableGroupAction under which the asymmetry is being measured. The q-side summand is averaged over
+            a Haar sample of this group at every evaluation
         *args, **kwargs
             Forwarded to FDivergenceEstimator.__init__
         """

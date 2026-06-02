@@ -74,7 +74,7 @@ Only works with `PandasDirDataModule` (uses `.transform` / `.reweight` / `.copy`
 - `iwpc.metrics.WeightedMeanMetric` — builds `val_Df` / `val_Df_err`.
 - `iwpc.models.utils.basic_model_factory` — used by `GenericNaiveVariationalFDivergenceEstimator` (`naive.py:98`); accepts an `int`/`tuple` input shape or an `iwpc.encodings.Encoding`.
 - `iwpc.encodings.Encoding` — `GenericNaiveVariationalFDivergenceEstimator(input=...)` forwards to the factory.
-- `iwpc.symmetries.GroupAction` — `AsymmetryEstimator` calls `group.symmetrize(...)` (`asymmetry_estimator.py:30`).
+- `iwpc.symmetries.SeparableGroupAction` — `AsymmetryEstimator` calls `group.symmetrize(...)` (`asymmetry_estimator.py:30`). Only the separable hierarchy carries `symmetrize` / `complement`; the bare vector-space `GroupAction` does not.
 - `iwpc.data_modules.PandasDirDataModule` — `run_reweight_loop` is hard-coupled.
 - `iwpc.accumulators.LabeledBinaryNaiveDfAccumulator` — `calculate_total_divergence` post-loop.
 

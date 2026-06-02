@@ -8,7 +8,7 @@ Network factory and small helper layers used to build the MLPs that parameterise
 - `basic_model_factory` — the canonical way to build an MLP for an
   `FDivergenceEstimator`. Wires together an optional input `Encoding`, a stack
   of `Linear`/activation/(dropout)/(batch-norm) groups, optional output
-  encoding, and optional `GroupAction` symmetry/complement wrappers.
+  encoding, and optional `SeparableGroupAction` symmetry/complement wrappers.
 - `basic_model_factory_sum` — convenience that sums independent sub-models
   (each with its own encodings/symmetries) into a single `IndependentSumModule`.
 - `layers.py` — small reusable modules: `LambdaLayer`, `RunningNormLayer`,
@@ -59,18 +59,21 @@ model = basic_model_factory(
 
 ### 3. With symmetries
 
-`symmetries=` makes the network invariant under the supplied `GroupAction`(s);
-`complement_symmetries=` constrains the output to live in the symmetrised
-complement (i.e. is forced to vanish on the symmetric part). An iterable is
-folded together via `*` (joint action on the same space).
+`symmetries=` makes the network invariant under the supplied
+`SeparableGroupAction`(s); `complement_symmetries=` constrains the output to
+live in the symmetrised complement (i.e. is forced to vanish on the symmetric
+part). An iterable is folded together via `*` (joint action on the same
+space).
 
 ```python
 from iwpc.models.utils import basic_model_factory
-from iwpc.symmetries.group_action import GroupAction  # plus a concrete action
+from iwpc.symmetries import SeparableGroupActionElement  # plus other concrete actions
+
+parity = SeparableGroupActionElement.from_prod_add(input_prod=[-1.0], output_dim=1).to_group()
 
 model = basic_model_factory(
     input=4,
-    symmetries=[my_group_action],            # invariant under my_group_action
+    symmetries=[parity],                     # invariant under parity
     complement_symmetries=other_action,      # orthogonal to other_action
 )
 ```

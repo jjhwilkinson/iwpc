@@ -21,7 +21,7 @@ and a map into them.
    conventions.
 
 Both flows share the network builder (`iwpc.models.basic_model_factory`), the
-feature/output `Encoding`s, the `GroupAction` symmetry wrappers, and the
+feature/output `Encoding`s, the `SeparableGroupAction` symmetry wrappers, and the
 `DifferentiableFDivergence` math layer.
 
 ## Sub-package map
@@ -34,7 +34,7 @@ feature/output `Encoding`s, the `GroupAction` symmetry wrappers, and the
 | [`learn_dist/base_distributions/`](src/iwpc/learn_dist/base_distributions/AGENTS.md) | `SamplableBaseModel` contract; analytic + histogram priors. |
 | [`learn_dist/fdivergence_minimization/`](src/iwpc/learn_dist/fdivergence_minimization/AGENTS.md) | `FDivergenceMinimizingKernelTrainer` and the `fdivergence_gradient_surrogate_loss`. |
 | [`encodings/`](src/iwpc/encodings/AGENTS.md) | `Encoding` subclass contract, `&` concatenation, per-encoding gotchas. |
-| [`symmetries/`](src/iwpc/symmetries/AGENTS.md) | `GroupAction`, Haar averaging, `.symmetrize` / `.complement`, `*` / `&` composition. |
+| [`symmetries/`](src/iwpc/symmetries/AGENTS.md) | Vector-space `GroupAction` / `GroupActionElement` primitives, separable `SeparableGroupAction` / `SeparableGroupActionElement` function-space wrappers, Haar averaging, `.symmetrize` / `.complement`, `*` / `&` composition. |
 | [`models/`](src/iwpc/models/AGENTS.md) | `basic_model_factory` composition order; `RunningNormLayer` / `RunningDeNormLayer`. |
 | [`utility_modules/`](src/iwpc/utility_modules/AGENTS.md) | `IndependentSumModule`. |
 | [`data_modules/`](src/iwpc/data_modules/AGENTS.md) | Batch contract, train/val split mechanics, `ds_info.yml`, `PandasDirDataModule` mutation API. |
@@ -83,7 +83,9 @@ signatures:
   `GenericNaiveVariationalFDivergenceEstimator`, `AsymmetryEstimator`
 - `calculate_divergence`, `DivergenceResult`, `run_reweight_loop`
 - `Encoding` (and the concrete encodings)
-- `GroupAction` (and concrete groups)
+- `GroupAction` and `GroupActionElement` (vector-space hierarchy + concrete subclasses);
+  `SeparableGroupAction` and `SeparableGroupActionElement` (function-space wrapper layer +
+  concrete subclasses)
 - `basic_model_factory`, `basic_model_factory_sum`
 - The data modules (`BinaryPandasDataModule`, `BinaryNumpyDataModule`,
   `PandasDirDataModule`)
