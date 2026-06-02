@@ -54,15 +54,17 @@ Top-level diagnostic. Takes a `ScalarFunction` or list of them (the package's
 projection-from-DataFrame abstraction) plus a divergence, and runs two passes
 over a `PandasDirDataModule`:
 
-- `update_train(samples, labels, weights, p_over_q)` builds reference
+- `update_train(samples, labels, weights, log_p_over_q)` builds reference
   histograms of p, q, and the network-implied marginalised p and q.
 - `update_val(samples, labels, weights, log_p_over_q)` accumulates per-bin
   conditional divergence summands, the global divergence, and the marginalised
   divergence (the part captured by the chosen scalars).
 
-The helper `BinnedDfAccumulator.evaluate(datamodule, p_over_q_cols)` drives the
-two passes and computes `log p/q` by multiplying the listed reweight columns
-(`construct_p_over_q` clips the product to `[1e-6, 1e6]`).
+Both passes take the **log ratio** and recover mixture weights via
+`expit(±log_p_over_q)`. The helper
+`BinnedDfAccumulator.evaluate(datamodule, p_over_q_cols)` drives the two
+passes and computes `log p/q` by multiplying the listed reweight columns and
+taking the log (`construct_p_over_q` clips the product to `[1e-6, 1e6]`).
 
 Plot panels are implemented for **1 or 2** scalars only; `plot` raises
 `NotImplementedError` for higher dimensions even though the accumulation is

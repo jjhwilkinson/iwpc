@@ -33,7 +33,7 @@ Callers clip `log(p/q)` to `[-14, 14]` before passing it in (`naive.py:47,63`); 
 
 - `calculate_naive_p_summands_given_log(log_p_over_q) = f_dash_given_log(log_p_over_q)`.
 - `calculate_naive_q_summands_given_log(log_p_over_q) = f_conj(f_dash_given_log(log_p_over_q))`.
-- `calculate_naive_rep_summands_given_log_by_label(log_p_over_q, label)` splits via `iwpc.utils.split_by_mask`. Convention: **label 0 = p, label 1 = q**. (`base.py:244-252` docstring reads backwards but implementation matches the repo — known wart.)
+- `calculate_naive_rep_summands_given_log_by_label(log_p_over_q, label)` splits via `iwpc.utils.split_by_mask`. Convention: **label 0 = p, label 1 = q** (`base.py:244-252`).
 - `naive_estimate_given_log(log_p_over_q, label, weights)` returns a weighted scalar lower-bound estimator (no error bars; for SE use `iwpc.accumulators.DfAccumulator`).
 
 ## Estimator hierarchy
@@ -99,5 +99,4 @@ Only works with `PandasDirDataModule` (uses `.transform` / `.reweight` / `.copy`
 - Don't introduce per-instance state that differs between numpy and torch paths (JSD's `self.log_two` is torch-only; the numpy branch hardcodes `np.log(2.)` — follow that pattern).
 - Don't add a divergence whose `f_conj` domain excludes the outputs of `f_dash_given_log` on the clipped log-ratio range — training will NaN.
 - Don't bypass `_np_or_torch` by type-checking in subclasses.
-- Don't copy `asymmetry_estimator.py:77-81` — dead code after a `return`.
 - Don't call `self.model(x)` on the batch tuple — only `forward` unpacks it.
