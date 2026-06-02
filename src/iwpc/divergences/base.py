@@ -223,6 +223,10 @@ class DifferentiableFDivergence(ABC):
         Evaluates the function in the expectation value over the distribution q in the naive representation of the
         f-divergence (https://arxiv.org/abs/2405.06397)
 
+        Subclasses may override this method when the `f_conj ∘ f_dash_given_log` composition admits an analytically
+        simpler or numerically more stable closed form. For example, JensenShannonDivergence overrides this to avoid
+        cancellation that occurs in the generic composition near the boundary of `f_conj`'s domain.
+
         Parameters
         ----------
         log_p_over_q
