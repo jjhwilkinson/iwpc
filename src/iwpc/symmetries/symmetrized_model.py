@@ -17,8 +17,8 @@ class SymmetrizedModel(Module):
 
     Implementation dedupes calls to ``base_function`` for any element whose input-side action is the identity: such
     elements share a single evaluation on the unmodified input. Identity is detected by reading
-    :py:attr:`SeparableGroupActionElement.input_is_identity`; the legacy
-    :py:class:`InputSpaceInvariantException` raised from :py:meth:`input_space_action` is also caught for back-compat
+    ``SeparableGroupActionElement.input_is_identity``; the legacy
+    ``InputSpaceInvariantException`` raised from ``input_space_action`` is also caught for back-compat
     with user-defined elements
     """
 

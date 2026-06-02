@@ -14,7 +14,7 @@ class ComposedActionElement(GroupActionElement):
         [g1 * g2 * ... * gN](x) = g1(g2(...gN(x)))
 
     Nested ComposedActionElement instances are automatically un-curried when constructed using the multiplication
-    operator ``*`` or :py:meth:`merge`. The composed element is the identity iff every sub-element is the identity
+    operator ``*`` or ``merge``. The composed element is the identity iff every sub-element is the identity
     """
 
     def __init__(self, sub_elements: List[GroupActionElement]):

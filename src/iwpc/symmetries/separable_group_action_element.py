@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 class SeparableGroupActionElement(Module):
     """
-    A separable function-space action element built from a pair of vector-space :py:class:`GroupActionElement`
+    A separable function-space action element built from a pair of vector-space ``GroupActionElement``
     instances — one acting on the input space R^input_dim and one on the output space R^output_dim. Together they
     represent a single function-space group element g where [g.f](x) = output_action(f(input_action(x)))
 
@@ -28,11 +28,11 @@ class SeparableGroupActionElement(Module):
         Parameters
         ----------
         input_action
-            A :py:class:`GroupActionElement` acting on the input space R^input_dim. Use
-            :py:class:`Identity` if the input space is invariant under this element
+            A ``GroupActionElement`` acting on the input space R^input_dim. Use
+            ``Identity`` if the input space is invariant under this element
         output_action
-            A :py:class:`GroupActionElement` acting on the output space R^output_dim. Use
-            :py:class:`Identity` if the output space is invariant under this element
+            A ``GroupActionElement`` acting on the output space R^output_dim. Use
+            ``Identity`` if the output space is invariant under this element
         """
         super().__init__()
         self.input_action = input_action
@@ -46,7 +46,7 @@ class SeparableGroupActionElement(Module):
         Returns
         -------
         bool
-            True when the input-side action is the identity. :py:class:`SymmetrizedModel` reads this to dedupe
+            True when the input-side action is the identity. ``SymmetrizedModel`` reads this to dedupe
             evaluations of the base model on the unchanged input
         """
         return self.input_action.is_identity
@@ -54,7 +54,7 @@ class SeparableGroupActionElement(Module):
     def input_space_action(self, x: Tensor) -> Tensor:
         """
         Applies the input-side action to ``x``. For back-compat with the legacy contract, raises
-        :py:class:`InputSpaceInvariantException` when :py:attr:`input_is_identity` is True so existing
+        ``InputSpaceInvariantException`` when ``input_is_identity`` is True so existing
         ``except`` paths in user code continue to work
         """
         if self.input_action.is_identity:
@@ -69,7 +69,7 @@ class SeparableGroupActionElement(Module):
 
     def to_group(self) -> "SeparableFiniteGroupAction":
         """
-        Constructs a :py:class:`SeparableFiniteGroupAction` containing the identity pair and this element. Warning:
+        Constructs a ``SeparableFiniteGroupAction`` containing the identity pair and this element. Warning:
         this is only valid if this element is an involution (its own inverse). It is the caller's responsibility to
         check this
 
@@ -132,7 +132,7 @@ class SeparableGroupActionElement(Module):
     ) -> "SeparableGroupActionElement":
         """
         Convenience factory mirroring the legacy ``LambdaAction(input_fn=..., output_fn=...)`` constructor. ``None``
-        on either side becomes :py:class:`Identity` on that side
+        on either side becomes ``Identity`` on that side
 
         Parameters
         ----------
@@ -142,7 +142,7 @@ class SeparableGroupActionElement(Module):
             Dimensionality of the output space
         input_fn
             Optional callable acting on the input space. Pass ``None`` rather than an identity function to advertise
-            input invariance to :py:class:`SymmetrizedModel`
+            input invariance to ``SymmetrizedModel``
         output_fn
             Optional callable acting on the output space. Pass ``None`` rather than an identity function to advertise
             output invariance
@@ -169,7 +169,7 @@ class SeparableGroupActionElement(Module):
     ) -> "SeparableGroupActionElement":
         """
         Convenience factory mirroring the legacy ``ProdAddAction(input_prod=..., output_prod=..., ...)`` constructor.
-        Builds a :py:class:`ProdAddAction` on each side
+        Builds a ``ProdAddAction`` on each side
 
         Parameters
         ----------

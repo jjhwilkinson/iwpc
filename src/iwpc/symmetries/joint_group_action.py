@@ -17,9 +17,9 @@ class JointGroupAction(GroupAction):
         [g1 * g2 * ... * gN](x) = g1(g2(...gN(x)))
 
     Nested JointGroupAction instances are automatically un-curried when constructed using the multiplication operator
-    ``*`` or :py:meth:`merge`. Batches are drawn jointly by zipping the sub-group batches and composing each tuple.
+    ``*`` or ``merge``. Batches are drawn jointly by zipping the sub-group batches and composing each tuple.
     When all sub-groups are FiniteGroupActions the full Cartesian product is enumerated instead via the finite
-    fast-path on :py:meth:`FiniteGroupAction.__mul__`
+    fast-path on ``FiniteGroupAction.__mul__``
 
     All sub-groups must agree on ``dim`` since they act on the same space
     """

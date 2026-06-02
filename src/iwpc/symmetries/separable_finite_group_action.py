@@ -16,7 +16,7 @@ from iwpc.symmetries.separable_group_action_element import SeparableGroupActionE
 class SeparableFiniteGroupAction(SeparableGroupAction):
     """
     Generic implementation of a finite separable group action on the function space R^input_dim -> R^output_dim. Stores
-    an explicit list of :py:class:`SeparableGroupActionElement` pairs with the identity pair prepended. Overrides the
+    an explicit list of ``SeparableGroupActionElement`` pairs with the identity pair prepended. Overrides the
     ``&`` and ``*`` operators so that when both operands are SeparableFiniteGroupActions the result is a
     SeparableFiniteGroupAction enumerating the full direct or full Cartesian product of element pairs respectively
     """

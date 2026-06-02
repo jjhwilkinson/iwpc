@@ -9,9 +9,9 @@ from .group_action_element import GroupActionElement
 class GroupAction(ABC, Module):
     """
     Abstract interface for group actions acting on a single vector space R^dim. Provides the batch method enabling
-    averaging over the group by averaging over batches of its action. Concrete subclasses must implement :py:meth:`batch`
+    averaging over the group by averaging over batches of its action. Concrete subclasses must implement ``batch``
 
-    Two of these may be combined into a :py:class:`SeparableGroupAction` to recover the original separable
+    Two of these may be combined into a ``SeparableGroupAction`` to recover the original separable
     function-space action, where one GroupAction acts on the input space and the other on the output space
 
     GroupActions support declarative composition via Python operators

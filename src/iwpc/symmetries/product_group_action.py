@@ -14,9 +14,9 @@ class ProductGroupAction(GroupAction):
     A wrapper group action representing the direct product of a list of GroupActions acting on disjoint dim ranges of
     R^dim. Given sub-groups with dims d1, ..., dN, the product acts on a feature vector of length d1+...+dN by applying
     each sub-group's elements to the corresponding slice. Nested ProductGroupAction instances are automatically
-    un-curried when constructed using the bitwise and operator ``&`` or :py:meth:`merge`. Batches are drawn jointly by
+    un-curried when constructed using the bitwise and operator ``&`` or ``merge``. Batches are drawn jointly by
     zipping the sub-group batches. When all sub-groups are FiniteGroupActions the full direct product is enumerated
-    instead via the finite fast-path on :py:meth:`FiniteGroupAction.__and__`
+    instead via the finite fast-path on ``FiniteGroupAction.__and__``
     """
 
     def __init__(self, sub_groups: List[GroupAction]):

@@ -13,7 +13,7 @@ class ProductActionElement(GroupActionElement):
     A wrapper element acting on disjoint dim ranges of R^dim. Given sub-elements with dims d1, ..., dN, the product
     acts on a feature vector of length d1+...+dN by applying the j'th sub-element to the slice
     [d1+...+d_{j-1} : d1+...+d_j) and concatenating the results. Nested ProductActionElement instances are
-    automatically un-curried when constructed using the bitwise and operator ``&`` or :py:meth:`merge`. The product
+    automatically un-curried when constructed using the bitwise and operator ``&`` or ``merge``. The product
     element is the identity iff every sub-element is the identity
     """
 

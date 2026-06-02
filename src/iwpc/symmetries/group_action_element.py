@@ -7,8 +7,8 @@ from torch.nn import Module
 class GroupActionElement(Module, ABC):
     """
     Abstract interface for the action of a particular group element, g, on a single vector space R^dim. Concrete
-    subclasses implement :py:meth:`action` plus any structure-preserving algebra they support. The separable function
-    space wrappers in :py:mod:`iwpc.symmetries.separable_group_action_element` combine two of these — one acting on the
+    subclasses implement ``action`` plus any structure-preserving algebra they support. The separable function
+    space wrappers in ``iwpc.symmetries.separable_group_action_element`` combine two of these — one acting on the
     input space and one on the output space — to recover the original function-space action
 
     GroupActionElements support declarative composition via Python operators
@@ -21,7 +21,7 @@ class GroupActionElement(Module, ABC):
     Nested compositions are automatically un-curried, so g1 * g2 * g3 yields a single ComposedActionElement with three
     sub-elements rather than a binary tree
 
-    Subclasses may override the :py:attr:`is_identity` class attribute, or set it as an instance attribute, to advertise
+    Subclasses may override the ``is_identity`` class attribute, or set it as an instance attribute, to advertise
     that the element is the identity transformation. The separable wrapper layer reads this flag to skip duplicate model
     evaluations of unchanged inputs
     """
@@ -129,9 +129,9 @@ class Identity(GroupActionElement):
 class InputSpaceInvariantException(Exception):
     """
     Legacy sentinel signalling that the input space side of a separable action is the identity. Retained for
-    back-compat: :py:class:`iwpc.symmetries.symmetrized_model.SymmetrizedModel` still catches this so user-defined
+    back-compat: ``iwpc.symmetries.symmetrized_model.SymmetrizedModel`` still catches this so user-defined
     elements that raise it continue to dedupe correctly. New code should prefer setting
-    :py:attr:`GroupActionElement.is_identity` on the input-side element
+    ``GroupActionElement.is_identity`` on the input-side element
     """
 
     def __init__(self):
