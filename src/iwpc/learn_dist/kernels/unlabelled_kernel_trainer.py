@@ -162,9 +162,10 @@ class KernelKLDivergenceGradientLoss:
         for i in range(self.kernel_resample_rate):
             samples, log_prob = kernel.draw_with_log_prob(base_samples)
             with torch.no_grad():
-                p_over_q = torch.exp(log_p_over_q_model(samples))[:, 0]
+                log_p_over_q = log_p_over_q_model(samples)[:, 0]
+                clipped_p_over_q = log_p_over_q.clamp(-14, 14).exp()
 
-            loss += - (weights * log_prob * p_over_q.detach()).mean()
+            loss += - (weights * log_prob * clipped_p_over_q.detach()).mean()
 
         return loss / self.kernel_resample_rate
 

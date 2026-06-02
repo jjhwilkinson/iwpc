@@ -49,9 +49,12 @@ class MultiKernelKLDivergenceGradientLoss:
         samples, all_log_probs = combined_kernel.draw_with_separate_log_prob(cond)
 
         with torch.no_grad():
-            all_p_over_q = [torch.exp(log_p_over_q_model(samples)[:, 0]) for log_p_over_q_model in log_p_over_q_models]
+            all_clipped_p_over_q = [
+                log_p_over_q_model(samples)[:, 0].clamp(-14, 14).exp()
+                for log_p_over_q_model in log_p_over_q_models
+            ]
 
-        return - (weights * (sum(log_prob * p_over_q for log_prob, p_over_q in zip(all_log_probs, all_p_over_q)))).mean()
+        return - (weights * (sum(log_prob * p_over_q for log_prob, p_over_q in zip(all_log_probs, all_clipped_p_over_q)))).mean()
 
 
 class UnlabelledMultiKernelTrainer(LightningModule):
