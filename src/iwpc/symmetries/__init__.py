@@ -10,6 +10,7 @@ from iwpc.symmetries.product_action_element import ProductActionElement
 from iwpc.symmetries.product_group_action import ProductGroupAction
 from iwpc.symmetries.separable_finite_group_action import SeparableFiniteGroupAction
 from iwpc.symmetries.separable_group_action import (
+    PairedSeparableGroupAction,
     SeparableGroupAction,
     SeparableJointGroupAction,
     SeparableProductGroupAction,
@@ -27,6 +28,7 @@ __all__ = [
     'InputSpaceInvariantException',
     'JointGroupAction',
     'LambdaAction',
+    'PairedSeparableGroupAction',
     'ProdAddAction',
     'ProductActionElement',
     'ProductGroupAction',

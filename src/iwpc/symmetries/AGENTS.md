@@ -21,7 +21,8 @@ Two hierarchies plus one wrapper layer.
   `output_dim`, exposes `batch() -> Tuple[SeparableGroupActionElement, ...]`. Implements
   `symmetrize(f)` / `complement(f)`. Concrete subclasses: `SeparableFiniteGroupAction`,
   `SeparableProductGroupAction`, `SeparableJointGroupAction`, plus the private
-  `_PairedSeparableGroupAction` returned by `from_pair_of_vector_groups`.
+  `PairedSeparableGroupAction` (the direct-product case: two independent vector-space
+  groups zipped at sample time).
 - `SeparableGroupActionElement`: holds `input_action: GroupActionElement` (acts on
   `R^input_dim`) and `output_action: GroupActionElement` (acts on `R^output_dim`). Exposes
   `input_space_action(x)`, `output_space_action(x)`, and `input_is_identity`. Provides
@@ -109,7 +110,7 @@ Separable element operators delegate per side, so analytic fast paths from the v
 ## Adding a new `SeparableGroupAction`
 
 Usually you don't — build one by combining two vector-space groups via
-`SeparableGroupAction.from_pair_of_vector_groups(input_group, output_group)`, or enumerate
+`PairedSeparableGroupAction(input_group, output_group)`, or enumerate
 pairs explicitly with `SeparableFiniteGroupAction(pairs, input_dim, output_dim)`. Subclass
 `SeparableGroupAction` directly only if you need a custom Haar sampler whose pairs do not
 factor as independent products.

@@ -138,11 +138,11 @@ per side.
 ### Building separable actions from two independent vector-space groups
 
 ```python
-from iwpc.symmetries import ProdAddAction, SeparableGroupAction
+from iwpc.symmetries import PairedSeparableGroupAction, ProdAddAction
 
 input_group  = ProdAddAction(prod=[-1.0]).to_group()  # vector-space Z_2 on R^1
 output_group = ProdAddAction(prod=[-1.0]).to_group()  # vector-space Z_2 on R^1
-G = SeparableGroupAction.from_pair_of_vector_groups(input_group, output_group)
+G = PairedSeparableGroupAction(input_group, output_group)
 # G.batch() zips one element from each side independently — i.e. the direct product
 # separable action G_in x G_out
 ```

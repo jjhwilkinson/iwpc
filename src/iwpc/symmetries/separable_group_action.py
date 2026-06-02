@@ -123,37 +123,11 @@ class SeparableGroupAction(ABC, Module):
         """
         return SeparableJointGroupAction.merge(self, other)
 
-    @classmethod
-    def from_pair_of_vector_groups(
-        cls,
-        input_group: GroupAction,
-        output_group: GroupAction,
-    ) -> "SeparableGroupAction":
-        """
-        Constructs a direct-product separable group action from two independent vector-space groups. At each
-        ``batch`` call the two underlying groups are sampled independently and their elements are zipped into
-        SeparableGroupActionElements. This represents the homomorphism G_in x G_out -> G_in x G_out — i.e. a separable
-        action where the input and output sides are sampled independently
-
-        Parameters
-        ----------
-        input_group
-            A vector-space ``GroupAction`` acting on the input space
-        output_group
-            A vector-space ``GroupAction`` acting on the output space
-
-        Returns
-        -------
-        SeparableGroupAction
-            A SeparableGroupAction whose ``batch()`` zips one element from each underlying group
-        """
-        return _PairedSeparableGroupAction(input_group=input_group, output_group=output_group)
-
-
-class _PairedSeparableGroupAction(SeparableGroupAction):
+class PairedSeparableGroupAction(SeparableGroupAction):
     """
     A separable group action built from two independent vector-space groups acting on the input and output spaces
-    respectively. ``batch()`` zips fresh batches from each
+    respectively. ``batch()`` zips fresh batches from each, so this represents the direct-product homomorphism
+    G_in x G_out -> G_in x G_out where the input and output sides are sampled independently
     """
 
     def __init__(self, input_group: GroupAction, output_group: GroupAction):
