@@ -18,12 +18,11 @@ if __name__ == '__main__':
 
     datamodule = PandasDirDataModule(
         Path(".") / "sample_dataset",
-        ['x', 'y'],
-        target_cols='label',
+        feature_spec=[['x', 'y'], ['label']],
     )
     divergence = JensenShannonDivergence()
     module_factory = lambda lr: GenericNaiveVariationalFDivergenceEstimator(
-        datamodule.num_features,
+        2,
         divergence,
         initial_learning_rate=lr,
         lr_patience=10
@@ -42,8 +41,7 @@ if __name__ == '__main__':
     radius_scalar = ScalarFunction(lambda df: (df['x'] ** 2 + df['y'] ** 2) ** 0.5, 'r', bins=np.linspace(0.5,1.5, 50))
     final_data_module = PandasDirDataModule(
         Path(".") / "sample_dataset_example_reweighted",
-        ['x', 'y'],
-        target_cols='label',
+        feature_spec=[['x', 'y'], ['label']],
         dataloader_kwargs={'num_workers': 0}
     )
 

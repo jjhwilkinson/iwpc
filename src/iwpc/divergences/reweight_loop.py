@@ -1,6 +1,9 @@
 import os
 from dataclasses import dataclass
-from typing import Dict, Callable, Tuple, List
+from typing import Dict, Callable, Tuple, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..accumulators.Df_accumulator import LabeledBinaryNaiveDfAccumulator
 
 import numpy as np
 from lightning import Trainer
@@ -12,7 +15,6 @@ from iwpc.divergences.calculate_divergence import calculate_divergence, Divergen
 from iwpc.datasets.pandas_dataset import PandasDataset
 from iwpc.divergences import DifferentiableFDivergence
 from iwpc.divergences.fdivergence_base import FDivergenceEstimator
-from ..accumulators.Df_accumulator import LabeledBinaryNaiveDfAccumulator
 from ..data_modules.pandas_directory_data_module import PandasDirDataModule
 
 
@@ -45,8 +47,7 @@ def add_p_over_q_transformation(
     """
     ds = PandasDataset(
         df,
-        data_module.feature_cols,
-        data_module.target_cols,
+        data_module.feature_spec,
         data_module.weight_col,
     )
     trainer = Trainer(enable_checkpointing=False, logger=False)
@@ -91,14 +92,14 @@ def reweight_down_from_p_over_q(df: DataFrame, label_col: str, p_over_q_col: str
 def calculate_total_divergence(
     data_module: PandasDirDataModule,
     divergence: DifferentiableFDivergence,
-) -> LabeledBinaryNaiveDfAccumulator:
+) -> "LabeledBinaryNaiveDfAccumulator":
     """
     Calculates the total divergence using the product of the reweighting columns produced in the reweight loop procedure
 
     Parameters
     ----------
     data_module
-        A PandasDirDataModule with target columns containing first, the label of each sample, and then all the
+        A PandasDirDataModule whose feature_spec target sublist contains first the label of each sample, then all the
         p_over_q_{i} columns generated in the reweight loop
     divergence
         A DifferentiableFDivergence instance
@@ -107,6 +108,7 @@ def calculate_total_divergence(
     -------
     LabeledBinaryNaiveDfAccumulator
     """
+    from ..accumulators.Df_accumulator import LabeledBinaryNaiveDfAccumulator
     df_accumulator = LabeledBinaryNaiveDfAccumulator(divergence)
 
     for (_, y, weights) in data_module.val_dataloader():
@@ -121,7 +123,7 @@ def calculate_total_divergence(
 class ReweightLoopResult:
     calculate_divergence_results: List[DivergenceResult]
     p_over_q_cols: List[str]
-    final_divergence_accumulator: LabeledBinaryNaiveDfAccumulator
+    final_divergence_accumulator: "LabeledBinaryNaiveDfAccumulator"
     final_data_module: PandasDirDataModule
 
 
@@ -176,6 +178,9 @@ def run_reweight_loop(
         ReweightLoopResult object containing the result of each iteration, the name of the p_over_q_{i} columns added,
         the final divergence accumulator and the final reweighted data module
     """
+    assert (
+        len(data_module.feature_spec) == 2 and isinstance(data_module.feature_spec[1], list)
+    ), "run_reweight_loop requires feature_spec=[features, [label, ...]]"
     reweighted_path = data_module.dataset_dir.parent / f"{data_module.dataset_dir.name}_{tag}_reweighted"
     current_datamodule = data_module
     if resume:
@@ -218,7 +223,7 @@ def run_reweight_loop(
                 f"{tag}_reweighted",
                 lambda df: reweight_down_from_p_over_q(
                     df,
-                    data_module.target_cols[0],
+                    data_module.feature_spec[1][0],
                     p_over_q_col
                 ),
                 reweighted_path,
@@ -229,9 +234,13 @@ def run_reweight_loop(
         results.append(result)
         current_lr *= lr_decay_factor
 
+    new_feature_spec = [
+        current_datamodule.feature_spec[0],
+        list(current_datamodule.feature_spec[1]) + p_over_q_cols,
+    ]
     final_data_module = current_datamodule.copy(
         weight_col=data_module.weight_col,
-        target_cols=current_datamodule.target_cols + p_over_q_cols
+        feature_spec=new_feature_spec,
     )
 
     return ReweightLoopResult(
