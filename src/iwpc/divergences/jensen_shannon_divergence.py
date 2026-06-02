@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from scipy.special import xlogy
 
 from .base import DifferentiableFDivergence
 
@@ -13,10 +14,10 @@ class JensenShannonDivergence(DifferentiableFDivergence):
         self.log_two = torch.log(torch.tensor(2.))
 
     def _f_torch(self, x):
-        return 0.5 * (x * torch.log(x) - (x + 1) * torch.log((x+1) / 2))
+        return 0.5 * (torch.special.xlogy(x, x) - torch.special.xlogy(x + 1, (x + 1) / 2))
 
     def _f_np(self, x):
-        return 0.5 * (x * np.log(x) - (x + 1) * np.log((x+1) / 2))
+        return 0.5 * (xlogy(x, x) - xlogy(x + 1, (x + 1) / 2))
 
     def _f_conj_torch(self, x):
         return - 0.5 * (self.log_two + torch.log1p(-0.5 * torch.exp(2 * x)))
