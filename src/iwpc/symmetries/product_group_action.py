@@ -12,28 +12,24 @@ from iwpc.symmetries.product_action_element import ProductActionElement
 class ProductGroupAction(GroupAction):
     """
     A wrapper group action representing the direct product of a list of GroupActions acting on disjoint dim ranges of
-    the input and output spaces. Given sub-groups with input dimensions d1, ..., dN and output dimensions o1, ..., oN,
-    the product acts on a feature vector of length d1+...+dN by applying each sub-group's elements to the corresponding
-    slice. Every sub-group must declare both input_dim and output_dim. Nested ProductGroupAction instances are
-    automatically un-curried when constructed using the bitwise and operator, '&', or ProductGroupAction.merge.
-    Batches are drawn jointly by zipping the sub-group batches. When all sub-groups are FiniteGroupActions the full
-    direct product is enumerated instead via the finite fast-path on FiniteGroupAction.__and__
+    R^dim. Given sub-groups with dims d1, ..., dN, the product acts on a feature vector of length d1+...+dN by applying
+    each sub-group's elements to the corresponding slice. Nested ProductGroupAction instances are automatically
+    un-curried when constructed using the bitwise and operator ``&`` or ``merge``. Batches are drawn jointly by
+    zipping the sub-group batches. When all sub-groups are FiniteGroupActions the full direct product is enumerated
+    instead via the finite fast-path on ``FiniteGroupAction.__and__``
     """
+
     def __init__(self, sub_groups: List[GroupAction]):
         """
         Parameters
         ----------
         sub_groups
-            A list of GroupActions to take the direct product of. Every sub-group must declare both input_dim and
-            output_dim
+            A list of GroupActions to take the direct product of
         """
         if len(sub_groups) == 0:
             raise ValueError('ProductGroupAction requires at least one sub-group')
 
-        super().__init__(
-            input_dim=sum(g.input_dim for g in sub_groups),
-            output_dim=sum(g.output_dim for g in sub_groups),
-        )
+        super().__init__(dim=sum(g.dim for g in sub_groups))
         self.sub_groups = ModuleList(sub_groups)
 
     def batch(self) -> Tuple[GroupActionElement, ...]:
@@ -45,9 +41,7 @@ class ProductGroupAction(GroupAction):
             the minimum of the sub-group batch lengths
         """
         sub_batches = [list(g.batch()) for g in self.sub_groups]
-        return tuple(
-            _product_compose(tup) for tup in zip(*sub_batches)
-        )
+        return tuple(_product_compose(tup) for tup in zip(*sub_batches))
 
     @classmethod
     def merge(cls, a: GroupAction, b: GroupAction) -> "ProductGroupAction":
@@ -111,9 +105,8 @@ def _build_finite_product(sub_groups: List[FiniteGroupAction]) -> FiniteGroupAct
     if len(sub_groups) == 0:
         raise ValueError('ProductGroupAction requires at least one sub-group')
 
-    input_dim = sum(g.input_dim for g in sub_groups)
-    output_dim = sum(g.output_dim for g in sub_groups)
+    dim = sum(g.dim for g in sub_groups)
     sub_element_lists = [list(g.batch()) for g in sub_groups]
     all_tuples = list(itertools.product(*sub_element_lists))
     non_id_elements = [_product_compose(tup) for tup in all_tuples[1:]]
-    return FiniteGroupAction(non_id_elements, input_dim=input_dim, output_dim=output_dim)
+    return FiniteGroupAction(non_id_elements, dim=dim)

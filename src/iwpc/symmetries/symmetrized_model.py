@@ -4,23 +4,30 @@ import torch
 from torch import Tensor
 from torch.nn import Module
 
-from iwpc.symmetries.group_action import GroupAction
 from iwpc.symmetries.group_action_element import InputSpaceInvariantException
+from iwpc.symmetries.separable_group_action import SeparableGroupAction
 
 
 class SymmetrizedModel(Module):
     """
-    Group actions, G, define a projection operator S_G where S_Gf(x) = E_G[gf(x)] and expectation is taken with
-    respect to the Haar measure on G. This wrapper module implements the complement projection operator on the
-    base_function. The resulting module is invariant under the action of G. Note that the averaging procedure can
-    significantly increase model evaluation time.
+    Separable group actions, G, define a projection operator S_G where S_G f(x) = E_G[g.f(x)] and expectation is taken
+    with respect to the Haar measure on G. This wrapper module evaluates that projection on ``base_function``. The
+    resulting module is invariant under the action of G. Note that the averaging procedure can significantly increase
+    model evaluation time
+
+    Implementation dedupes calls to ``base_function`` for any element whose input-side action is the identity: such
+    elements share a single evaluation on the unmodified input. Identity is detected by reading
+    ``SeparableGroupActionElement.input_is_identity``; the legacy
+    ``InputSpaceInvariantException`` raised from ``input_space_action`` is also caught for back-compat
+    with user-defined elements
     """
-    def __init__(self, group: GroupAction, base_function: Callable[[...], Tensor]):
+
+    def __init__(self, group: SeparableGroupAction, base_function: Callable[[...], Tensor]):
         """
         Parameters
         ----------
         group
-            A group action over which the base_model should be averaged
+            A separable group action over which the base_function should be averaged
         base_function
             Some function
         """
@@ -30,8 +37,8 @@ class SymmetrizedModel(Module):
 
     def forward(self, input: Tensor) -> Tensor:
         """
-        Computes the average of base_model under the group action, i.e. S_G base_model. Implementation will re-use model
-        calls if a group action element does not affect the input space and raises an InputSpaceInvariantException
+        Computes the average of base_model under the group action, i.e. S_G base_model. Implementation re-uses model
+        calls when a group action element does not affect the input space
 
         Parameters
         ----------
@@ -50,6 +57,13 @@ class SymmetrizedModel(Module):
         max_output_idx = -1
 
         for action in actions:
+            if action.input_is_identity:
+                if original_input_idx is None:
+                    full_input.append(input)
+                    max_output_idx += 1
+                    original_input_idx = max_output_idx
+                output_indices.append(original_input_idx)
+                continue
             try:
                 full_input.append(action.input_space_action(input))
                 max_output_idx += 1

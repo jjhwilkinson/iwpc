@@ -13,8 +13,8 @@ basic_model_factory(
     batch_norm: bool = False,
     initial_layers: Optional[Iterable[nn.Module]] = None,
     final_layers: Optional[Iterable[nn.Module]] = None,
-    symmetries: Optional[Union[GroupAction, Iterable[GroupAction]]] = None,
-    complement_symmetries: Optional[Union[GroupAction, Iterable[GroupAction]]] = None,
+    symmetries: Optional[Union[SeparableGroupAction, Iterable[SeparableGroupAction]]] = None,
+    complement_symmetries: Optional[Union[SeparableGroupAction, Iterable[SeparableGroupAction]]] = None,
     activation: Callable = LeakyReLU,
     debug_name: str | None = None,
 ) -> Sequential
@@ -35,11 +35,13 @@ Composition order (top to bottom of the resulting `nn.Sequential`):
    `is_vector_input=True`).
 
 After the `Sequential` is built, `symmetries` and `complement_symmetries` are
-coerced via `_coerce_group_action` (single `GroupAction`, or iterable folded
-with `*`) and the model is wrapped by `group.symmetrize(model)` then
-`group.complement(model)` respectively. Composition operators `*` (joint action
-on same space) and `&` (direct product on disjoint dim slices) are how
-multi-symmetry models are described declaratively.
+coerced via `_coerce_group_action` (single `SeparableGroupAction`, or iterable
+folded with `*`) and the model is wrapped by `group.symmetrize(model)` then
+`group.complement(model)` respectively. Composition operators `*` (joint
+action on same space) and `&` (direct product on disjoint dim slices) are how
+multi-symmetry models are described declaratively. Both operators are defined
+on `SeparableGroupAction` and delegate per-side to the underlying
+vector-space `GroupAction`s.
 
 `basic_model_factory_sum(specs, output, **common_spec)` builds one
 `basic_model_factory` per spec dict (overlaying `common_spec`), forces each
@@ -71,9 +73,11 @@ sub-model's `output` to `output.input_shape`, and wraps them in an
 - `iwpc.modules.naive.GenericNaiveVariationalFDivergenceEstimator` passes its
   `input` straight into `basic_model_factory` — primary consumer in the
   divergence-estimation flow.
-- `iwpc.symmetries.group_action.GroupAction.symmetrize`/`.complement` are
-  invoked here; any new symmetry types should keep `*`/`&` and the
-  `symmetrize`/`complement` API stable.
+- `iwpc.symmetries.separable_group_action.SeparableGroupAction.symmetrize` /
+  `.complement` are invoked here; any new symmetry types should keep `*`/`&`
+  and the `symmetrize`/`complement` API stable. Note: `symmetrize` /
+  `complement` are only defined on the function-space `SeparableGroupAction`,
+  not on the bare vector-space `GroupAction`.
 - `iwpc.modules.utility_modules.independent_sum_module.IndependentSumModule`
   backs `basic_model_factory_sum`.
 - `iwpc.learn_dist` reuses these models (and `RunningDeNormLayer` in

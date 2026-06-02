@@ -8,31 +8,28 @@ from iwpc.symmetries.group_action_element import GroupActionElement, Identity
 
 class FiniteGroupAction(GroupAction):
     """
-    Generic implementation of a finite group action. Overrides the '&' and '*' operators so that when both operands
-    are FiniteGroupActions the result is a FiniteGroupAction enumerating the full direct product or full Cartesian
-    product of elements respectively. When the other operand is not finite, the operators fall back to the generic
-    ProductGroupAction or JointGroupAction wrappers
+    Generic implementation of a finite group action on R^dim. Overrides the ``&`` and ``*`` operators so that when both
+    operands are FiniteGroupActions the result is a FiniteGroupAction enumerating the full direct product or full
+    Cartesian product of elements respectively. When the other operand is not finite, the operators fall back to the
+    generic ProductGroupAction or JointGroupAction wrappers
     """
+
     def __init__(
         self,
         non_id_elements: Iterable[GroupActionElement],
-        input_dim: int,
-        output_dim: int,
+        dim: int,
     ):
         """
         Parameters
         ----------
         non_id_elements
             An iterable of the non-identity GroupActionElements in the group action
-        input_dim
-            The dimensionality of the input space this group acts on. The prepended Identity element is constructed
-            with this dim
-        output_dim
-            The dimensionality of the output space this group acts on. The prepended Identity element is constructed
+        dim
+            The dimensionality of the vector space this group acts on. The prepended Identity element is constructed
             with this dim
         """
-        super().__init__(input_dim=input_dim, output_dim=output_dim)
-        self.elements = ModuleList([Identity(input_dim=input_dim, output_dim=output_dim), *non_id_elements])
+        super().__init__(dim=dim)
+        self.elements = ModuleList([Identity(dim=dim), *non_id_elements])
 
     def batch(self) -> Tuple[GroupActionElement, ...]:
         """
@@ -43,7 +40,7 @@ class FiniteGroupAction(GroupAction):
         """
         return self.elements
 
-    def __len__(self):
+    def __len__(self) -> int:
         """
         Returns
         -------
@@ -54,9 +51,9 @@ class FiniteGroupAction(GroupAction):
 
     def __and__(self, other: GroupAction) -> GroupAction:
         """
-        Specialised direct product. When other is also a FiniteGroupAction, returns a FiniteGroupAction enumerating
-        the full direct product |self| * |other| of elements as ProductActionElements. Otherwise falls back to the
-        generic ProductGroupAction wrapper
+        Specialised direct product. When other is also a FiniteGroupAction, returns a FiniteGroupAction enumerating the
+        full direct product |self| * |other| of elements as ProductActionElements. Otherwise falls back to the generic
+        ProductGroupAction wrapper
 
         Parameters
         ----------
@@ -75,9 +72,9 @@ class FiniteGroupAction(GroupAction):
 
     def __mul__(self, other: GroupAction) -> GroupAction:
         """
-        Specialised joint action on the same space. When other is also a FiniteGroupAction, returns a
-        FiniteGroupAction enumerating the full Cartesian product |self| * |other| of elements as
-        ComposedActionElements. Otherwise falls back to the generic JointGroupAction wrapper
+        Specialised joint action on the same space. When other is also a FiniteGroupAction, returns a FiniteGroupAction
+        enumerating the full Cartesian product |self| * |other| of elements as ComposedActionElements. Otherwise falls
+        back to the generic JointGroupAction wrapper
 
         Parameters
         ----------

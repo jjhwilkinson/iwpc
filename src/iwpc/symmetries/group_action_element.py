@@ -4,85 +4,60 @@ from torch import Tensor
 from torch.nn import Module
 
 
-class InputSpaceInvariantException(Exception):
-    """
-    Special exception that may be raised in the implementation of the input_space_action method of a GroupActionElement
-    if the action does not affect the input space. It is recommended to raise this exception rather than returning the
-    input tensor as various implementations can use this fact to speed up execution and prevent re-evaluating models
-    on duplicate inputs
-    """
-    def __init__(self):
-        super().__init__("Input space is invariant under group element action")
-
-
 class GroupActionElement(Module, ABC):
     """
-    Abstract interface for the action of a particular group element, g, on the function space accessible to a NN from
-    R^M -> R^N. We restrict ourselves to actions that act separately on the input and output spaces, that is group
-    actions that can be expressed in the form [g⋅f](x) = g⋅(f(g⋅x)) for some action of G on R^M and R^N separately.
+    Abstract interface for the action of a particular group element, g, on a single vector space R^dim. Concrete
+    subclasses implement ``action`` plus any structure-preserving algebra they support. The separable function
+    space wrappers in ``iwpc.symmetries.separable_group_action_element`` combine two of these — one acting on the
+    input space and one on the output space — to recover the original function-space action
 
     GroupActionElements support declarative composition via Python operators
 
-    >>> # Group multiplication: (g1 * g2)(x) = g1(g2(x)) for both input and output spaces
+    >>> # Group multiplication: (g1 * g2)(x) = g1(g2(x))
     >>> composed = g1 * g2
     >>> # Direct product on disjoint dim ranges: (g1 & g2)(concat(x1, x2)) = concat(g1(x1), g2(x2))
     >>> product = g1 & g2
 
     Nested compositions are automatically un-curried, so g1 * g2 * g3 yields a single ComposedActionElement with three
     sub-elements rather than a binary tree
+
+    Subclasses may override the ``is_identity`` class attribute, or set it as an instance attribute, to advertise
+    that the element is the identity transformation. The separable wrapper layer reads this flag to skip duplicate model
+    evaluations of unchanged inputs
     """
-    def __init__(self, input_dim: int, output_dim: int):
+
+    is_identity: bool = False
+
+    def __init__(self, dim: int):
         """
         Parameters
         ----------
-        input_dim
-            The dimensionality of the input space this element acts on
-        output_dim
-            The dimensionality of the output space this element acts on
+        dim
+            The dimensionality of the vector space this element acts on
         """
         super().__init__()
-        self.input_dim = input_dim
-        self.output_dim = output_dim
+        self.dim = dim
 
     @abstractmethod
-    def input_space_action(self, x: Tensor) -> Tensor:
+    def action(self, x: Tensor) -> Tensor:
         """
-        Performs the action of the group element on the input space, R^M, of the function. If the action does not affect
-        the input space, then this function should raise an InputSpaceInvariantException to inform the caller that it
-        may re-use previous model evaluations of the original inputs
+        Performs the action of the group element on a tensor in R^dim
 
         Parameters
         ----------
         x
-            An input tensor in R^M
+            An input tensor with last dimension self.dim
 
         Returns
         -------
         Tensor
-            The action of g input tensor, gx
-        """
-
-    @abstractmethod
-    def output_space_action(self, x: Tensor) -> Tensor:
-        """
-        Performs the action of the group element on the output space, R^N, of the function
-
-        Parameters
-        ----------
-        x
-            An input tensor of output values in R^N
-
-        Returns
-        -------
-        Tensor
-            The action of g input tensor, gx
+            The action of g on the input tensor, gx
         """
 
     def to_group(self) -> "FiniteGroupAction":
         """
-        Constructs a group action containing the identity and this group action element. Warning, this method should only
-        be used if this group action element is an involution. In other words, this action undoes itself. It is your
-        responsibility to check this
+        Constructs a ``FiniteGroupAction`` containing the identity and this element. Warning: this is only valid
+        if this element is an involution (its own inverse). It is the caller's responsibility to check this
 
         Returns
         -------
@@ -90,13 +65,13 @@ class GroupActionElement(Module, ABC):
             A FiniteGroupAction containing only this element and the identity
         """
         from iwpc.symmetries.finite_group_action import FiniteGroupAction
-        return FiniteGroupAction([self], input_dim=self.input_dim, output_dim=self.output_dim)
+        return FiniteGroupAction([self], dim=self.dim)
 
-    def __mul__(self, other: "GroupActionElement") -> "ComposedActionElement":
+    def __mul__(self, other: "GroupActionElement") -> "GroupActionElement":
         """
-        Composes two GroupActionElements via group multiplication. The resulting element acts on the input space as
-        (g1 * g2).input_space_action(x) = g1.input_space_action(g2.input_space_action(x)), and likewise for the output
-        space. Nested ComposedActionElement instances are automatically un-curried
+        Composes two GroupActionElements via group multiplication. The resulting element acts as
+        (g1 * g2).action(x) = g1.action(g2.action(x)). Nested ComposedActionElement instances are automatically
+        un-curried
 
         Parameters
         ----------
@@ -105,18 +80,17 @@ class GroupActionElement(Module, ABC):
 
         Returns
         -------
-        ComposedActionElement
+        GroupActionElement
             The composed group element
         """
         from iwpc.symmetries.composed_action_element import ComposedActionElement
         return ComposedActionElement.merge(self, other)
 
-    def __and__(self, other: "GroupActionElement") -> "ProductActionElement":
+    def __and__(self, other: "GroupActionElement") -> "GroupActionElement":
         """
         Forms the direct product of two GroupActionElements acting on disjoint dim ranges. The resulting element acts on
-        the concatenation of input feature vectors of length self.input_dim + other.input_dim by applying self to the
-        first slice and other to the second slice, and likewise for the output space. Both operands must declare their
-        input_dim and output_dim. Nested ProductActionElement instances are automatically un-curried
+        the concatenation of feature vectors of length self.dim + other.dim by applying self to the first slice and
+        other to the second slice. Nested ProductActionElement instances are automatically un-curried
 
         Parameters
         ----------
@@ -125,7 +99,7 @@ class GroupActionElement(Module, ABC):
 
         Returns
         -------
-        ProductActionElement
+        GroupActionElement
             The direct product element
         """
         from iwpc.symmetries.product_action_element import ProductActionElement
@@ -134,21 +108,44 @@ class GroupActionElement(Module, ABC):
 
 class Identity(GroupActionElement):
     """
-    Convenience implementation of the action of the identity.
+    Convenience implementation of the identity action on R^dim
     """
-    def __init__(self, input_dim: int, output_dim: int):
+
+    is_identity = True
+
+    def __init__(self, dim: int):
         """
         Parameters
         ----------
-        input_dim
-            The dimensionality of the input space this identity acts on
-        output_dim
-            The dimensionality of the output space this identity acts on
+        dim
+            The dimensionality of the vector space this identity acts on
         """
-        super().__init__(input_dim=input_dim, output_dim=output_dim)
+        super().__init__(dim=dim)
 
-    def input_space_action(self, x: Tensor) -> Tensor:
-        raise InputSpaceInvariantException()
+    def action(self, x: Tensor) -> Tensor:
+        """
+        Returns the input tensor unchanged
 
-    def output_space_action(self, x: Tensor) -> Tensor:
+        Parameters
+        ----------
+        x
+            An input tensor
+
+        Returns
+        -------
+        Tensor
+            x, unchanged
+        """
         return x
+
+
+class InputSpaceInvariantException(Exception):
+    """
+    Legacy sentinel signalling that the input space side of a separable action is the identity. Retained for
+    back-compat: ``iwpc.symmetries.symmetrized_model.SymmetrizedModel`` still catches this so user-defined
+    elements that raise it continue to dedupe correctly. New code should prefer setting
+    ``GroupActionElement.is_identity`` on the input-side element
+    """
+
+    def __init__(self):
+        super().__init__("Input space is invariant under group element action")

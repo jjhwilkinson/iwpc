@@ -10,7 +10,7 @@ from .layers import RunningNormLayer, LambdaLayer
 from ..encodings.encoding_base import Encoding
 from ..encodings.trivial_encoding import TrivialEncoding
 from ..utility_modules.independent_sum_module import IndependentSumModule
-from ..symmetries.group_action import GroupAction
+from ..symmetries.separable_group_action import SeparableGroupAction
 from ..types import Shape
 
 
@@ -70,8 +70,8 @@ def basic_model_factory(
     batch_norm: bool = False,
     initial_layers: Optional[Iterable[nn.Module]] = None,
     final_layers: Optional[Iterable[nn.Module]] = None,
-    symmetries: Optional[Union[GroupAction, Iterable[GroupAction]]] = None,
-    complement_symmetries: Optional[Union[GroupAction, Iterable[GroupAction]]] = None,
+    symmetries: Optional[Union[SeparableGroupAction, Iterable[SeparableGroupAction]]] = None,
+    complement_symmetries: Optional[Union[SeparableGroupAction, Iterable[SeparableGroupAction]]] = None,
     activation: Callable = LeakyReLU,
     debug_name: str | None = None,
 ) -> Sequential:
@@ -98,14 +98,15 @@ def basic_model_factory(
     final_layers
         An optional list of any additional layers to insert at the end of the sequential model sequence
     symmetries
-        A symmetry group action under which the network should be invariant. To combine multiple symmetries,
-        compose them declaratively with '*' (joint action on the same space) or '&' (direct product on disjoint
-        dim ranges), e.g. ``G1 * G2``. An iterable of GroupActions is also accepted as a convenience and is folded
-        via '*' to match the previous behaviour of symmetrizing over each group on the same space
+        A separable symmetry group action under which the network should be invariant. To combine multiple
+        symmetries, compose them declaratively with '*' (joint action on the same space) or '&' (direct product on
+        disjoint dim ranges), e.g. ``G1 * G2``. An iterable of SeparableGroupActions is also accepted as a
+        convenience and is folded via '*' to match the previous behaviour of symmetrizing over each group on the
+        same space
     complement_symmetries
-        A symmetry group action for which the network output should reside in the symmetrized complement.
-        Compose multiple symmetries declaratively with '*' or '&'. An iterable of GroupActions is also accepted as
-        a convenience and is folded via '*'
+        A separable symmetry group action for which the network output should reside in the symmetrized complement.
+        Compose multiple symmetries declaratively with '*' or '&'. An iterable of SeparableGroupActions is also
+        accepted as a convenience and is folded via '*'
     activation
         The activation function class to apply to the output of layers
     debug_name
@@ -173,27 +174,27 @@ def basic_model_factory(
 
 
 def _coerce_group_action(
-    symmetries: Optional[Union[GroupAction, Iterable[GroupAction]]],
-) -> Optional[GroupAction]:
+    symmetries: Optional[Union[SeparableGroupAction, Iterable[SeparableGroupAction]]],
+) -> Optional[SeparableGroupAction]:
     """
-    Coerces the symmetries argument of basic_model_factory into a single GroupAction. A None or empty iterable returns
-    None. A single GroupAction is returned as-is. An iterable of GroupActions is folded together via the '*' operator
-    (joint action on the same space) so the resulting model is symmetrized once over the joint group, matching the
-    semantics of the previous nested-symmetrize loop
+    Coerces the symmetries argument of basic_model_factory into a single SeparableGroupAction. A None or empty
+    iterable returns None. A single SeparableGroupAction is returned as-is. An iterable of SeparableGroupActions is
+    folded together via the '*' operator (joint action on the same space) so the resulting model is symmetrized once
+    over the joint group, matching the semantics of the previous nested-symmetrize loop
 
     Parameters
     ----------
     symmetries
-        Either None, a single GroupAction, or an iterable of GroupActions
+        Either None, a single SeparableGroupAction, or an iterable of SeparableGroupActions
 
     Returns
     -------
-    Optional[GroupAction]
-        A single GroupAction representing the combined symmetries, or None if no symmetries were provided
+    Optional[SeparableGroupAction]
+        A single SeparableGroupAction representing the combined symmetries, or None if no symmetries were provided
     """
     if symmetries is None:
         return None
-    if isinstance(symmetries, GroupAction):
+    if isinstance(symmetries, SeparableGroupAction):
         return symmetries
     groups = list(symmetries)
     if len(groups) == 0:
