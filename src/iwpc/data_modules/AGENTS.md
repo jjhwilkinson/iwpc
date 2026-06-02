@@ -4,14 +4,11 @@
 
 - Every dataloader here yields `(features, labels, weights)` tuples.
 - `labels == 0` -> samples from `p`. `labels == 1` -> samples from `q`.
-- The pandas/numpy binary modules add this label automatically.
-  `BinaryPandasDataModule` writes a 0/1 column whose name is taken from
-  `feature_spec[1][0]` (the first target column in the nested
-  `[feature_cols, [label_col, ...]]` convention shared with
-  `PandasDirDataModule`); `BinaryNumpyDataModule` concatenates a 0/1 tensor.
-  For `PandasDirDataModule` the label column is whatever you point
-  `feature_spec` at as a target — sample files in `examples/sample_dataset/`
-  use `'label'`.
+- The pandas/numpy binary modules add this label automatically (`__label`
+  column for `BinaryPandasDataModule`; concatenated 0/1 tensor for
+  `BinaryNumpyDataModule`). For `PandasDirDataModule` the label column is
+  whatever you point `feature_spec` at as a target — sample files in
+  `examples/sample_dataset/` use `'label'`.
 - Weights in `BinaryNumpyDataModule` are mean-normalised within each class.
   `PandasDirDataModule.normalise_weights(label_col=...)` does the same for
   on-disk datasets and is automatically called by `.reweight`.
