@@ -26,7 +26,7 @@ class FDivergenceEstimator(LightningModule, ABC):
         lr_patience: int = 10,
         lr_decay_factor: Optional[float] = 0.1,
     ):
-        """
+        r"""
         Parameters
         ----------
         model
@@ -169,7 +169,7 @@ class FDivergenceEstimator(LightningModule, ABC):
         }
 
     def forward(self, x: Tensor) -> Tensor:
-        """
+        r"""
         Returns
         -------
         Tensor

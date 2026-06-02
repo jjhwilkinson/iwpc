@@ -74,8 +74,3 @@ class AsymmetryEstimator(FDivergenceEstimator):
             weights,
             divs
         )
-        return
-        self.val_accumulator(
-            weights,
-            self.divergence.calculate_naive_p_summands_given_log(torch.exp(self.diagonal_model(x)[:, 0])) - self.sym_q_fn(x)[:, 0]
-        )
