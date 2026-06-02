@@ -72,6 +72,11 @@ class SeparableGroupActionElement(Module):
         Constructs a :py:class:`SeparableFiniteGroupAction` containing the identity pair and this element. Warning:
         this is only valid if this element is an involution (its own inverse). It is the caller's responsibility to
         check this
+
+        Returns
+        -------
+        SeparableFiniteGroupAction
+            A SeparableFiniteGroupAction containing only this element and the identity pair
         """
         from iwpc.symmetries.separable_finite_group_action import SeparableFiniteGroupAction
         return SeparableFiniteGroupAction([self], input_dim=self.input_dim, output_dim=self.output_dim)
@@ -81,6 +86,16 @@ class SeparableGroupActionElement(Module):
         Composes two separable elements by composing their input-side and output-side actions independently via the
         vector-space ``*`` operator. Each side may un-curry into a ComposedActionElement or stay analytic (e.g. when
         both sides are ProdAddActions)
+
+        Parameters
+        ----------
+        other
+            A SeparableGroupActionElement to compose with
+
+        Returns
+        -------
+        SeparableGroupActionElement
+            The composed separable element
         """
         return SeparableGroupActionElement(
             input_action=self.input_action * other.input_action,
@@ -91,6 +106,16 @@ class SeparableGroupActionElement(Module):
         """
         Direct product on disjoint dim ranges. The input and output sides are direct-producted via the vector-space
         ``&`` operator independently
+
+        Parameters
+        ----------
+        other
+            A SeparableGroupActionElement to take the direct product with
+
+        Returns
+        -------
+        SeparableGroupActionElement
+            The direct-product separable element acting on the concatenated input and output spaces
         """
         return SeparableGroupActionElement(
             input_action=self.input_action & other.input_action,
@@ -121,6 +146,11 @@ class SeparableGroupActionElement(Module):
         output_fn
             Optional callable acting on the output space. Pass ``None`` rather than an identity function to advertise
             output invariance
+
+        Returns
+        -------
+        SeparableGroupActionElement
+            A SeparableGroupActionElement wrapping the supplied callables (or Identity on either side)
         """
         from iwpc.symmetries.lambda_action import LambdaAction
         input_action = Identity(dim=input_dim) if input_fn is None else LambdaAction(dim=input_dim, fn=input_fn)
@@ -140,6 +170,26 @@ class SeparableGroupActionElement(Module):
         """
         Convenience factory mirroring the legacy ``ProdAddAction(input_prod=..., output_prod=..., ...)`` constructor.
         Builds a :py:class:`ProdAddAction` on each side
+
+        Parameters
+        ----------
+        input_dim
+            Dimensionality of the input space. May be omitted if inferrable from ``input_prod`` or ``input_add``
+        output_dim
+            Dimensionality of the output space. May be omitted if inferrable from ``output_prod`` or ``output_add``
+        input_prod
+            Multiplier constant for the input-side action. Defaults to ones if not provided
+        input_add
+            Additive constant for the input-side action. Defaults to zeros if not provided
+        output_prod
+            Multiplier constant for the output-side action. Defaults to ones if not provided
+        output_add
+            Additive constant for the output-side action. Defaults to zeros if not provided
+
+        Returns
+        -------
+        SeparableGroupActionElement
+            A SeparableGroupActionElement wrapping a ProdAddAction on each side
         """
         from iwpc.symmetries.prod_add_action import ProdAddAction
         input_action = ProdAddAction(prod=input_prod, add=input_add, dim=input_dim)

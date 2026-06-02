@@ -54,6 +54,18 @@ class JointGroupAction(GroupAction):
         """
         Constructs a JointGroupAction from a and b, splicing in the sub_groups of any operand that is itself a
         JointGroupAction so that nested joint actions are flattened into a single un-curried list
+
+        Parameters
+        ----------
+        a
+            A GroupAction
+        b
+            A GroupAction
+
+        Returns
+        -------
+        JointGroupAction
+            The flattened joint action a * b
         """
         a_groups = list(a.sub_groups) if isinstance(a, JointGroupAction) else [a]
         b_groups = list(b.sub_groups) if isinstance(b, JointGroupAction) else [b]
@@ -64,6 +76,16 @@ def _joint_compose(elements: Tuple[GroupActionElement, ...]) -> GroupActionEleme
     """
     Composes a tuple of GroupActionElements via group multiplication, automatically un-currying via the
     ComposedActionElement.merge factory
+
+    Parameters
+    ----------
+    elements
+        A tuple of GroupActionElements
+
+    Returns
+    -------
+    GroupActionElement
+        A single (un-curried) ComposedActionElement representing the right-to-left composition of the inputs
     """
     composed = elements[0]
     for e in elements[1:]:
@@ -73,7 +95,12 @@ def _joint_compose(elements: Tuple[GroupActionElement, ...]) -> GroupActionEleme
 
 def _validate_consistent_dims(sub_groups: List[GroupAction]) -> None:
     """
-    Checks that every sub-group declares the same dim
+    Checks that every sub-group declares the same dim, raising ValueError otherwise
+
+    Parameters
+    ----------
+    sub_groups
+        A list of GroupActions whose dims must all agree
     """
     dims = {g.dim for g in sub_groups}
     if len(dims) != 1:
@@ -86,6 +113,16 @@ def _build_finite_joint(sub_groups: List[FiniteGroupAction]) -> FiniteGroupActio
     """
     Enumerates the full Cartesian product of a list of FiniteGroupActions as a FiniteGroupAction whose non-identity
     elements are ComposedActionElements
+
+    Parameters
+    ----------
+    sub_groups
+        A list of FiniteGroupActions sharing the same dim
+
+    Returns
+    -------
+    FiniteGroupAction
+        A FiniteGroupAction with |sub_groups[0]| * ... * |sub_groups[-1]| elements
     """
     if len(sub_groups) == 0:
         raise ValueError('JointGroupAction requires at least one sub-group')

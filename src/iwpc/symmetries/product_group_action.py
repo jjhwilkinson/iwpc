@@ -48,6 +48,18 @@ class ProductGroupAction(GroupAction):
         """
         Constructs a ProductGroupAction from a and b, splicing in the sub_groups of any operand that is itself a
         ProductGroupAction so that nested products are flattened into a single un-curried list
+
+        Parameters
+        ----------
+        a
+            A GroupAction
+        b
+            A GroupAction
+
+        Returns
+        -------
+        ProductGroupAction
+            The flattened direct product a & b
         """
         a_groups = list(a.sub_groups) if isinstance(a, ProductGroupAction) else [a]
         b_groups = list(b.sub_groups) if isinstance(b, ProductGroupAction) else [b]
@@ -58,6 +70,16 @@ def _product_compose(elements: Tuple[GroupActionElement, ...]) -> GroupActionEle
     """
     Composes a tuple of GroupActionElements into a single ProductActionElement, automatically un-currying via the
     ProductActionElement.merge factory
+
+    Parameters
+    ----------
+    elements
+        A tuple of GroupActionElements
+
+    Returns
+    -------
+    GroupActionElement
+        A single (un-curried) ProductActionElement representing the direct product of the inputs
     """
     composed = elements[0]
     for e in elements[1:]:
@@ -69,6 +91,16 @@ def _build_finite_product(sub_groups: List[FiniteGroupAction]) -> FiniteGroupAct
     """
     Enumerates the full direct product of a list of FiniteGroupActions as a FiniteGroupAction whose non-identity
     elements are ProductActionElements
+
+    Parameters
+    ----------
+    sub_groups
+        A list of FiniteGroupActions
+
+    Returns
+    -------
+    FiniteGroupAction
+        A FiniteGroupAction with |sub_groups[0]| * ... * |sub_groups[-1]| elements
     """
     if len(sub_groups) == 0:
         raise ValueError('ProductGroupAction requires at least one sub-group')

@@ -40,7 +40,7 @@ class FiniteGroupAction(GroupAction):
         """
         return self.elements
 
-    def __len__(self):
+    def __len__(self) -> int:
         """
         Returns
         -------
@@ -54,6 +54,16 @@ class FiniteGroupAction(GroupAction):
         Specialised direct product. When other is also a FiniteGroupAction, returns a FiniteGroupAction enumerating the
         full direct product |self| * |other| of elements as ProductActionElements. Otherwise falls back to the generic
         ProductGroupAction wrapper
+
+        Parameters
+        ----------
+        other
+            A GroupAction to take the direct product with
+
+        Returns
+        -------
+        GroupAction
+            A FiniteGroupAction if other is a FiniteGroupAction, otherwise a ProductGroupAction
         """
         if isinstance(other, FiniteGroupAction):
             from iwpc.symmetries.product_group_action import _build_finite_product
@@ -65,6 +75,16 @@ class FiniteGroupAction(GroupAction):
         Specialised joint action on the same space. When other is also a FiniteGroupAction, returns a FiniteGroupAction
         enumerating the full Cartesian product |self| * |other| of elements as ComposedActionElements. Otherwise falls
         back to the generic JointGroupAction wrapper
+
+        Parameters
+        ----------
+        other
+            A GroupAction to compose jointly with
+
+        Returns
+        -------
+        GroupAction
+            A FiniteGroupAction if other is a FiniteGroupAction, otherwise a JointGroupAction
         """
         if isinstance(other, FiniteGroupAction):
             from iwpc.symmetries.joint_group_action import _build_finite_joint

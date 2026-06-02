@@ -54,9 +54,15 @@ class SeparableGroupAction(ABC, Module):
         """
         Wraps ``base_function`` in a :py:class:`SymmetrizedModel` so the result is invariant under this group action
 
+        Parameters
+        ----------
+        base_function
+            A function to symmetrize
+
         Returns
         -------
         SymmetrizedModel
+            A symmetrized function invariant under this group action
         """
         from .symmetrized_model import SymmetrizedModel
         return SymmetrizedModel(self, base_function)
@@ -66,9 +72,15 @@ class SeparableGroupAction(ABC, Module):
         Wraps ``base_function`` in a :py:class:`ComplementModel` so the result lives in the orthogonal complement of
         the symmetrisation projection under this group action
 
+        Parameters
+        ----------
+        base_function
+            A function to project into the symmetrised complement
+
         Returns
         -------
         ComplementModel
+            A function in the complement of the symmetrisation projection of this group action
         """
         from .complement_model import ComplementModel
         return ComplementModel(self, base_function)
@@ -79,6 +91,16 @@ class SeparableGroupAction(ABC, Module):
         :py:class:`SeparableFiniteGroupAction`, the full direct product is enumerated as |self| * |other|
         SeparableGroupActionElements. Otherwise the result is a :py:class:`SeparableProductGroupAction` zipping fresh
         batches from each sub-group
+
+        Parameters
+        ----------
+        other
+            A SeparableGroupAction to take the direct product with
+
+        Returns
+        -------
+        SeparableGroupAction
+            A SeparableFiniteGroupAction if both operands are finite, otherwise a SeparableProductGroupAction
         """
         return SeparableProductGroupAction.merge(self, other)
 
@@ -88,6 +110,16 @@ class SeparableGroupAction(ABC, Module):
         :py:class:`SeparableFiniteGroupAction`, the full Cartesian product is enumerated as |self| * |other|
         SeparableGroupActionElements. Otherwise the result is a :py:class:`SeparableJointGroupAction` zipping fresh
         batches and composing each pair
+
+        Parameters
+        ----------
+        other
+            A SeparableGroupAction to compose jointly with
+
+        Returns
+        -------
+        SeparableGroupAction
+            A SeparableFiniteGroupAction if both operands are finite, otherwise a SeparableJointGroupAction
         """
         return SeparableJointGroupAction.merge(self, other)
 
@@ -109,6 +141,11 @@ class SeparableGroupAction(ABC, Module):
             A vector-space :py:class:`GroupAction` acting on the input space
         output_group
             A vector-space :py:class:`GroupAction` acting on the output space
+
+        Returns
+        -------
+        SeparableGroupAction
+            A SeparableGroupAction whose ``batch()`` zips one element from each underlying group
         """
         return _PairedSeparableGroupAction(input_group=input_group, output_group=output_group)
 
@@ -120,11 +157,26 @@ class _PairedSeparableGroupAction(SeparableGroupAction):
     """
 
     def __init__(self, input_group: GroupAction, output_group: GroupAction):
+        """
+        Parameters
+        ----------
+        input_group
+            A vector-space GroupAction acting on the input space
+        output_group
+            A vector-space GroupAction acting on the output space
+        """
         super().__init__(input_dim=input_group.dim, output_dim=output_group.dim)
         self.input_group = input_group
         self.output_group = output_group
 
     def batch(self) -> Tuple[SeparableGroupActionElement, ...]:
+        """
+        Returns
+        -------
+        Tuple[SeparableGroupActionElement, ...]
+            A tuple of SeparableGroupActionElements drawn by zipping one fresh batch from each underlying group. The
+            batch length is the minimum of the two underlying batch lengths
+        """
         return tuple(
             SeparableGroupActionElement(input_action=in_elem, output_action=out_elem)
             for in_elem, out_elem in zip(self.input_group.batch(), self.output_group.batch())
@@ -172,8 +224,21 @@ class SeparableProductGroupAction(SeparableGroupAction):
         """
         Constructs a SeparableProductGroupAction from a and b, splicing in the sub_groups of any operand that is itself
         a SeparableProductGroupAction so that nested products are flattened. When both operands are
-        :py:class:`SeparableFiniteGroupAction`, returns a SeparableFiniteGroupAction enumerating the full direct product
-        instead
+        :py:class:`SeparableFiniteGroupAction`, returns a SeparableFiniteGroupAction enumerating the full direct
+        product instead
+
+        Parameters
+        ----------
+        a
+            A SeparableGroupAction
+        b
+            A SeparableGroupAction
+
+        Returns
+        -------
+        SeparableGroupAction
+            A SeparableFiniteGroupAction if both operands are finite, otherwise a flattened
+            SeparableProductGroupAction
         """
         from iwpc.symmetries.separable_finite_group_action import SeparableFiniteGroupAction, _build_finite_separable_product
         if isinstance(a, SeparableFiniteGroupAction) and isinstance(b, SeparableFiniteGroupAction):
@@ -227,6 +292,18 @@ class SeparableJointGroupAction(SeparableGroupAction):
         SeparableJointGroupAction so that nested joint actions are flattened. When both operands are
         :py:class:`SeparableFiniteGroupAction`, returns a SeparableFiniteGroupAction enumerating the full Cartesian
         product instead
+
+        Parameters
+        ----------
+        a
+            A SeparableGroupAction
+        b
+            A SeparableGroupAction
+
+        Returns
+        -------
+        SeparableGroupAction
+            A SeparableFiniteGroupAction if both operands are finite, otherwise a flattened SeparableJointGroupAction
         """
         from iwpc.symmetries.separable_finite_group_action import SeparableFiniteGroupAction, _build_finite_separable_joint
         if isinstance(a, SeparableFiniteGroupAction) and isinstance(b, SeparableFiniteGroupAction):
@@ -242,6 +319,17 @@ def _separable_product_compose(
 ) -> SeparableGroupActionElement:
     """
     Combines a tuple of SeparableGroupActionElements via per-side ``&`` (direct product on disjoint dim ranges)
+
+    Parameters
+    ----------
+    elements
+        A tuple of SeparableGroupActionElements
+
+    Returns
+    -------
+    SeparableGroupActionElement
+        A single SeparableGroupActionElement whose input and output actions are the direct products of the
+        corresponding sub-element actions
     """
     composed = elements[0]
     for e in elements[1:]:
@@ -254,6 +342,17 @@ def _separable_joint_compose(
 ) -> SeparableGroupActionElement:
     """
     Combines a tuple of SeparableGroupActionElements via per-side ``*`` (group multiplication on the same space)
+
+    Parameters
+    ----------
+    elements
+        A tuple of SeparableGroupActionElements sharing the same input and output dims
+
+    Returns
+    -------
+    SeparableGroupActionElement
+        A single SeparableGroupActionElement whose input and output actions are the right-to-left compositions of
+        the corresponding sub-element actions
     """
     composed = elements[0]
     for e in elements[1:]:
@@ -263,7 +362,12 @@ def _separable_joint_compose(
 
 def _validate_consistent_separable_dims(sub_groups: List[SeparableGroupAction]) -> None:
     """
-    Checks that every sub-group declares the same input_dim and output_dim
+    Checks that every sub-group declares the same input_dim and output_dim, raising ValueError otherwise
+
+    Parameters
+    ----------
+    sub_groups
+        A list of SeparableGroupActions whose input_dim and output_dim must all agree
     """
     input_dims = {g.input_dim for g in sub_groups}
     output_dims = {g.output_dim for g in sub_groups}

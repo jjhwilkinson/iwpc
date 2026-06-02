@@ -48,6 +48,11 @@ class ProdAddAction(GroupActionElement):
 
     def action(self, x: Tensor) -> Tensor:
         """
+        Parameters
+        ----------
+        x
+            An input tensor with last dimension self.dim
+
         Returns
         -------
         Tensor
@@ -110,8 +115,21 @@ class ProdAddAction(GroupActionElement):
 
 def _materialise(arr: Optional[ArrayLike], dim: int, fill: float) -> Tensor:
     """
-    Returns a 1D buffer of length ``dim`` holding the contents of ``arr``, or a constant-filled buffer when ``arr`` is
-    None
+    Materialises a 1D buffer of length ``dim``, either from a provided array-like or filled with a constant
+
+    Parameters
+    ----------
+    arr
+        An optional 1D array-like of length ``dim``
+    dim
+        The expected length of the resulting buffer
+    fill
+        The constant to use when ``arr`` is None
+
+    Returns
+    -------
+    Tensor
+        A 1D tensor of shape ``(dim,)`` and dtype ``float``
     """
     if arr is None:
         return torch.full((dim,), fill, dtype=torch.float)
@@ -120,7 +138,19 @@ def _materialise(arr: Optional[ArrayLike], dim: int, fill: float) -> Tensor:
 
 def _infer_dim(prod: Optional[ArrayLike], add: Optional[ArrayLike]) -> Optional[int]:
     """
-    Infers a dim size from the lengths of ``prod`` and ``add``. Returns None if neither is provided
+    Infers a dim size from the lengths of ``prod`` and ``add``
+
+    Parameters
+    ----------
+    prod
+        An optional 1D array-like
+    add
+        An optional 1D array-like
+
+    Returns
+    -------
+    Optional[int]
+        The inferred dim length, or None if neither array-like is provided
     """
     for arr in (prod, add):
         if arr is None:

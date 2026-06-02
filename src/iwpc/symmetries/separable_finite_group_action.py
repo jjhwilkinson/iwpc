@@ -53,7 +53,13 @@ class SeparableFiniteGroupAction(SeparableGroupAction):
         """
         return self.elements
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """
+        Returns
+        -------
+        int
+            The number of elements in the group, including the identity pair
+        """
         return len(self.elements)
 
     def __and__(self, other: SeparableGroupAction) -> SeparableGroupAction:
@@ -61,6 +67,16 @@ class SeparableFiniteGroupAction(SeparableGroupAction):
         Specialised direct product. When other is also a SeparableFiniteGroupAction, enumerates the full direct
         product as a SeparableFiniteGroupAction. Otherwise falls back to the generic SeparableProductGroupAction
         wrapper
+
+        Parameters
+        ----------
+        other
+            A SeparableGroupAction to take the direct product with
+
+        Returns
+        -------
+        SeparableGroupAction
+            A SeparableFiniteGroupAction if other is finite, otherwise a SeparableProductGroupAction
         """
         if isinstance(other, SeparableFiniteGroupAction):
             return _build_finite_separable_product([self, other])
@@ -71,6 +87,16 @@ class SeparableFiniteGroupAction(SeparableGroupAction):
         Specialised joint action on the same space. When other is also a SeparableFiniteGroupAction, enumerates the
         full Cartesian product as a SeparableFiniteGroupAction. Otherwise falls back to the generic
         SeparableJointGroupAction wrapper
+
+        Parameters
+        ----------
+        other
+            A SeparableGroupAction to compose jointly with
+
+        Returns
+        -------
+        SeparableGroupAction
+            A SeparableFiniteGroupAction if other is finite, otherwise a SeparableJointGroupAction
         """
         if isinstance(other, SeparableFiniteGroupAction):
             return _build_finite_separable_joint([self, other])
@@ -83,6 +109,16 @@ def _build_finite_separable_product(
     """
     Enumerates the full direct product of a list of SeparableFiniteGroupActions as a SeparableFiniteGroupAction whose
     non-identity elements are SeparableGroupActionElements combined per-side via ``&``
+
+    Parameters
+    ----------
+    sub_groups
+        A list of SeparableFiniteGroupActions
+
+    Returns
+    -------
+    SeparableFiniteGroupAction
+        A SeparableFiniteGroupAction with |sub_groups[0]| * ... * |sub_groups[-1]| elements
     """
     if len(sub_groups) == 0:
         raise ValueError('SeparableProductGroupAction requires at least one sub-group')
@@ -101,6 +137,16 @@ def _build_finite_separable_joint(
     """
     Enumerates the full Cartesian product of a list of SeparableFiniteGroupActions as a SeparableFiniteGroupAction
     whose non-identity elements are SeparableGroupActionElements composed per-side via ``*``
+
+    Parameters
+    ----------
+    sub_groups
+        A list of SeparableFiniteGroupActions sharing the same input and output dims
+
+    Returns
+    -------
+    SeparableFiniteGroupAction
+        A SeparableFiniteGroupAction with |sub_groups[0]| * ... * |sub_groups[-1]| elements
     """
     if len(sub_groups) == 0:
         raise ValueError('SeparableJointGroupAction requires at least one sub-group')

@@ -24,6 +24,11 @@ class LambdaAction(GroupActionElement):
 
     def action(self, x: Tensor) -> Tensor:
         """
+        Parameters
+        ----------
+        x
+            An input tensor with last dimension self.dim
+
         Returns
         -------
         Tensor
