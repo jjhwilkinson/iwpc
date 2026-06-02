@@ -97,7 +97,10 @@ def calculate_divergence(
         **trainer_kwargs
     )
     trainer.fit(model=module, datamodule=data_module, ckpt_path=resume_training_from)
-    best_module = type(module).load_from_checkpoint(checkpoint_callback.best_model_path)
+    best_module = type(module).load_from_checkpoint(
+        checkpoint_callback.best_model_path,
+        weights_only=False,
+    )
 
     results = trainer.validate(
         model=best_module,
