@@ -104,9 +104,6 @@ class PandasDataset(Dataset):
             else torch.ones(self.num_rows, dtype=torch.float32)
         )
         structured = structure_data(df, feature_spec)
-        # Wrap a flat tensor (from a non-nested feature_spec) into a list so the weight
-        # tensor can always be appended uniformly; __getitem__ will then yield
-        # (features, ..., weight) tuples.
         if isinstance(structured, Tensor):
             structured = [structured]
         structured.append(self.weights)
