@@ -183,8 +183,8 @@ class BinnedDfAccumulator:
             The labels of each sample. 0 for p and 1 for q
         weights
             The weights of each sample
-        p_over_q
-            The predicted probability ratio between p and q for this sample
+        log_p_over_q
+            The predicted log probability ratio between p and q for this sample (i.e. log(p/q))
         """
         if isinstance(samples, list):
             samples = np.asarray(samples).T
@@ -243,8 +243,8 @@ class BinnedDfAccumulator:
             samples,
             [
                 unbiased_mixture_weights,
-                unbiased_mixture_weights * 2 * (p_over_q / (1 + p_over_q)),
-                unbiased_mixture_weights * 2 * (1 / (1 + p_over_q))
+                unbiased_mixture_weights * 2 * expit(log_p_over_q),
+                unbiased_mixture_weights * 2 * expit(-log_p_over_q)
             ],
         )
 
