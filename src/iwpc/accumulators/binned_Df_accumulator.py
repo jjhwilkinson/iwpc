@@ -633,7 +633,7 @@ class BinnedDfAccumulator:
             ):
                 df = self._prep_data(df)
                 scalar_values = [scalar(df) for scalar in self.scalars]
-                labels = df[datamodule.target_cols[0]].values.astype(bool)
+                labels = df[datamodule.feature_spec[1][0]].values.astype(bool)
                 weights = df[datamodule.weight_col].values if datamodule.weight_col else np.ones_like(labels, dtype=float)
                 log_p_over_q = np.log(construct_p_over_q(df, p_over_q_cols))
                 update_fn(scalar_values, labels, weights, log_p_over_q)
