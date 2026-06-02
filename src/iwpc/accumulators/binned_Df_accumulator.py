@@ -1,6 +1,7 @@
 from typing import List, Callable, Union, Optional, Tuple, Iterable
 
 import numpy as np
+from scipy.special import expit
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
@@ -104,7 +105,7 @@ class BinnedDfAccumulator:
         samples: Union[NDArray, List[NDArray]],
         labels: NDArray,
         weights: NDArray,
-        p_over_q: NDArray,
+        log_p_over_q: NDArray,
     ) -> None:
         """
         Updates various internal states with training data that may be used in the construction of marginalised
@@ -118,8 +119,11 @@ class BinnedDfAccumulator:
             The labels of each sample. 0 for p and 1 for q
         weights
             The weights of each sample
-        p_over_q
-            The predicted probability ratio between p and q for this sample
+        log_p_over_q
+            The predicted log probability ratio :math:`\\log(p(x)/q(x))` for this sample. Mixture
+            weights :math:`p/(p+q)` and :math:`q/(p+q)` are recovered as ``expit(log_p_over_q)`` and
+            ``expit(-log_p_over_q)`` respectively, which is numerically stable across the full range
+            of log-ratios.
         """
         if isinstance(samples, list):
             samples = np.asarray(samples).T
@@ -145,17 +149,19 @@ class BinnedDfAccumulator:
         unbiased_mixture_weights[is_p] *= total_weight_sum / self.train_p_hist.weight_sum_hist.sum() / 2
         unbiased_mixture_weights[is_q] *= total_weight_sum / self.train_q_hist.weight_sum_hist.sum() / 2
 
+        p_mixture_weight = expit(log_p_over_q)
+        q_mixture_weight = expit(-log_p_over_q)
         self.train_learned_dists.update(
             samples,
-            [unbiased_mixture_weights, unbiased_mixture_weights * 2 * (p_over_q / (1 + p_over_q)), unbiased_mixture_weights * 2 * (1 / (1 + p_over_q))],
+            [unbiased_mixture_weights, unbiased_mixture_weights * 2 * p_mixture_weight, unbiased_mixture_weights * 2 * q_mixture_weight],
         )
         self.train_learned_p.update(
             samples,
-            unbiased_mixture_weights * 2 * (p_over_q / (1 + p_over_q)),
+            unbiased_mixture_weights * 2 * p_mixture_weight,
         )
         self.train_learned_q.update(
             samples,
-            unbiased_mixture_weights * 2 * (1 / (1 + p_over_q)),
+            unbiased_mixture_weights * 2 * q_mixture_weight,
         )
 
     def update_val(
