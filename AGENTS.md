@@ -50,9 +50,7 @@ feature/output `Encoding`s, the `GroupAction` symmetry wrappers, and the
   `iwpc.utils.split_by_mask` to fan out by label rather than hand-rolling
   boolean indexing.
 - **Label convention:** `0 = p`, `1 = q`. Same in batches, accumulators, and
-  the reweight loop. The docstring in
-  `divergences/base.py:calculate_naive_rep_summands_given_log_by_label` reads
-  backwards — implementation matches the rest of the repo.
+  the reweight loop.
 - **Validation metric:** always `val_Df` (higher is better — it is a lower
   bound). `ModelCheckpoint`, `EarlyStopping`, and `ReduceLROnPlateau` all
   monitor it with `mode="max"`. Subclasses MUST set `self.val_Df` and

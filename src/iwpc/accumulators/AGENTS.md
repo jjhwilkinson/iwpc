@@ -13,19 +13,18 @@ Dense notes for contributors. Read `README.md` first.
   `divergence.calculate_naive_rep_summands_given_log_by_label(p_over_q, labels)`
   and routes label==0 to `p_accumulator`, label==1 to `q_accumulator` (both
   `WeightedMeanMetric` from `iwpc.metrics`).
-- `BinnedDfAccumulator.update_train(samples, labels, weights, p_over_q)` takes
-  the **ratio**; `update_val(samples, labels, weights, log_p_over_q)` takes the
-  **log ratio**. This asymmetry is real — `update_val` does arithmetic on
-  `log_p_over_q - marginalised_log_p_over_q` and then exponentiates inside the
-  divergence summand calls. Don't "fix" by unifying. (Note: `update_val`
-  references `p_over_q` and `marginalised_p_over_q` locally without defining
-  them; this is a latent bug — `evaluate(...)` only exercises code paths up to
-  where these are needed, and the diagnostic plotting path in the README uses
-  log ratios. If you touch this, preserve current call sites.)
+- `BinnedDfAccumulator.update_train(samples, labels, weights, log_p_over_q)` and
+  `update_val(samples, labels, weights, log_p_over_q)` both take the **log
+  ratio**. Mixture weights `p/(p+q)` and `q/(p+q)` are recovered via
+  `expit(log_p_over_q)` and `expit(-log_p_over_q)` respectively (numerically
+  stable across the full range). `update_val` works in log-space throughout
+  (subtracts the marginalised log ratio rather than dividing).
 - `BinnedDfAccumulator.evaluate(datamodule, p_over_q_cols)` requires a
-  `PandasDirDataModule` (uses `file_iter`, `target_cols`, `weight_col`,
-  `train_files`, `validation_files`). `construct_p_over_q` clips the product
-  to `[1e-6, 1e6]`.
+  `PandasDirDataModule` (uses `file_iter`, `feature_spec[1][0]` as the label
+  column, `weight_col`, `train_files`, `validation_files`). The per-file
+  pipeline takes `log(construct_p_over_q(df, p_over_q_cols))` and feeds that
+  log ratio to both `update_train` and `update_val`. `construct_p_over_q` clips
+  the product to `[1e-6, 1e6]`.
 
 ## Stat-accumulator stack
 
