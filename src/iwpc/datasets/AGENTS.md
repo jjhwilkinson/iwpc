@@ -17,7 +17,6 @@
 
 ## Gotchas
 
-- `PandasDataset.num_features` references `self.feature_cols`, which **does not exist** (only `feature_spec` is stored). Calling that property will `AttributeError`. Nothing in the codebase calls it; treat as dead code.
 - `PandasFileListDataset` is **not safe for `DataLoader(shuffle=True)`**: adjacent indices from different files will thrash IO. The DataModule layer enforces `shuffle=False`.
 - `pd.read_pickle` runs once per file load; if the pickle was written by a different pandas version, this will be the point of failure.
 - `shuffle_in_file=True` shuffles only within the current file; it does **not** persist across reloads (each `load_file` re-shuffles).
