@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from scipy.special import xlogy
 
 from .base import DifferentiableFDivergence
 
@@ -13,10 +14,10 @@ class KLDivergence(DifferentiableFDivergence):
         super().__init__("Kullback-Leibler", "KL")
 
     def _f_torch(self, x):
-        return x * torch.log(x)
+        return torch.special.xlogy(x, x)
 
     def _f_np(self, x):
-        return x * np.log(x)
+        return xlogy(x, x)
 
     def _f_conj_torch(self, x):
         return torch.exp(x - 1)
