@@ -72,6 +72,7 @@ def basic_model_factory(
     final_layers: Optional[Iterable[nn.Module]] = None,
     symmetries: Optional[Union[GroupAction, Iterable[GroupAction]]] = None,
     complement_symmetries: Optional[Union[GroupAction, Iterable[GroupAction]]] = None,
+    symmetrize_in_logspace: bool = False,
     activation: Callable = LeakyReLU,
     debug_name: str | None = None,
 ) -> Sequential:
@@ -106,6 +107,12 @@ def basic_model_factory(
         A symmetry group action for which the network output should reside in the symmetrized complement.
         Compose multiple symmetries declaratively with '*' or '&'. An iterable of GroupActions is also accepted as
         a convenience and is folded via '*'
+    symmetrize_in_logspace
+        When True, the orbit reduction used by both `symmetries` and `complement_symmetries` switches from the
+        linear-space Haar mean to the log-space Haar mean of ``exp(.)`` (reduction `log_mean_exp`). The symmetrise
+        path then returns ``log(mean_g[exp(g . f(g.x))])`` and the complement path returns
+        ``f(x) - log(mean_g[exp(g . f(g.x))])`` — the natural construction when `exp(f)` is interpreted as a density
+        ratio to be orbit-averaged. See `SymmetrizedModel` / `ComplementModel` for the precise definitions
     activation
         The activation function class to apply to the output of layers
     debug_name
@@ -162,12 +169,13 @@ def basic_model_factory(
     ]
 
     model = Sequential(*layers)
+    reduction = "log_mean_exp" if symmetrize_in_logspace else "mean"
     symmetry_group = _coerce_group_action(symmetries)
     if symmetry_group is not None:
-        model = symmetry_group.symmetrize(model)
+        model = symmetry_group.symmetrize(model, reduction=reduction)
     complement_group = _coerce_group_action(complement_symmetries)
     if complement_group is not None:
-        model = complement_group.complement(model)
+        model = complement_group.complement(model, reduction=reduction)
 
     return model
 
