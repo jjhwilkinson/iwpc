@@ -249,14 +249,14 @@ class BinnedDfAccumulator:
         )
 
         self.marginalised_df_accumulator.update(
-            marginalised_p_over_q,
+            np.exp(marginalised_log_p_over_q),
             labels[mask],
             weights[mask],
         )
         self.global_df_accumulator.update(
-            p_over_q,
+            np.exp(log_p_over_q),
             labels,
-            weights
+            weights,
         )
 
     @property
