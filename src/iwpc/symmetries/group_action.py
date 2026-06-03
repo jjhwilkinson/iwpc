@@ -49,7 +49,11 @@ class GroupAction(ABC, Module):
         Tuple[GroupActionElement]
         """
 
-    def symmetrize(self, base_function: Callable[..., Tensor]) -> "SymmetrizedModel":
+    def symmetrize(
+        self,
+        base_function: Callable[..., Tensor],
+        reduction: str = "mean",
+    ) -> "SymmetrizedModel":
         """
         Helper function to wrap a function in a SymmetrizedModel resulting in a function symmetric with respect to this group
         action
@@ -58,6 +62,9 @@ class GroupAction(ABC, Module):
         ----------
         base_function
             A function to symmetrize
+        reduction
+            Orbit reduction to use. `mean` (default) gives the linear-space Haar mean; `log_mean_exp` gives the log of
+            the Haar mean of ``exp(base)``. See `SymmetrizedModel`
 
         Returns
         -------
@@ -65,9 +72,13 @@ class GroupAction(ABC, Module):
             A symmetrized function
         """
         from .symmetrized_model import SymmetrizedModel
-        return SymmetrizedModel(self, base_function)
+        return SymmetrizedModel(self, base_function, reduction=reduction)
 
-    def complement(self, base_function: Callable[..., Tensor]) -> "ComplementModel":
+    def complement(
+        self,
+        base_function: Callable[..., Tensor],
+        reduction: str = "mean",
+    ) -> "ComplementModel":
         """
         Helper function to wrap a function in a ComplementModel resulting in a function in the complement of the symmetrization
         projection of this group action
@@ -76,6 +87,9 @@ class GroupAction(ABC, Module):
         ----------
         base_function
             A function to symmetrize
+        reduction
+            Orbit reduction to use. `mean` (default) gives the linear-space complement; `log_mean_exp` gives the
+            log-space complement. See `ComplementModel`
 
         Returns
         -------
@@ -83,7 +97,7 @@ class GroupAction(ABC, Module):
             A function in the complement of the symmetrization projection of this group action
         """
         from .complement_model import ComplementModel
-        return ComplementModel(self, base_function)
+        return ComplementModel(self, base_function, reduction=reduction)
 
     def __and__(self, other: "GroupAction") -> "ProductGroupAction":
         """
