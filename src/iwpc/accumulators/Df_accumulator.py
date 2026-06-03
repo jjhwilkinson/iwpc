@@ -137,11 +137,12 @@ class LabeledBinaryNaiveDfAccumulator(DfAccumulator):
             The weight of each sample
 
         """
+        log_p_over_q = np.log(p_over_q)
         if self.clip_log_p_over_q:
-            p_over_q = np.exp(np.clip(np.log(p_over_q), *self.clip_log_p_over_q))
+            log_p_over_q = np.clip(log_p_over_q, *self.clip_log_p_over_q)
 
         p_summands, q_summands = self.divergence.calculate_naive_rep_summands_given_log_by_label(
-            p_over_q,
+            log_p_over_q,
             labels,
         )
         (p_weights,), (q_weights,) = split_by_mask(labels == 0, weights)
