@@ -122,8 +122,7 @@ class SymmetrizedModel(Module):
     The orbit reduction is configurable via `reduction`. With the default `mean`, the module returns the linear-space
     Haar mean ``mean_g[ g . base(g.x) ]``. With `log_mean_exp` it returns the log-space Haar mean
     ``log( mean_g[ exp( g . base(g.x) ) ] )`` — appropriate when `exp(base)` is interpreted as a density ratio and you
-    want the orbit average of that ratio. Both reductions are invariant under the group action and divide by the orbit
-    size in their respective spaces (linear `/N`, log `-log N`)
+    want the orbit average of that ratio.
     """
     def __init__(
         self,
