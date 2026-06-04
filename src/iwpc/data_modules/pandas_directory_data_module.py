@@ -131,7 +131,7 @@ class PandasDirDataModule(LightningDataModule):
             mask is applied at file-open time on the dataloader paths (`train_dataloader`, `val_dataloader`,
             `all_dataloader`, and the `use_in_memory_dataset` setup). Dataset-rewrite operations (`transform`,
             `reweight`, `normalise_weights`, `rebatch_files`, `shuffle`) see raw rows and are not affected. When set,
-            per-file post-filter row counts are precomputed once on first access by scanning every file, which can be
+            per-file post-filter row counts are precomputed during construction by scanning every file, which can be
             slow on large datasets
         """
         super().__init__()
@@ -143,7 +143,6 @@ class PandasDirDataModule(LightningDataModule):
         self.shuffle_in_train_files = shuffle_in_train_files
         self.use_in_memory_dataset = use_in_memory_dataset
         self.filter = filter
-        self._filtered_file_sizes: list[int] | None = None
         self._in_memory_train_ds: PandasDataset | None = None
         self._in_memory_val_ds: PandasDataset | None = None
 
@@ -152,6 +151,13 @@ class PandasDirDataModule(LightningDataModule):
         self.dataloader_kwargs.setdefault("num_workers", os.cpu_count())
         if self.dataloader_kwargs["num_workers"] > 0:
             self.dataloader_kwargs.setdefault("persistent_workers", True)
+
+        self._filtered_file_sizes: list[int] | None = None
+        if self.filter is not None:
+            self._filtered_file_sizes = [
+                self.open_file(i).shape[0]
+                for i in tqdm(range(len(self.all_files)), desc="Computing filtered file sizes")
+            ]
 
     @property
     def all_files(self) -> list[Path]:
@@ -271,15 +277,10 @@ class PandasDirDataModule(LightningDataModule):
     @property
     def file_sizes(self) -> list[int]:
         """
-        List of the number of samples in each file. When self.filter is set the post-filter sizes are returned;
-        these are computed once on first access by opening every file
+        List of the number of samples in each file. When self.filter is set the post-filter sizes (precomputed at
+        construction time) are returned instead of the raw values from ds_info.yml
         """
-        if self.filter is not None:
-            if self._filtered_file_sizes is None:
-                self._filtered_file_sizes = [
-                    self.open_file(i).shape[0]
-                    for i in tqdm(range(len(self.all_files)), desc="Computing filtered file sizes")
-                ]
+        if self._filtered_file_sizes is not None:
             return self._filtered_file_sizes
         if self.limit_files:
             return self.ds_info['file_sizes'][:self.limit_files]
