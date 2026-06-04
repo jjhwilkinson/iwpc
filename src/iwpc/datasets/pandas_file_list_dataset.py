@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Union, Tuple
+from typing import Callable, List, Optional, Union, Tuple
 
 import numpy as np
 import pandas as pd
@@ -31,6 +31,7 @@ class PandasFileListDataset(Dataset):
         weight_col: Optional[str] = None,
         file_sizes: Optional[List[int]] = None,
         shuffle_in_file: bool = False,
+        filter: Optional["Callable[[pd.DataFrame], np.ndarray]"] = None,
     ):
         """
         Parameters
@@ -43,15 +44,20 @@ class PandasFileListDataset(Dataset):
             Optional. The name of a weight column to provide when iterated over
         file_sizes
             An optional list of the number of samples in each file. If not provided, then each file will be opened to
-            check the file size (might be quite slow)
+            check the file size (might be quite slow). When a filter is provided, these sizes must reflect the
+            post-filter row counts
         shuffle_in_file
             If True, samples with a given dataframe will be shuffled each time a file is loaded
+        filter
+            Optional callable taking a DataFrame and returning a boolean mask of the same length. When provided, every
+            file is masked at load time and only the surviving rows are exposed downstream
         """
         self.files = files
+        self.filter = filter
         self.file_sizes = file_sizes
         if self.file_sizes is None:
             self.file_sizes = [
-                pd.read_pickle(file).shape[0]
+                self._read_file(file).shape[0]
                 for file in tqdm(list(files), desc="Calculating file sizes")
             ]
         self.feature_spec = feature_spec
@@ -70,6 +76,15 @@ class PandasFileListDataset(Dataset):
         """
         return int(np.sum(self.file_sizes))
 
+    def _read_file(self, file: PathLike) -> pd.DataFrame:
+        """
+        Reads a single pickle file and applies self.filter when set
+        """
+        df = pd.read_pickle(file)
+        if self.filter is not None:
+            df = df[self.filter(df)].reset_index(drop=True)
+        return df
+
     def load_file(self, file_idx: int) -> PandasDataset:
         """
         Loads the file with the given idx into various member attributes
@@ -82,7 +97,7 @@ class PandasFileListDataset(Dataset):
 
         logger.debug("Reading file:", self.files[file_idx])
         self._last_file_no = file_idx
-        df = pd.read_pickle(self.files[file_idx])
+        df = self._read_file(self.files[file_idx])
         if self.shuffle_in_file:
             logger.debug("Shuffling dataframe entries")
             df = df.sample(frac=1).reset_index(drop=True)
