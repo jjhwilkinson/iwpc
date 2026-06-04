@@ -83,6 +83,11 @@ class PandasDirDataModule(LightningDataModule):
     and the manipulations applied. As such the state of the dictionary may be important. It is recommended that all
     modifications to the dataset are performed through the transform method defined below and that a tag is provided
     with each modification. The full list of tags recording the state of the data is available through 'self.tags'.
+
+    A row-level boolean `filter` callable may optionally be supplied; when set, it is applied at file-open time on the
+    dataloader paths (`train_dataloader`, `val_dataloader`, `all_dataloader`, and the `use_in_memory_dataset` setup).
+    Dataset-rewrite operations (`transform`, `reweight`, `normalise_weights`, `rebatch_files`, `shuffle`) intentionally
+    see raw rows so the on-disk representation is unaffected.
     """
     def __init__(
         self,
@@ -94,6 +99,7 @@ class PandasDirDataModule(LightningDataModule):
         dataloader_kwargs: dict | None = None,
         shuffle_in_train_files: bool = True,
         use_in_memory_dataset: bool = False,
+        filter: Callable[[DataFrame], "np.ndarray | pd.Series"] | None = None,
     ):
         """
         Parameters
@@ -120,6 +126,13 @@ class PandasDirDataModule(LightningDataModule):
             setup(). The train and val DataLoaders are then constructed with `pin_memory=True` defaulted on (overridable
             via dataloader_kwargs), the train loader additionally with `shuffle=True` so it shuffles across the full
             dataset, and the val loader with `shuffle=False`. Faster than file-by-file loading when the data fits in RAM
+        filter
+            Optional callable taking a DataFrame and returning a boolean mask of the same length. When supplied, the
+            mask is applied at file-open time on the dataloader paths (`train_dataloader`, `val_dataloader`,
+            `all_dataloader`, and the `use_in_memory_dataset` setup). Dataset-rewrite operations (`transform`,
+            `reweight`, `normalise_weights`, `rebatch_files`, `shuffle`) see raw rows and are not affected. When set,
+            per-file post-filter row counts are precomputed during construction by scanning every file, which can be
+            slow on large datasets
         """
         super().__init__()
         self.dataset_dir = Path(dataset_dir)
@@ -129,6 +142,7 @@ class PandasDirDataModule(LightningDataModule):
         self.limit_files = limit_files
         self.shuffle_in_train_files = shuffle_in_train_files
         self.use_in_memory_dataset = use_in_memory_dataset
+        self.filter = filter
         self._in_memory_train_ds: PandasDataset | None = None
         self._in_memory_val_ds: PandasDataset | None = None
 
@@ -137,6 +151,13 @@ class PandasDirDataModule(LightningDataModule):
         self.dataloader_kwargs.setdefault("num_workers", os.cpu_count())
         if self.dataloader_kwargs["num_workers"] > 0:
             self.dataloader_kwargs.setdefault("persistent_workers", True)
+
+        self._filtered_file_sizes: list[int] | None = None
+        if self.filter is not None:
+            self._filtered_file_sizes = [
+                self.open_file(i).shape[0]
+                for i in tqdm(range(len(self.all_files)), desc="Computing filtered file sizes")
+            ]
 
     @property
     def all_files(self) -> list[Path]:
@@ -222,6 +243,7 @@ class PandasDirDataModule(LightningDataModule):
             self.weight_col,
             file_sizes=self.file_sizes,
             shuffle_in_file=False,
+            filter=self.filter,
         )
 
     @property
@@ -235,6 +257,7 @@ class PandasDirDataModule(LightningDataModule):
             self.weight_col,
             file_sizes=self.file_sizes[:len(self.train_files)],
             shuffle_in_file=self.shuffle_in_train_files,
+            filter=self.filter,
         )
 
     @property
@@ -248,13 +271,17 @@ class PandasDirDataModule(LightningDataModule):
             self.weight_col,
             file_sizes=self.file_sizes[len(self.train_files):],
             shuffle_in_file=False,
+            filter=self.filter,
         )
 
     @property
     def file_sizes(self) -> list[int]:
         """
-        List of the number of samples in each file
+        List of the number of samples in each file. When self.filter is set the post-filter sizes (precomputed at
+        construction time) are returned instead of the raw values from ds_info.yml
         """
+        if self._filtered_file_sizes is not None:
+            return self._filtered_file_sizes
         if self.limit_files:
             return self.ds_info['file_sizes'][:self.limit_files]
         return self.ds_info['file_sizes']
@@ -268,18 +295,23 @@ class PandasDirDataModule(LightningDataModule):
 
     def open_file(self, idx: int) -> DataFrame:
         """
-        Opens and returns the DataFrame in the file corresponding to the given index
+        Opens and returns the DataFrame in the file corresponding to the given index. When self.filter is set the
+        returned frame contains only rows for which the filter mask is True
         """
-        return pd.read_pickle(self.all_files[idx])
+        df = pd.read_pickle(self.all_files[idx])
+        if self.filter is not None:
+            df = df[self.filter(df)].reset_index(drop=True)
+        return df
 
-    def _load_in_memory_dataset(self, files: list[Path], name: str) -> PandasDataset:
+    def _load_in_memory_dataset(self, file_indices: list[int], name: str) -> PandasDataset:
         """
-        Concatenates all files into a single PandasDataset with all tensors placed in shared memory.
+        Concatenates the given files into a single PandasDataset with all tensors placed in shared memory. Reads each
+        file through self.open_file so the filter (if any) is applied uniformly with the other dataloader paths
 
         Parameters
         ----------
-        files
-            Ordered list of pickle file paths to load and concatenate
+        file_indices
+            Indices into self.all_files for the files to load and concatenate
         name
             Name of the data being loaded placed into the tqdm progress bar
 
@@ -289,7 +321,7 @@ class PandasDirDataModule(LightningDataModule):
             Dataset backed by shared-memory tensors
         """
         df = pd.concat(
-            [pd.read_pickle(f) for f in tqdm(files, desc=f"Loading {name} data into shared memory")],
+            [self.open_file(i) for i in tqdm(file_indices, desc=f"Loading {name} data into shared memory")],
             ignore_index=True,
         )
         return PandasDataset(df, self.feature_spec, self.weight_col).share_memory_()
@@ -305,10 +337,13 @@ class PandasDirDataModule(LightningDataModule):
             One of 'fit', 'validate', 'test', 'predict', or None
         """
         if self.use_in_memory_dataset:
+            n_train = self.num_train_files
             if self._in_memory_train_ds is None:
-                self._in_memory_train_ds = self._load_in_memory_dataset(self.train_files, name="train")
+                self._in_memory_train_ds = self._load_in_memory_dataset(list(range(n_train)), name="train")
             if self._in_memory_val_ds is None:
-                self._in_memory_val_ds = self._load_in_memory_dataset(self.validation_files, name="val")
+                self._in_memory_val_ds = self._load_in_memory_dataset(
+                    list(range(n_train, self.num_files)), name="val"
+                )
 
     def all_dataloader(self) -> DataLoader:
         """
@@ -729,6 +764,9 @@ class PandasDirDataModule(LightningDataModule):
             'split': self.split,
             'limit_files': self.limit_files,
             'dataloader_kwargs': self.dataloader_kwargs,
+            'shuffle_in_train_files': self.shuffle_in_train_files,
+            'use_in_memory_dataset': self.use_in_memory_dataset,
+            'filter': self.filter,
         }
         arguments.update(overrides)
         return PandasDirDataModule(**arguments)
