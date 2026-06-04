@@ -337,7 +337,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         if isinstance(self.exact_kernel, FiniteCutKernel) and self.target_cut_pass_prob is not None:
             normalized_log_poisson_term = - (
                 self.target_cut_pass_prob * log_average_cut_pass_prob - log_average_cut_pass_prob.exp()
-                - (self.target_cut_pass_prob * torch.log(self.target_cut_pass_prob) - self.target_cut_pass_prob)
+                - (self.target_cut_pass_prob * math.log(self.target_cut_pass_prob) - self.target_cut_pass_prob)
             )
             loss = loss + normalized_log_poisson_term
             self.log(f"{stage}_normalized_log_poisson_term", normalized_log_poisson_term, on_step=False, on_epoch=True, prog_bar=False)
