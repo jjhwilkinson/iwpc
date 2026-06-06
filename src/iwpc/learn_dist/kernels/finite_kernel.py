@@ -17,16 +17,19 @@ from iwpc.models.utils import basic_model_factory
 
 class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase):
     """
-    Kernel for discrete outcomes. Often discrete probability spaces are constructed as the cartesian product over
-    variables. For example, consider the variables A, B, C that can either be true or false. There are 8 possible
-    outcomes corresponding to {(not A and not B and not C), (not A and not B and C) , etc}. The sample space of this
-    kernel is an integer vector of length equal to the number of distinct variables with each entry between 0 and the
-    number of values said variables can take less one. In the above ABC example, samples are vectors of length three
-    and entries equal to 0 or 1.
+    Kernel for discrete outcomes over an arbitrary ``FiniteSampleSpace``. The sample space defines both the
+    enumeration of distinct outcomes and the mapping between an outcome tensor and its integer index.
 
-    Offers an optional 'fast path' for modeling p(A | B=b, x) when B is a discrete variable by exposing a full M×K
-    logit table over all K index outcomes b in a single forward pass. Use ``index_cond_indices`` and
-    ``index_sample_space`` to enable.
+    The common case where the space is a Cartesian product over a tuple of per-variable outcome counts is
+    handled by ``CartesianFiniteSampleSpace`` — for convenience ``__init__`` also accepts an ``int`` or
+    iterable of ints as shorthand and wraps it in that class. For example, the three binary variables A, B,
+    C give a Cartesian sample space of size 8 with samples of dimension 3; pass ``sample_space=(2, 2, 2)``.
+    Other shapes (e.g. a sample space restricted to a subset of a Cartesian product) can be supplied as an
+    ``ExplicitFiniteSampleSpace`` directly.
+
+    Offers an optional 'fast path' for modeling p(A | B=b, x) when B is a discrete variable by exposing a
+    full M×K logit table over all K index outcomes b in a single forward pass. Use ``index_cond_indices``
+    and ``index_sample_space`` to enable.
     """
     def __init__(
         self,
