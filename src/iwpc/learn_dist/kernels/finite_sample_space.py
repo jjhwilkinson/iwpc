@@ -275,6 +275,69 @@ class CutFiniteSampleSpace(FiniteSampleSpace):
         return self.base_space.idx_to_outcome(self.cut_idx_to_base_idx_map[idxs])
 
 
+class CartesianFiniteSampleSpace(FiniteSampleSpace):
+    """
+    FiniteSampleSpace over the Cartesian product of a tuple of per-variable outcome counts. Outcomes are
+    integer vectors ``(a_0, ..., a_{d-1})`` with ``0 <= a_i < num_variable_outcomes[i]``, flattened into a
+    single index via the standard row-major scheme.
+    """
+    def __init__(self, num_variable_outcomes: int | Iterable[int]):
+        """
+        Parameters
+        ----------
+        num_variable_outcomes
+            A tuple of integers representing the number of possible values per variable. The product of the
+            constituents gives the total number of outcomes. An ``int`` is interpreted as the single-variable
+            tuple ``(num_variable_outcomes,)``
+        """
+        if isinstance(num_variable_outcomes, int):
+            num_variable_outcomes = (num_variable_outcomes,)
+        else:
+            num_variable_outcomes = tuple(num_variable_outcomes)
+        M = int(np.prod(num_variable_outcomes))
+        super().__init__(M, len(num_variable_outcomes))
+        self.num_variable_outcomes = num_variable_outcomes
+        self.register_buffer(
+            "outcomes",
+            torch.tensor([
+                torch.unravel_index(outcome_idx, num_variable_outcomes)
+                for outcome_idx in torch.arange(M)
+            ]).float(),
+        )
+        self.register_buffer(
+            "reversed_cumprod_num_variable_outcomes",
+            torch.tensor(list(np.cumprod([num_variable_outcomes[::-1]])[::-1]) + [1])[1:],
+        )
+
+    def outcome_to_idx(self, outcomes: Tensor) -> Tensor:
+        """
+        Parameters
+        ----------
+        outcomes
+            An integer tensor of shape ``(N, self.dimension)`` whose columns are the per-variable values
+
+        Returns
+        -------
+        Tensor
+            An integer tensor of shape ``(N,)`` containing the flattened indices in ``[0, num_outcomes-1]``
+        """
+        return (outcomes * self.reversed_cumprod_num_variable_outcomes[None, :]).sum(dim=-1).int()
+
+    def idx_to_outcome(self, idxs: Tensor) -> Tensor:
+        """
+        Parameters
+        ----------
+        idxs
+            An integer tensor of shape ``(N,)`` with entries in ``[0, num_outcomes-1]``
+
+        Returns
+        -------
+        Tensor
+            A tensor of shape ``(N, self.dimension)`` of unravelled per-variable values
+        """
+        return self.outcomes[idxs.int()]
+
+
 class ExplicitFiniteSampleSpace(FiniteSampleSpace):
     """
     FiniteSampleSpace over an explicit list of outcomes

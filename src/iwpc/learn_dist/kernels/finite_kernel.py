@@ -8,7 +8,7 @@ from torch import Tensor
 from iwpc.encodings.encoding_base import Encoding
 from iwpc.encodings.trivial_encoding import TrivialEncoding
 from iwpc.learn_dist.kernels.finite_kernel_interface import FiniteKernelInterface
-from iwpc.learn_dist.kernels.finite_sample_space import ExplicitFiniteSampleSpace, FiniteSampleSpace
+from iwpc.learn_dist.kernels.finite_sample_space import CartesianFiniteSampleSpace, FiniteSampleSpace
 from iwpc.learn_dist.kernels.indexed_interface import IndexedInterface, trivial_index_sample_space
 from iwpc.learn_dist.kernels.trainable_kernel_base import TrainableKernelBase
 from iwpc.models.layers import ConstantScaleLayer
@@ -30,7 +30,7 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
     """
     def __init__(
         self,
-        num_variable_outcomes: int | Iterable[int],
+        sample_space: int | Iterable[int] | FiniteSampleSpace,
         cond: Encoding | int,
         index_cond_indices: list[int] | int | None = None,
         index_sample_space: FiniteSampleSpace | None = None,
@@ -40,10 +40,10 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
         """
         Parameters
         ----------
-        num_variable_outcomes
-            A tuple of integers representing the number of possible values per variable. The product of the constituents
-            gives the total number of possible outcomes. If an integer is given, it is interpreted as the tuple
-            (num_outcomes,). In the ABC example, this would be (2, 2, 2)
+        sample_space
+            The FiniteSampleSpace this kernel models a distribution over. For Cartesian-product spaces, an
+            ``int`` or iterable of ints can be passed as shorthand and is auto-wrapped in a
+            ``CartesianFiniteSampleSpace``; the ABC example becomes ``(2, 2, 2)``
         cond
             The encoding or dimension of the standard (unindexed) conditioning information x passed to the logit model.
             When indexing is not used this is the full cond; when indexing is used, the full cond_dimension becomes
@@ -63,8 +63,8 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
             length M provides one log-prob per outcome, broadcast across K. A 2D (M, K) iterable provides a distinct
             initial log-prob per outcome per index value. Ignored if logit_model is provided
         """
-        if isinstance(num_variable_outcomes, int):
-            num_variable_outcomes = (num_variable_outcomes,)
+        if not isinstance(sample_space, FiniteSampleSpace):
+            sample_space = CartesianFiniteSampleSpace(sample_space)
         if index_cond_indices is None:
             index_cond_indices = []
         elif isinstance(index_cond_indices, int):
@@ -78,23 +78,17 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
                 raise ValueError("index_sample_space is required when index_cond_indices is non-empty")
 
         K = index_sample_space.num_outcomes
-        M = int(np.prod(num_variable_outcomes))
+        M = sample_space.num_outcomes
         standard_cond_dim = int(cond.input_shape[0]) if isinstance(cond, Encoding) else int(cond)
         total_cond_dim = standard_cond_dim + len(index_cond_indices)
-
-        sample_space = ExplicitFiniteSampleSpace(torch.tensor([
-            torch.unravel_index(outcome_idx, num_variable_outcomes)
-            for outcome_idx in torch.arange(M)
-        ]), self.outcome_to_idx)
 
         super().__init__(
             index_sample_space,
             index_cond_indices,
             sample_space,
-            len(num_variable_outcomes),
+            sample_space.dimension,
             total_cond_dim,
         )
-        self.num_variable_outcomes = num_variable_outcomes
 
         if logit_model is not None:
             self.logit_model = logit_model
@@ -107,10 +101,6 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
                 TrivialEncoding(M * K),
                 final_layers=final_layers,
             )
-        self.register_buffer(
-            'reversed_cumprod_num_variable_outcomes',
-            torch.tensor(list(np.cumprod([num_variable_outcomes[::-1]])[::-1]) + [1])[1:],
-        )
 
     @staticmethod
     def _build_init_shift(init_log_probs, M: int, K: int) -> list[float]:
@@ -152,7 +142,7 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
     @classmethod
     def condition_on(
         cls,
-        num_variable_outcomes: int | Iterable[int],
+        sample_space: int | Iterable[int] | FiniteSampleSpace,
         conditioning_kernel: FiniteKernelInterface,
         standard_cond: Encoding | int,
         **kwargs,
@@ -164,8 +154,8 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
 
         Parameters
         ----------
-        num_variable_outcomes
-            Number of outcomes per variable for the sample kernel (see __init__)
+        sample_space
+            Sample space of the resulting kernel (see __init__)
         conditioning_kernel
             The FiniteKernelInterface whose outcomes serve as the discrete index b
         standard_cond
@@ -180,26 +170,12 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
             first conditioning_kernel.sample_dimension columns of cond are interpreted as the index B
         """
         return cls(
-            num_variable_outcomes,
+            sample_space,
             standard_cond,
             list(range(conditioning_kernel.sample_dimension)),
             conditioning_kernel.sample_space,
             **kwargs,
         )
-
-    def outcome_to_idx(self, samples: Tensor) -> Tensor:
-        """
-        Parameters
-        ----------
-        samples
-            A tensor of size (N, self.sample_dimension) of integers
-
-        Returns
-        -------
-        Tensor
-            An integer tensor of shape (N,) containing the indices for each sample
-        """
-        return (samples * self.reversed_cumprod_num_variable_outcomes[None, :]).sum(dim=-1).int()
 
     def construct_log_prob_table(self, cond: Tensor) -> Tensor:
         """
@@ -253,8 +229,9 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
         Parameters
         ----------
         other
-            Either a list with as many entries as self.num_outcomes, or a list of lists of TrainableKernelBase instances
-            wherein len(other[i]) equals self.num_variable_outcomes[i]
+            Either a list with as many entries as self.num_outcomes, or, when the kernel's sample space is a
+            ``CartesianFiniteSampleSpace``, a list of lists of TrainableKernelBase instances wherein
+            ``len(other[i])`` equals ``self.sample_space.num_variable_outcomes[i]``
 
         Returns
         -------
