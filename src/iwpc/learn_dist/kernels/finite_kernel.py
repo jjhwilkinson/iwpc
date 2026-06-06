@@ -53,18 +53,21 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
             len(index_cond_indices) + standard_cond_dim with the index columns at index_cond_indices
         index_cond_indices
             Optional columns of the full cond tensor that carry the discrete index b. An int N is treated as
-            list(range(N)). None disables indexing (K=1)
+            list(range(N)). None disables indexing (number of index outcomes = 1)
         index_sample_space
             Optional FiniteSampleSpace of the discrete index b. Required when index_cond_indices is non-empty;
             ignored otherwise
         logit_model
-            Optional custom logit model. Must accept x of shape (N, standard_cond_dim) and return (N, M*K) logits
-            laid out in M-major order. If None, a default model is constructed via basic_model_factory
+            Optional custom logit model. Must accept x of shape (N, standard_cond_dim) and return
+            (N, num_sample_outcomes * num_index_outcomes) logits laid out in sample-major order. If None, a
+            default model is constructed via basic_model_factory
         init_log_probs
-            Optional initial log-probability bias applied as a constant shift to the logits. A float lp initialises a
-            binary kernel (M=2) with shift [log(1-exp(lp)), lp] broadcast across all K index values. A 1D iterable of
-            length M provides one log-prob per outcome, broadcast across K. A 2D (M, K) iterable provides a distinct
-            initial log-prob per outcome per index value. Ignored if logit_model is provided
+            Optional initial log-probability bias applied as a constant shift to the logits. A float lp
+            initialises a binary kernel (num_sample_outcomes=2) with shift [log(1-exp(lp)), lp] broadcast
+            across all index outcomes. A 1D iterable of length num_sample_outcomes provides one log-prob per
+            sample outcome, broadcast across index outcomes. A 2D iterable of shape
+            (num_sample_outcomes, num_index_outcomes) provides a distinct initial log-prob per sample
+            outcome per index outcome. Ignored if logit_model is provided
         """
         if not isinstance(sample_space, FiniteSampleSpace):
             sample_space = CartesianFiniteSampleSpace(sample_space)
@@ -80,17 +83,13 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
             if index_sample_space is None:
                 raise ValueError("index_sample_space is required when index_cond_indices is non-empty")
 
-        K = index_sample_space.num_outcomes
-        M = sample_space.num_outcomes
         standard_cond_dim = int(cond.input_shape[0]) if isinstance(cond, Encoding) else int(cond)
-        total_cond_dim = standard_cond_dim + len(index_cond_indices)
-
         super().__init__(
             index_sample_space,
             index_cond_indices,
             sample_space,
             sample_space.dimension,
-            total_cond_dim,
+            standard_cond_dim + len(index_cond_indices),
         )
 
         if logit_model is not None:
@@ -98,49 +97,64 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
         else:
             final_layers = []
             if init_log_probs is not None:
-                final_layers.append(ConstantScaleLayer(shift=self._build_init_shift(init_log_probs, M, K)))
+                final_layers.append(ConstantScaleLayer(
+                    shift=self._build_init_shift(
+                        init_log_probs, sample_space.num_outcomes, index_sample_space.num_outcomes,
+                    )
+                ))
             self.logit_model = basic_model_factory(
                 cond,
-                TrivialEncoding(M * K),
+                TrivialEncoding(sample_space.num_outcomes * index_sample_space.num_outcomes),
                 final_layers=final_layers,
             )
 
     @staticmethod
-    def _build_init_shift(init_log_probs, M: int, K: int) -> list[float]:
+    def _build_init_shift(init_log_probs, num_sample_outcomes: int, num_index_outcomes: int) -> list[float]:
         """
-        Normalise init_log_probs into a flat length-(M*K) shift to apply to the logit_model output prior to its
-        reshape into (N, M, K). Layout matches the reshape order — M-major, K-minor — so the shift at flat index
-        m*K + k corresponds to outcome m, index k
+        Normalise init_log_probs into a flat shift to apply to the logit_model output prior to its reshape
+        into (N, num_sample_outcomes, num_index_outcomes). Layout matches the reshape order — sample-major,
+        index-minor — so the shift at flat index ``m*num_index_outcomes + k`` corresponds to sample outcome
+        m, index outcome k
 
         Parameters
         ----------
         init_log_probs
             See FiniteKernel.__init__
-        M
+        num_sample_outcomes
             Number of sample outcomes
-        K
+        num_index_outcomes
             Number of index outcomes
 
         Returns
         -------
         list[float]
-            A list of length M*K
+            A list of length ``num_sample_outcomes * num_index_outcomes``
         """
-        arr = np.asarray(init_log_probs, dtype=float)
-        if arr.ndim == 0:
-            if M != 2:
-                raise ValueError(f"A scalar init_log_probs can only be used with binary kernels (2 outcomes), got {M}")
-            per_outcome = np.array([np.log1p(-np.exp(arr)), float(arr)])
-            return np.repeat(per_outcome, K).tolist()
-        if arr.ndim == 1:
-            if arr.shape[0] != M:
-                raise ValueError(f"1D init_log_probs must have length M={M}, got {arr.shape[0]}")
-            return np.repeat(arr, K).tolist()
-        if arr.ndim == 2:
-            if arr.shape != (M, K):
-                raise ValueError(f"2D init_log_probs must have shape (M={M}, K={K}), got {tuple(arr.shape)}")
-            return arr.reshape(-1).tolist()
-        raise ValueError(f"init_log_probs must be 0D, 1D, or 2D, got {arr.ndim}D")
+        init_log_probs = np.asarray(init_log_probs, dtype=float)
+        if init_log_probs.ndim == 0:
+            if num_sample_outcomes != 2:
+                raise ValueError(
+                    f"A scalar init_log_probs can only be used with binary kernels (2 outcomes), got "
+                    f"{num_sample_outcomes}"
+                )
+            per_outcome = np.array([np.log1p(-np.exp(init_log_probs)), float(init_log_probs)])
+            return np.repeat(per_outcome, num_index_outcomes).tolist()
+        if init_log_probs.ndim == 1:
+            if init_log_probs.shape[0] != num_sample_outcomes:
+                raise ValueError(
+                    f"1D init_log_probs must have length num_sample_outcomes={num_sample_outcomes}, got "
+                    f"{init_log_probs.shape[0]}"
+                )
+            return np.repeat(init_log_probs, num_index_outcomes).tolist()
+        if init_log_probs.ndim == 2:
+            expected_shape = (num_sample_outcomes, num_index_outcomes)
+            if init_log_probs.shape != expected_shape:
+                raise ValueError(
+                    f"2D init_log_probs must have shape (num_sample_outcomes={num_sample_outcomes}, "
+                    f"num_index_outcomes={num_index_outcomes}), got {tuple(init_log_probs.shape)}"
+                )
+            return init_log_probs.reshape(-1).tolist()
+        raise ValueError(f"init_log_probs must be 0D, 1D, or 2D, got {init_log_probs.ndim}D")
 
     @classmethod
     def condition_on(
@@ -187,18 +201,18 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
         Parameters
         ----------
         cond
-            The standard conditioning x of shape (N, standard_cond_dim) — i.e. with the index columns removed. When
-            no indexing is used this is the full cond
+            The standard conditioning x of shape (N, standard_cond_dim) — i.e. with the index columns
+            removed. When no indexing is used this is the full cond
 
         Returns
         -------
         Tensor
-            A tensor of shape (N, M, K) where M = sample_space.num_outcomes and K = index_sample_space.num_outcomes.
-            Column k holds ``log p(A=m | B=k, x)``. For non-indexed kernels K=1
+            A tensor of shape (N, sample_space.num_outcomes, index_sample_space.num_outcomes). Slice
+            ``[:, :, k]`` holds ``log p(A=m | B=k, x)`` for sample outcome m. For non-indexed kernels the
+            trailing dimension is 1
         """
-        N = cond.shape[0]
         return self.logit_model(cond).reshape(
-            N,
+            cond.shape[0],
             self.sample_space.num_outcomes,
             self.index_sample_space.num_outcomes,
         ).log_softmax(dim=1)
@@ -213,16 +227,18 @@ class FiniteKernel(IndexedInterface, FiniteKernelInterface, TrainableKernelBase)
         Returns
         -------
         Tensor
-            A tensor of size (N, self.sample_space.num_outcomes) of log-probabilities over the outcomes for each row
-            of conditioning information
+            A tensor of size (N, self.sample_space.num_outcomes) of log-probabilities over the outcomes
+            for each row of conditioning information
         """
         if len(self.index_cond_indices) == 0:
             return self.construct_log_prob_table(cond).squeeze(-1)
-        x = cond[:, self.standard_cond_indices]
-        b = cond[:, self.index_cond_indices]
-        table = self.construct_log_prob_table(x)
-        idxs = self.index_sample_space.outcome_to_idx(b).long()
-        return table.gather(2, idxs[:, None, None].expand(-1, table.shape[1], 1)).squeeze(2)
+        standard_cond = cond[:, self.standard_cond_indices]
+        index_cond = cond[:, self.index_cond_indices]
+        log_prob_table = self.construct_log_prob_table(standard_cond)
+        index_outcome_idxs = self.index_sample_space.outcome_to_idx(index_cond).long()
+        return log_prob_table.gather(
+            2, index_outcome_idxs[:, None, None].expand(-1, log_prob_table.shape[1], 1),
+        ).squeeze(2)
 
     def __ror__(self, other: list[TrainableKernelBase | list[TrainableKernelBase]]) -> "BranchingKernel":
         """
