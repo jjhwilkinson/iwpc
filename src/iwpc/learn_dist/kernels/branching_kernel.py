@@ -64,10 +64,15 @@ def branched_evaluation(
     cum_cnt = 0
     for idx in range(len(functions)):
         mask = function_indices == idx
-        branch_size = mask.sum()
+        branch_size = int(mask.sum())
+        if branch_size == 0:
+            continue
         outputs_by_label.append(functions[idx](*map_indexing(inputs, mask)))
         output_indices[mask] = torch.arange(cum_cnt, cum_cnt + branch_size, dtype=torch.int, device=output_indices.device)
         cum_cnt += branch_size
+
+    if len(outputs_by_label) == 0:
+        outputs_by_label.append(functions[0](*inputs))
 
     if isinstance(outputs_by_label[0], Tensor):
         outputs_by_label = [[output] for output in outputs_by_label]
