@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Tuple
 
 from lightning import LightningModule
-from sympy.printing.pytorch import torch
+import torch
 from torch import Tensor
 from torch import optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
