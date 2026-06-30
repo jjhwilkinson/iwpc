@@ -27,7 +27,7 @@ class PandasDirDataModuleBuilder:
         file_size: Optional[int] = None,
         shuffle: bool = True,
         tags: Optional[Union[str, Iterable[str]]] = None,
-        serializer: "DataFrameSerializer | str | None" = None,
+        serializer: "DataFrameSerializer | str | None" = "pickle",
     ):
         """
         Parameters

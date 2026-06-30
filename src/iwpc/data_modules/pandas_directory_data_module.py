@@ -150,7 +150,7 @@ class PandasDirDataModule(LightningDataModule):
         """
         super().__init__()
         self.dataset_dir = Path(dataset_dir)
-        self.serializer = resolve_serializer(serializer, read_yaml(self.dataset_dir / 'ds_info.yml'))
+        self.serializer = resolve_serializer(serializer, self.ds_info)
         self.feature_spec = feature_spec
         self.weight_col = weight_col
         self.split = split
