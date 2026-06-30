@@ -3,6 +3,7 @@ torch
 lightning
 matplotlib
 pandas
+pyarrow
 scikit-learn
 tensorboard
 seaborn

@@ -19,31 +19,39 @@ from ..datasets.pandas_dataset import StructuredDataSpec, PandasDataset
 from ..datasets.pandas_file_list_dataset import PandasFileListDataset
 from ..types import PathLike, TensorOrNDArray
 from ..utils import read_yaml, temp_directory, dump_yaml
+from .dataframe_serializer import DataFrameSerializer, PICKLE_SERIALIZER, resolve_serializer
 
 logger = logging.getLogger(__name__)
 
 
-def batched_df_pickles_iter(in_dir: Path, batch_size: int) -> Generator[DataFrame, None, None]:
+def batched_df_pickles_iter(
+    in_dir: Path,
+    batch_size: int,
+    serializer: DataFrameSerializer = PICKLE_SERIALIZER,
+) -> Generator[DataFrame, None, None]:
     """
     Loops over the files in in_dir and yields the data contained therein in batches of size batch_size
 
     Parameters
     ----------
     in_dir
-        A directory containing a number of pickled pandas DataFrames named file_0.pkl ...
+        A directory containing a number of serialized pandas DataFrames named file_0<ext> ...
     batch_size
         The desired batch size
+    serializer
+        The DataFrameSerializer describing the on-disk format (file extension and reader). Defaults to pickle
 
     Yields
     ------
     DataFrame
         A DataFrame containing batch_size rows except for the possible the last batch
     """
+    ext = serializer.extension
     batch = []
     batch_fill = 0
-    num_pickles = len(list(in_dir.glob('file_*.pkl')))
-    for file in tqdm([in_dir / f'file_{i}.pkl' for i in range(num_pickles)], desc="Looping through files for rebatch"):
-        data = pd.read_pickle(file)
+    num_files = len(list(in_dir.glob(f'file_*{ext}')))
+    for file in tqdm([in_dir / f'file_{i}{ext}' for i in range(num_files)], desc="Looping through files for rebatch"):
+        data = serializer.read(file)
         used_data = 0
         while used_data < data.shape[0]:
             to_fill = min(data.shape[0] - used_data, batch_size - batch_fill)
@@ -62,10 +70,10 @@ def batched_df_pickles_iter(in_dir: Path, batch_size: int) -> Generator[DataFram
 
 class PandasDirDataModule(LightningDataModule):
     """
-    A generic LightningDataModule implementation that accepts a directory of pickled pandas dataframes. The directory
-    structure must contain a number of pickle files named 'file_{i}.pkl' numbered from 0 through N-1 and a metadata
-    file named ds_info.yml which must contain at least a 'file_sizes' entry providing an ordered list of the number of
-    samples in each file. E.g.
+    A generic LightningDataModule implementation that accepts a directory of serialized pandas dataframes. The directory
+    structure must contain a number of files named 'file_{i}<ext>' numbered from 0 through N-1 (where <ext> is the
+    serializer's file extension, '.pkl' by default) and a metadata file named ds_info.yml which must contain at least a
+    'file_sizes' entry providing an ordered list of the number of samples in each file. E.g.
 
     file_sizes:
         - 10669194
@@ -100,6 +108,7 @@ class PandasDirDataModule(LightningDataModule):
         shuffle_in_train_files: bool = True,
         use_in_memory_dataset: bool = False,
         filter: Callable[[DataFrame], "np.ndarray | pd.Series"] | None = None,
+        serializer: "DataFrameSerializer | str | None" = None,
     ):
         """
         Parameters
@@ -133,9 +142,15 @@ class PandasDirDataModule(LightningDataModule):
             `reweight`, `normalise_weights`, `rebatch_files`, `shuffle`) see raw rows and are not affected. When set,
             per-file post-filter row counts are precomputed during construction by scanning every file, which can be
             slow on large datasets
+        serializer
+            Selects the on-disk (de)serialization format. May be a DataFrameSerializer instance, the name of a built-in
+            serializer (``"pickle"`` or ``"parquet"``), or None to auto-detect. When None, the format recorded in the
+            dataset's ds_info.yml (``serializer`` field) is used if present, otherwise pickle, so existing ``.pkl``
+            datasets and configs keep working unchanged
         """
         super().__init__()
         self.dataset_dir = Path(dataset_dir)
+        self.serializer = resolve_serializer(serializer, self.ds_info)
         self.feature_spec = feature_spec
         self.weight_col = weight_col
         self.split = split
@@ -167,7 +182,10 @@ class PandasDirDataModule(LightningDataModule):
         List[Path]
             List of paths to all the files that comprise this dataset
         """
-        files = [self.dataset_dir / f"file_{i}.pkl" for i in range(len(self.ds_info['file_sizes']))]
+        files = [
+            self.dataset_dir / f"file_{i}{self.serializer.extension}"
+            for i in range(len(self.ds_info['file_sizes']))
+        ]
         if self.limit_files:
             return files[:self.limit_files]
         return files
@@ -244,6 +262,7 @@ class PandasDirDataModule(LightningDataModule):
             file_sizes=self.file_sizes,
             shuffle_in_file=False,
             filter=self.filter,
+            read_fn=self.serializer.read,
         )
 
     @property
@@ -258,6 +277,7 @@ class PandasDirDataModule(LightningDataModule):
             file_sizes=self.file_sizes[:len(self.train_files)],
             shuffle_in_file=self.shuffle_in_train_files,
             filter=self.filter,
+            read_fn=self.serializer.read,
         )
 
     @property
@@ -272,6 +292,7 @@ class PandasDirDataModule(LightningDataModule):
             file_sizes=self.file_sizes[len(self.train_files):],
             shuffle_in_file=False,
             filter=self.filter,
+            read_fn=self.serializer.read,
         )
 
     @property
@@ -298,7 +319,7 @@ class PandasDirDataModule(LightningDataModule):
         Opens and returns the DataFrame in the file corresponding to the given index. When self.filter is set the
         returned frame contains only rows for which the filter mask is True
         """
-        df = pd.read_pickle(self.all_files[idx])
+        df = self.serializer.read(self.all_files[idx])
         if self.filter is not None:
             df = df[self.filter(df)].reset_index(drop=True)
         return df
@@ -435,7 +456,7 @@ class PandasDirDataModule(LightningDataModule):
             files += self.validation_files
 
         for file in files:
-            yield file, pd.read_pickle(file)
+            yield file, self.serializer.read(file)
 
     def transform(
         self,
@@ -487,6 +508,7 @@ class PandasDirDataModule(LightningDataModule):
         if out_dir.exists() and not force:
             raise Exception(f"{out_dir} already exists. Use `force' to overwrite.")
 
+        ext = self.serializer.extension
         old_file_sizes = self.file_sizes
         with temp_directory() as tmpdir:
             new_file_sizes = []
@@ -494,24 +516,25 @@ class PandasDirDataModule(LightningDataModule):
                 new_df = transformation(df.copy())
                 assert isinstance(new_df, pd.DataFrame)
                 new_file_sizes.append(new_df.shape[0])
-                pd.to_pickle(new_df, tmpdir / file.name)
+                self.serializer.write(new_df, tmpdir / file.name)
 
             if new_ds_info is None:
                 new_ds_info = copy.deepcopy(self.ds_info)
             if update_ds_info:
                 new_ds_info.update(update_ds_info)
             new_ds_info['file_sizes'] = new_file_sizes
+            new_ds_info['serializer'] = self.serializer.name
             dump_yaml(new_ds_info, tmpdir / 'ds_info.yml')
 
             if out_dir.exists():
-                for path in out_dir.glob('file_*.pkl'):
+                for path in out_dir.glob(f'file_*{ext}'):
                     path.unlink()
                 if (out_dir / "ds_info.yml").exists():
                     (out_dir / "ds_info.yml").unlink()
             else:
                 out_dir.mkdir()
 
-            for file in tmpdir.glob("file_*.pkl"):
+            for file in tmpdir.glob(f"file_*{ext}"):
                 shutil.move(file, out_dir / file.name)
             shutil.move(tmpdir / "ds_info.yml", out_dir / "ds_info.yml")
 
@@ -524,6 +547,7 @@ class PandasDirDataModule(LightningDataModule):
             self.weight_col,
             split=self.split,
             dataloader_kwargs=self.dataloader_kwargs,
+            serializer=self.serializer,
         )
         if tag is not None:
             new_dm.add_tag(tag)
@@ -620,6 +644,7 @@ class PandasDirDataModule(LightningDataModule):
             weight_col=output_weight_col,
             split=self.split,
             dataloader_kwargs=self.dataloader_kwargs,
+            serializer=self.serializer,
         )
         new_dm.normalise_weights(label_col)
         return self.copy(dataset_dir=out_dir, weight_col=output_weight_col)
@@ -694,16 +719,17 @@ class PandasDirDataModule(LightningDataModule):
         assert new_file_size > 0
         logger.info(f"Original file sizes {self.ds_info['file_sizes']}")
 
+        ext = self.serializer.extension
         ds_info = self.ds_info
         new_batch_sizes = []
-        for i, batch in enumerate(batched_df_pickles_iter(self.dataset_dir, new_file_size)):
-            pd.to_pickle(batch, self.dataset_dir / f"file_{i}.pkl_")
+        for i, batch in enumerate(batched_df_pickles_iter(self.dataset_dir, new_file_size, self.serializer)):
+            self.serializer.write(batch, self.dataset_dir / f"file_{i}{ext}_")
             new_batch_sizes.append(batch.shape[0])
         ds_info['file_sizes'] = new_batch_sizes
 
         for file in self.all_files:
             file.unlink()
-        for file in self.dataset_dir.glob("file_*.pkl_"):
+        for file in self.dataset_dir.glob(f"file_*{ext}_"):
             file.rename(self.dataset_dir / file.name[:-1])
 
         dump_yaml(ds_info, self.dataset_dir / 'ds_info.yml')
@@ -715,28 +741,29 @@ class PandasDirDataModule(LightningDataModule):
         In-place shuffles all the data in dataset_dir randomly assigning each row to a new file and position in the
         file. The size of each file is not changed
         """
+        ext = self.serializer.extension
         rng = np.random.Generator(np.random.PCG64())
-        in_files = [self.dataset_dir / f'file_{i}.pkl' for i in range(self.num_files)]
+        in_files = [self.dataset_dir / f'file_{i}{ext}' for i in range(self.num_files)]
         shuffled_sizes = np.zeros(len(in_files), dtype=int)
         new_ds_info = self.ds_info
         batch_sizes = np.asarray(self.ds_info["file_sizes"])
 
         for i, file in enumerate(tqdm(in_files, desc='Shuffling and splitting')):
-            data = pd.read_pickle(file).sample(frac=1).reset_index(drop=True)
+            data = self.serializer.read(file).sample(frac=1).reset_index(drop=True)
             partition = rng.multivariate_hypergeometric(batch_sizes - shuffled_sizes, data.shape[0])
             shuffled_sizes += partition
 
             cum_partition = np.cumsum(np.concatenate([[0], partition]))
             for j in range(len(in_files)):
-                pd.to_pickle(data[cum_partition[j]: cum_partition[j + 1]], self.dataset_dir / f'{j}_{i}.pkl')
+                self.serializer.write(data[cum_partition[j]: cum_partition[j + 1]], self.dataset_dir / f'{j}_{i}{ext}')
 
         new_file_sizes = []
         for j in tqdm(range(len(in_files)), desc='Merging and shuffling'):
-            data = pd.concat([pd.read_pickle(self.dataset_dir / f'{j}_{i}.pkl') for i in range(len(in_files))])
+            data = pd.concat([self.serializer.read(self.dataset_dir / f'{j}_{i}{ext}') for i in range(len(in_files))])
             data = data.sample(frac=1).reset_index(drop=True)
-            pd.to_pickle(data, self.dataset_dir / f'file_{j}.pkl')
+            self.serializer.write(data, self.dataset_dir / f'file_{j}{ext}')
             for i in range(len(in_files)):
-                (self.dataset_dir / f'{j}_{i}.pkl').unlink()
+                (self.dataset_dir / f'{j}_{i}{ext}').unlink()
             new_file_sizes.append(data.shape[0])
 
         new_ds_info['file_sizes'] = new_file_sizes
@@ -767,6 +794,7 @@ class PandasDirDataModule(LightningDataModule):
             'shuffle_in_train_files': self.shuffle_in_train_files,
             'use_in_memory_dataset': self.use_in_memory_dataset,
             'filter': self.filter,
+            'serializer': self.serializer,
         }
         arguments.update(overrides)
         return PandasDirDataModule(**arguments)
@@ -817,10 +845,11 @@ class PandasDirDataModule(LightningDataModule):
             force=force,
             shuffle=False,
             tags=[f'merged from {dm.dataset_dir}' for dm in [self, *others]],
+            serializer=self.serializer,
         ) as builder:
             for label, dm in tqdm(zip(labels, [self, *others]), desc='Merging datasets', total=len(others)+1):
                 for file in tqdm(dm.all_files, total=dm.num_files, leave=False, desc=f'Copying files'):
-                    df = pd.read_pickle(file)
+                    df = dm.serializer.read(file)
                     if label_col is not None:
                         df[label_col] = label
 
@@ -833,6 +862,7 @@ class PandasDirDataModule(LightningDataModule):
             split=self.split,
             limit_files=self.limit_files,
             dataloader_kwargs=self.dataloader_kwargs,
+            serializer=self.serializer,
         )
 
         return new_dm
