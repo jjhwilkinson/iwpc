@@ -69,21 +69,19 @@ class DataFrameSerializer:
         return self.read_fn(path)
 
 
-def _write_pickle(df: pd.DataFrame, path: PathLike) -> None:
-    df.to_pickle(path)
-
-
 def _write_parquet(df: pd.DataFrame, path: PathLike) -> None:
+    # pandas has no top-level pd.to_parquet (only the DataFrame method), so a module-level wrapper
+    # is needed to expose the (df, path) signature as a picklable free function
     df.to_parquet(path)
 
 
-# The write/read callables are module-level (not lambdas) so the serializer — and any
+# The write/read callables are module-level functions (not lambdas) so the serializer — and any
 # PandasFileListDataset holding a reference to serializer.read — pickles cleanly when DataLoader
 # workers are spawned (num_workers > 0).
 PICKLE_SERIALIZER = DataFrameSerializer(
     name="pickle",
     extension=".pkl",
-    write_fn=_write_pickle,
+    write_fn=pd.to_pickle,
     read_fn=pd.read_pickle,
 )
 PARQUET_SERIALIZER = DataFrameSerializer(
