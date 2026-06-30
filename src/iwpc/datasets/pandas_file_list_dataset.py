@@ -32,6 +32,7 @@ class PandasFileListDataset(Dataset):
         file_sizes: Optional[List[int]] = None,
         shuffle_in_file: bool = False,
         filter: Optional["Callable[[pd.DataFrame], np.ndarray]"] = None,
+        read_fn: Optional["Callable[[PathLike], pd.DataFrame]"] = None,
     ):
         """
         Parameters
@@ -51,9 +52,14 @@ class PandasFileListDataset(Dataset):
         filter
             Optional callable taking a DataFrame and returning a boolean mask of the same length. When provided, every
             file is masked at load time and only the surviving rows are exposed downstream
+        read_fn
+            Optional callable taking a path and returning a DataFrame, used to deserialize each file. Defaults to
+            pd.read_pickle, preserving the historical pickle behaviour. PandasDirDataModule passes its serializer's
+            reader here so non-pickle formats (e.g. parquet) load correctly
         """
         self.files = files
         self.filter = filter
+        self.read_fn = read_fn if read_fn is not None else pd.read_pickle
         self.file_sizes = file_sizes
         if self.file_sizes is None:
             self.file_sizes = [
@@ -78,9 +84,9 @@ class PandasFileListDataset(Dataset):
 
     def _read_file(self, file: PathLike) -> pd.DataFrame:
         """
-        Reads a single pickle file and applies self.filter when set
+        Reads a single file via self.read_fn and applies self.filter when set
         """
-        df = pd.read_pickle(file)
+        df = self.read_fn(file)
         if self.filter is not None:
             df = df[self.filter(df)].reset_index(drop=True)
         return df

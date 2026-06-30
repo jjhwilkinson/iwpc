@@ -78,14 +78,33 @@ mean-normalised inside each class.
 
 ### `PandasDirDataModule` pointing at a sharded directory
 
-The directory must contain `file_0.pkl … file_{N-1}.pkl` and a `ds_info.yml`
-listing `file_sizes` (in file order):
+The directory must contain `file_0<ext> … file_{N-1}<ext>` and a `ds_info.yml`
+listing `file_sizes` (in file order). `<ext>` is the serializer's extension —
+`.pkl` by default, `.parquet` when built with the parquet serializer:
 
 ```
 sample_dataset/
   ds_info.yml          # contains: file_sizes: [100000, 100000]
   file_0.pkl
   file_1.pkl
+```
+
+#### Serialization format
+
+The on-disk shard format is pluggable via the `serializer` argument on both
+`PandasDirDataModule` and `PandasDirDataModuleBuilder`. It accepts a
+`DataFrameSerializer` instance, the name of a built-in (`"pickle"` — the
+default — or `"parquet"`), or `None` to auto-detect. Pickle stays the default
+so existing datasets and configs are unchanged. Parquet (via `pyarrow`) is
+numpy-version-neutral and avoids the `ModuleNotFoundError: No module named
+'numpy._core.numeric'` you get loading a numpy-2 pickle under numpy 1.x. The
+chosen format is recorded in `ds_info.yml` under a `serializer` field, so a
+dataset re-opens with the right reader without re-specifying it (a `ds_info.yml`
+with no `serializer` field defaults to pickle):
+
+```python
+PandasDirDataModuleBuilder("new_dataset", serializer="parquet")  # writes file_i.parquet
+PandasDirDataModule("new_dataset")                               # auto-detects parquet
 ```
 
 ```python
@@ -124,9 +143,10 @@ with PandasDirDataModuleBuilder(
         builder.write(df)
 ```
 
-The builder writes `file_i.pkl` shards, records each `file_sizes` entry, dumps
-`ds_info.yml` (with a creation timestamp tag prepended), and optionally
-re-batches and shuffles on exit.
+The builder writes `file_i<ext>` shards (`.pkl` by default; pass
+`serializer="parquet"` to write `.parquet`), records each `file_sizes` entry,
+dumps `ds_info.yml` (with a creation timestamp tag prepended and the chosen
+`serializer` recorded), and optionally re-batches and shuffles on exit.
 
 #### Tagged transforms and reweighting
 

@@ -29,7 +29,12 @@
 
 ## `ds_info.yml` fields
 
-- `file_sizes` (required): ordered list of row counts per `file_i.pkl`.
+- `file_sizes` (required): ordered list of row counts per `file_i<ext>`.
+- `serializer` (optional): name of the on-disk format the shards were written
+  with (`"pickle"` default, `"parquet"`). Absent -> pickle (backward compatible).
+  `PandasDirDataModule`/`Builder` honour it via the `serializer=` arg
+  (`DataFrameSerializer` instance, name string, or `None` to auto-detect from
+  this field). Shard extension follows the serializer (`.pkl`/`.parquet`).
 - `tags` (optional): append-only history of modifications.
   `PandasDirDataModuleBuilder` prepends a `"Created: <iso timestamp>"` tag.
 - Anything else you put in is preserved across `.transform` unless explicitly

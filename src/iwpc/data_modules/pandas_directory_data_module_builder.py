@@ -3,9 +3,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union, Iterable
 
-import pandas as pd
 from pandas import DataFrame
 
+from .dataframe_serializer import DataFrameSerializer, resolve_serializer
 from .pandas_directory_data_module import PandasDirDataModule
 from iwpc.types import PathLike
 from iwpc.utils import dump_yaml
@@ -27,6 +27,7 @@ class PandasDirDataModuleBuilder:
         file_size: Optional[int] = None,
         shuffle: bool = True,
         tags: Optional[Union[str, Iterable[str]]] = None,
+        serializer: "DataFrameSerializer | str | None" = None,
     ):
         """
         Parameters
@@ -42,11 +43,16 @@ class PandasDirDataModuleBuilder:
             Whether to shuffle the final dataset
         tags
             Any tags to add to the dataset's metadata. A creation time tag is automatically added
+        serializer
+            Selects the on-disk (de)serialization format. May be a DataFrameSerializer instance, the name of a built-in
+            serializer (``"pickle"`` or ``"parquet"``), or None for the pickle default. The chosen format is recorded in
+            ds_info.yml so the resulting dataset can be re-opened without re-specifying it
         """
         self.dataset_dir = Path(dataset_dir)
         self.force = force
         self.file_size = file_size
         self.shuffle = shuffle
+        self.serializer = resolve_serializer(serializer)
         if tags is None:
             self.tags = []
         else:
@@ -78,11 +84,11 @@ class PandasDirDataModuleBuilder:
         """
         Writes the ds_info.yml file, rebatches, and shuffles the resulting dataset if specified
         """
-        ds_info = {'file_sizes': self.file_sizes}
+        ds_info = {'file_sizes': self.file_sizes, 'serializer': self.serializer.name}
         if self.tags is not None:
             ds_info['tags'] = self.tags
         dump_yaml(ds_info, self.dataset_dir / 'ds_info.yml')
-        dm = PandasDirDataModule(self.dataset_dir)
+        dm = PandasDirDataModule(self.dataset_dir, serializer=self.serializer)
 
         if self.file_size is not None:
             dm.rebatch_files(self.file_size)
@@ -98,5 +104,5 @@ class PandasDirDataModuleBuilder:
         df
             The DataFrame to write
         """
-        pd.to_pickle(df, self.dataset_dir / f'file_{len(self.file_sizes)}.pkl')
+        self.serializer.write(df, self.dataset_dir / f'file_{len(self.file_sizes)}{self.serializer.extension}')
         self.file_sizes.append(df.shape[0])
