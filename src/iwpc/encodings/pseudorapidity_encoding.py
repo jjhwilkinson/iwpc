@@ -2,10 +2,10 @@ import torch
 from torch import Tensor
 from iwpc.encodings.encoding_base import Encoding
 
-  class PseudorapidityEncoding(Encoding):                                                                                                                                                                        
-      """                                                                                                                                                                                                        
-      Encodes a polar angle as pseudorapidity, eta = -ln tan(theta / 2).              
-      """                               
+class PseudorapidityEncoding(Encoding):                                                                                                                                                                        
+    """                                                                                                                                                                                                        
+    Encodes a polar angle as pseudorapidity, eta = -ln tan(theta / 2).              
+    """                               
 
     def __init__(self, dimension: int):
         """
@@ -15,9 +15,9 @@ from iwpc.encodings.encoding_base import Encoding
             The number of features to expect
         """
         super().__init__(dimension, dimension)                                                                                                                             
-                                                                                                                                                                                                                 
+                                                                                                                                                                                                                    
     def _encode(self, x: Tensor) -> Tensor:   
-            """
+        """
         Parameters
         ----------
         x
@@ -28,4 +28,5 @@ from iwpc.encodings.encoding_base import Encoding
         Tensor
             Psuedorapidity encoded tensor of dimension (..., dimension)
         """                                                                                                                                                                 
+        
         return -torch.log(torch.tan(x / 2))
