@@ -20,7 +20,7 @@ class LogEncoding(Encoding):
             The base of the logarithm. Defaults to the natural logarithm.
         """
         super().__init__(dimension, dimension)
-        self.register_buffer('base', base)
+        self.register_buffer('base', torch.tensor(float(base)))
 
     def _encode(self, x: Tensor) -> Tensor:
         """
@@ -34,5 +34,5 @@ class LogEncoding(Encoding):
         Tensor
             torch.log(x)
         """
-        log_base = 1 if self.base < 0 else torch.log(self.base)
+        log_base = 1.0 if self.base < 0 else torch.log(self.base)
         return torch.log(x) / log_base
