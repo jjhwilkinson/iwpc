@@ -26,7 +26,7 @@ class UniformBaseModel(SamplableBaseModel):
         return np.random.uniform(self.low, self.high, size=(num_samples, 1))
 
     def _log_prob(self, x: np.ndarray) -> np.ndarray:
-        return np.full(x.shape[0], 1 / (self.high - self.low))
+        return np.full(x.shape[0], -np.log(self.high - self.low))
 
     @classmethod
     def fit(cls, x: np.ndarray) -> "UniformBaseModel":
