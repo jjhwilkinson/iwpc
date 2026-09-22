@@ -91,14 +91,26 @@ def construct_init_parameters(cov: ndarray) -> tuple[ndarray, ndarray, ndarray]:
     -------
     tuple[ndarray, ndarray, ndarray]
         1. The logarithm of the eigenvalues of the correlation matrix
-        2. The matrix logarithm of the rotation that diagonalizes the correlation matrix
+        2. The matrix logarithm of the rotation ``rot`` that diagonalizes the correlation matrix in the kernel's
+           convention ``correlation = rot.T @ diag(eigenvalues) @ rot`` (see ``construct_gaussian_parameters``). The
+           rotation is chosen in SO(n) so that its logarithm is real
         3. The logarithm of the standard deviations of the covariance matrix
     """
     corr = cov / np.sqrt(np.diag(cov))[:, None] / np.sqrt(np.diag(cov))[None, :]
-    corr_eigvals, corr_rotation = np.linalg.eigh(corr)
+    corr_eigvals, corr_eigvecs = np.linalg.eigh(corr)
+
+    # eigh returns corr = eigvecs @ diag(eigvals) @ eigvecs.T while the kernel reconstructs rot.T @ diag @ rot, so the
+    # rotation is the transpose of the eigenvector matrix. eigh's orthogonal matrix has determinant +-1; a determinant
+    # of -1 has no real matrix logarithm, so one eigenvector's sign is flipped (which leaves the product unchanged)
+    corr_rotation = corr_eigvecs.T.copy()
+    if np.linalg.det(corr_rotation) < 0:
+        corr_rotation[0] *= -1
 
     log_eigvals = np.log(corr_eigvals)
     log_rot = logm(corr_rotation)
+    if np.abs(np.imag(log_rot)).max() > 1e-8 * max(1.0, np.abs(log_rot).max()):
+        raise ValueError("The matrix logarithm of the correlation rotation is not real")
+    log_rot = np.real(log_rot)
     log_stds = np.log(np.sqrt(np.diag(cov)))
 
     return log_eigvals, log_rot, log_stds
@@ -257,10 +269,12 @@ class MultivariateGaussianKernel(TrainableKernelBase):
             final_layers=[ConstantScaleLayer(shift=log_corr_eigvals)],
         ) if log_diag_model is None else log_diag_model
 
+        # The network's raw output is the flattened sample_dim x sample_dim matrix that the AntiSymmetricMatrixEncoding
+        # antisymmetrises, so the (already antisymmetric) initial log rotation is applied as a flat shift
         log_rot_model = basic_model_factory(
             TrivialEncoding(cond),
             AntiSymmetricMatrixEncoding(sample_dim),
-            final_layers=[ConstantScaleLayer(shift=log_corr_rot)],
+            final_layers=[ConstantScaleLayer(shift=log_corr_rot.reshape(-1))],
         ) if log_rot_model is None else log_rot_model
 
         log_std_model = basic_model_factory(
