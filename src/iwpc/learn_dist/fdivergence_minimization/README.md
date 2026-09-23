@@ -13,8 +13,11 @@ The trainer alternates two steps. `log_p_over_q_model` is trained to learn
 the log density ratio `log(p/q)` using a cross-entropy loss over `p` and
 `q` samples (label `0 = p`, `1 = q`). The kernel is then updated against a
 score-function surrogate that consumes the detached `log(p/q)` estimate
-and whose gradient matches the gradient of `Df(p || q)` with respect to
-the kernel parameters.
+and whose gradient matches the gradient of `Df(p || q) = E_q[f(p/q)]` (the
+convention of the divergence estimators) with respect to the kernel parameters:
+with `r = p/q`, `d/dθ E_q[f(r)] = -E_q[f*(f'(r)) d/dθ log q]`, so each q sample's
+score is weighted by `-f*(f'(p/q))` (for the KL divergence this is the
+maximum-likelihood gradient `-E_p[d/dθ log q]`).
 
 ## Layout
 
@@ -25,10 +28,10 @@ the kernel parameters.
   (`1 - BCE / log 2`, a JS-style lower bound) and `train_kernel_loss`.
 - `fdivergence_gradient_surrogate_loss.py` -
   `FDivergenceGradientSurrogateLoss`, the standalone per-sample surrogate
-  `w * f'(p/q) * log q(x|base)`, evaluated through
-  `DifferentiableFDivergence._f_dash_given_log(log_p_over_q)` for numerical
-  stability. (The trainer currently inlines the same expression in
-  `calculate_kernel_loss`; the class documents the identity.)
+  `-w * f*(f'(p/q)) * log q(x|base)`, evaluated through
+  `DifferentiableFDivergence.calculate_naive_q_summands_given_log(log_p_over_q)`
+  for numerical stability. (The trainer computes the same weight in
+  `calculate_score_function_weights`; the class documents the identity.)
 
 ## Usage
 

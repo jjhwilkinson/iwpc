@@ -32,7 +32,8 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
       cross-entropy loss over p and q samples. Its scalar output is evaluated by
       `calculate_log_p_over_q`
     - `sampled_kernel` (and optionally `exact_kernel`) is trained against a score-function surrogate
-      whose gradient w.r.t. the kernel parameters equals the gradient of Df(p || q)
+      whose gradient w.r.t. the kernel parameters equals the gradient of Df(p || q) = E_q[f(p/q)], the same
+      convention as the divergence estimators of `iwpc.divergences` (see `calculate_score_function_weights`)
 
     The exact kernel is optional and can take three forms, each handled by
     `full_sample_iter_and_cut_pass_log_prob`:
@@ -296,6 +297,29 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         p_loss = - (p_weights * logsigmoid(self.calculate_log_p_over_q(samples[~q_mask]))).mean()
         return (p_loss + q_loss) / 2
 
+    def calculate_score_function_weights(self, log_p_over_q: Tensor) -> Tensor:
+        """
+        Per-sample weight of the score function in the kernel surrogate. With r = p/q,
+
+            d/dθ Df(p || q) = d/dθ E_q[f(r)] = E_q[(f(r) - r f'(r)) d/dθ log q] = - E_q[f*(f'(r)) d/dθ log q],
+
+        so the weight is -f*(f'(p/q)), the negated q-side summand of the naive variational representation, evaluated
+        through the divergence's stable `calculate_naive_q_summands_given_log`. For the KL divergence this gives
+        -E_p[d/dθ log q], the maximum-likelihood gradient. `log_p_over_q` is clipped to [-14, 14] before use, as
+        in the divergence estimators, because the weight exponentiates it for most divergences
+
+        Parameters
+        ----------
+        log_p_over_q
+            Detached estimate of log(p / q) at each q sample, shape (N,)
+
+        Returns
+        -------
+        Tensor
+            The score-function weights -f*(f'(p/q)), shape (N,)
+        """
+        return -self.divergence.calculate_naive_q_summands_given_log(log_p_over_q.clamp(-14., 14.))
+
     def calculate_kernel_loss(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor], stage: str) -> Tensor:
         """
         Calculates the kernel loss given the learned values of self.log_p_over_q_model
@@ -332,7 +356,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
             with torch.no_grad():
                 log_p_over_q = self.calculate_log_p_over_q(q)
             total_q_weight = q_weights * (exact_log_prob.detach() + cut_pass_log_prob.detach() - log_average_cut_pass_prob.detach()).exp()
-            loss = loss + (total_q_weight * self.divergence.f_dash_given_log(-log_p_over_q) * (sample_log_prob + cut_pass_log_prob - log_average_cut_pass_prob)).mean()
+            loss = loss + (total_q_weight * self.calculate_score_function_weights(log_p_over_q) * (sample_log_prob + cut_pass_log_prob - log_average_cut_pass_prob)).mean()
 
         if isinstance(self.exact_kernel, FiniteCutKernel) and self.target_cut_pass_prob is not None:
             normalized_log_poisson_term = - (
