@@ -37,7 +37,7 @@ class GaussianKernel(TrainableKernelBase):
             effects of outliers.
         """
         super().__init__(1, cond)
-        self.register_buffer('log_two_pi', torch.tensor(0.5 * np.log(2 * np.pi), dtype=torch.float32))
+        self.register_buffer('log_two_pi', torch.tensor(np.log(2 * np.pi), dtype=torch.float32))
         self.loc_model = basic_model_factory(cond, 1) if loc_model is None else loc_model
         self.scale_model = basic_model_factory(cond, ExponentialEncoding(1)) if scale_model is None else scale_model
         self.max_chi = max_chi
