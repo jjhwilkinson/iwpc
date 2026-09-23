@@ -19,6 +19,8 @@ You pick a divergence (KL, JS, or a custom subclass of `DifferentiableFDivergenc
 - `base.py` — `DifferentiableFDivergence`, the abstract interface. Declares the six `_*_torch` / `_*_np` hooks subclasses must implement (`_f`, `_f_conj`, `_f_dash_given_log` in both numpy and torch), the three public `f` / `f_conj` / `f_dash_given_log` dispatchers, and the helpers (`calculate_naive_p_summands_given_log`, `calculate_naive_q_summands_given_log`, `calculate_naive_rep_summands_given_log_by_label`, `naive_estimate_given_log`) that the training loop and accumulators call.
 - `kl_divergence.py` — `KLDivergence`. `f(x) = x log x`, `f*(x) = exp(x - 1)`, `f'(log x) = 1 + log x`.
 - `jensen_shannon_divergence.py` — `JensenShannonDivergence`. `f(x) = 0.5 (x log x - (x+1) log((x+1)/2))`, with a `logaddexp`-based stable form for `f'`.
+- `reverse_kl_divergence.py` — `ReverseKLDivergence`, `KL(q || p)`. `f(x) = -log x`, `f*(u) = -1 - log(-u)` on `u < 0`, `f'(log x) = -exp(-log x)`.
+- `chi_squared_divergences.py` — `PearsonChiSquaredDivergence` (`∫(p-q)²/q`: `f(x) = (x-1)²`, `f*(u) = u + u²/4` on `u ≥ -2`, `f'(log x) = 2 expm1(log x)`) and `NeymanChiSquaredDivergence` (`∫(p-q)²/p`: `f(x) = (x-1)²/x`, `f*(u) = 2 - 2√(1-u)` on `u < 1`, `f'(log x) = -expm1(-2 log x)`). Their `f'` are unbounded in one tail of `log(p/q)`, so gradients built from them can be dominated by a few samples.
 
 ### Estimator hierarchy
 
