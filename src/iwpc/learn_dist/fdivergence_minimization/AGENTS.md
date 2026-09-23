@@ -35,8 +35,16 @@ from the `log_p_over_q_model`, regardless of `self.divergence`.
 Score-function / REINFORCE identity for `Df(p || q) = E_q[ f(p/q) ]`:
 
 ```
-d/dθ Df(p || q) = E_q[ f'(p/q) * d/dθ log q_θ(x) ]
+d/dθ Df(p || q) = E_q[ (f(r) - r f'(r)) * d/dθ log q_θ(x) ] = - E_q[ f*(f'(r)) * d/dθ log q_θ(x) ],   r = p/q
 ```
+
+The weight `-f*(f'(p/q))` is `calculate_score_function_weights`, i.e. the negated
+q-side naive summand `calculate_naive_q_summands_given_log(log_p_over_q)`. It is
+not clipped: clipping `log(p/q)` would bias the kernel gradient wherever the
+ratio model is extreme, which is exactly where the gradient matters. (Before this was fixed the trainer used
+`f'(q/p)`, which is the gradient of `E_p[f(q/p)] = Df(q || p)`: the arguments
+swapped, so `KLDivergence` trained towards `KL(q || p)`. Symmetric divergences
+such as JSD were unaffected.)
 
 When `exact_kernel` is a `FiniteCutKernel`, q-side samples actually come from
 the un-cut base distribution and are reweighted by the per-row cut-pass
@@ -49,14 +57,13 @@ via a signed logsumexp that tolerates negative `w_i`.
 ```
 total_q_weight = w * exp(exact_log_prob + cut_pass_log_prob - log r̄).detach()
 loss += mean( total_q_weight
-              * divergence.f_dash_given_log(-log_p_over_q)
+              * calculate_score_function_weights(log_p_over_q)
               * (sample_log_prob + cut_pass_log_prob - log r̄) )
 ```
 
 where `sample_log_prob = sampled_log_prob + exact_log_prob` comes from
 `full_sample_iter_and_cut_pass_log_prob` (the only term carrying grad through
-θ — `log_p_over_q` and the `r̄` correction are detached). `f_dash_given_log`
-evaluates `f'(p/q)` stably from `log(q/p) = -log_p_over_q`.
+θ — `log_p_over_q` and the `r̄` correction are detached).
 
 When `exact_kernel` is `None` or a non-cut `FiniteKernelInterface`,
 `cut_pass_log_prob` is identically zero (every sample passes), `r̄` reduces to
@@ -84,9 +91,10 @@ term at the minimum. Disabled when `target_cut_pass_prob is None` or
 
 ## Cross-package deps
 
-- `iwpc.divergences.DifferentiableFDivergence` - supplies `f_dash_given_log`
-  (public) / `_f_dash_given_log` (used by the standalone surrogate class). Any
-  new divergence must implement the torch path.
+- `iwpc.divergences.DifferentiableFDivergence` - supplies
+  `calculate_naive_q_summands_given_log` (`f*(f'(p/q))`, used by both the
+  trainer and the standalone surrogate class). Any new divergence must
+  implement the torch path.
 - `iwpc.learn_dist.kernels.trainable_kernel_base.TrainableKernelBase` - must
   expose `draw(cond)` and `draw_with_log_prob(cond) -> (sample, log_prob)`.
 - `iwpc.learn_dist.kernels.finite_kernel.FiniteKernelInterface` - optional
