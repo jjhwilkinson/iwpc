@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from numpy import ndarray
 from scipy.linalg import logm
+from scipy.optimize import linear_sum_assignment
 from torch import Tensor
 from torch.nn import Module
 
@@ -77,6 +78,49 @@ class MultivariateGaussianParameters:
         )
 
 
+def align_rotation_with_coordinates(corr_eigvals: ndarray, corr_eigvecs: ndarray) -> tuple[ndarray, ndarray]:
+    """
+    Reorders and re-signs an eigen-decomposition so that each eigenvector occupies the row of the coordinate it
+    overlaps most, with a positive diagonal entry
+
+    ``eigh`` returns ``corr = eigvecs @ diag(eigvals) @ eigvecs.T`` with the eigenvectors in columns ordered by
+    eigenvalue, while the kernel reconstructs ``rot.T @ diag @ rot``, so the rotation is the transpose of the
+    eigenvector matrix. The eigenvalue ordering bears no relation to the coordinates, and any permutation or sign flip
+    of the eigenvectors reconstructs the same matrix, so the decomposition is free to choose the representative that
+    is closest to the identity: the assignment of eigenvectors to coordinates maximizing the total overlap
+    ``sum_k |eigvecs[row_k, column_k]|`` (a linear assignment problem), each eigenvector signed so that its diagonal
+    entry is positive.
+
+    This matters whenever the rotation is modelled by a network with symmetries imposed on it. If the correlation
+    matrix is block diagonal in some set of coordinates, the aligned rotation is block diagonal in the same set, and
+    a symmetrization that acts by permuting or signing coordinates leaves it invariant; ``eigh``'s arbitrary ordering
+    scatters the blocks across rows, and the symmetrization then averages parts of them away
+
+    Parameters
+    ----------
+    corr_eigvals
+        The (n,) eigenvalues returned by ``np.linalg.eigh``
+    corr_eigvecs
+        The (n, n) eigenvector matrix returned by ``np.linalg.eigh``, eigenvectors in columns
+
+    Returns
+    -------
+    tuple[ndarray, ndarray]
+        1. The eigenvalues permuted so that entry k belongs to the eigenvector placed in row k
+        2. The rotation with the eigenvectors as rows, aligned with the coordinates. Its determinant may be -1, in
+           which case it has no real matrix logarithm; the caller flips the sign of its least aligned row, which
+           leaves the reconstructed matrix unchanged
+    """
+    coordinate_rows, eigenvector_columns = linear_sum_assignment(-np.abs(corr_eigvecs))
+    aligned_rotation = np.zeros_like(corr_eigvecs)
+    aligned_eigvals = np.zeros_like(corr_eigvals)
+    for row, column in zip(coordinate_rows, eigenvector_columns):
+        eigenvector = corr_eigvecs[:, column]
+        aligned_rotation[row] = eigenvector if eigenvector[row] >= 0 else -eigenvector
+        aligned_eigvals[row] = corr_eigvals[column]
+    return aligned_eigvals, aligned_rotation
+
+
 def construct_init_parameters(cov: ndarray) -> tuple[ndarray, ndarray, ndarray]:
     """
     Calculates a set of parameters that produce the given matrix within the parameterization used by the
@@ -93,18 +137,16 @@ def construct_init_parameters(cov: ndarray) -> tuple[ndarray, ndarray, ndarray]:
         1. The logarithm of the eigenvalues of the correlation matrix
         2. The matrix logarithm of the rotation ``rot`` that diagonalizes the correlation matrix in the kernel's
            convention ``correlation = rot.T @ diag(eigenvalues) @ rot`` (see ``construct_gaussian_parameters``). The
-           rotation is chosen in SO(n) so that its logarithm is real
+           rotation is chosen in SO(n) so that its logarithm is real, and aligned with the coordinates so that it is
+           the representative closest to the identity (see ``align_rotation_with_coordinates``)
         3. The logarithm of the standard deviations of the covariance matrix
     """
     corr = cov / np.sqrt(np.diag(cov))[:, None] / np.sqrt(np.diag(cov))[None, :]
     corr_eigvals, corr_eigvecs = np.linalg.eigh(corr)
 
-    # eigh returns corr = eigvecs @ diag(eigvals) @ eigvecs.T while the kernel reconstructs rot.T @ diag @ rot, so the
-    # rotation is the transpose of the eigenvector matrix. eigh's orthogonal matrix has determinant +-1; a determinant
-    # of -1 has no real matrix logarithm, so one eigenvector's sign is flipped (which leaves the product unchanged)
-    corr_rotation = corr_eigvecs.T.copy()
+    corr_eigvals, corr_rotation = align_rotation_with_coordinates(corr_eigvals, corr_eigvecs)
     if np.linalg.det(corr_rotation) < 0:
-        corr_rotation[0] *= -1
+        corr_rotation[int(np.argmin(np.abs(np.diag(corr_rotation))))] *= -1
 
     log_eigvals = np.log(corr_eigvals)
     log_rot = logm(corr_rotation)
