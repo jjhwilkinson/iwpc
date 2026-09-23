@@ -127,6 +127,12 @@ class ConcatenatedEncoding(Encoding):
     returns the concatenated result of length o1+...+oN. Any collection of vector encodings, that is encodings take in
     and output a vector of some length, may be concatenated. Nested ConcatenatedEncoding instances are automatically
     un-curried when constructed using the bitwise and operator, '&', or ConcatenatedEncoding.merge
+
+    The sub-encodings are registered as submodules (an `nn.ModuleList`), so moving, saving and training the
+    concatenation includes them: `.to(device)` moves their buffers, `parameters()` yields their parameters and
+    `state_dict()` contains their state under `sub_encodings.<index>.`. State dicts written before the sub-encodings
+    were registered lack those entries; they still load, the missing entries keeping the values the sub-encodings
+    were constructed with (see `_load_from_state_dict`)
     """
     def __init__(self, sub_encodings: List[Encoding]):
         """
@@ -149,7 +155,20 @@ class ConcatenatedEncoding(Encoding):
             torch.tensor(np.cumsum([0] + [encoding.input_shape[0] for encoding in sub_encodings])).int()
         )
 
-        self.sub_encodings = sub_encodings
+        self.sub_encodings = nn.ModuleList(sub_encodings)
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        """
+        Fills in the sub-encodings' entries absent from state dicts saved before the sub-encodings were registered
+        as submodules, with the values they currently hold, so that such state dicts keep loading under
+        `strict=True`. Entries that are present are loaded as usual. Called by `nn.Module.load_state_dict` before
+        it descends into the sub-encodings, which then find their entries in `state_dict`
+        """
+        sub_encodings_prefix = f"{prefix}sub_encodings."
+        if not any(key.startswith(sub_encodings_prefix) for key in state_dict):
+            for key, value in self.sub_encodings.state_dict(prefix=sub_encodings_prefix).items():
+                state_dict[key] = value
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
 
     def _encode(self, x: Tensor) -> Tensor:
         """
@@ -192,6 +211,6 @@ class ConcatenatedEncoding(Encoding):
         ConcatenatedEncoding
             The concatenation of a and b
         """
-        a_encodings = a.sub_encodings if isinstance(a, ConcatenatedEncoding) else [a]
-        b_encodings = b.sub_encodings if isinstance(b, ConcatenatedEncoding) else [b]
+        a_encodings = list(a.sub_encodings) if isinstance(a, ConcatenatedEncoding) else [a]
+        b_encodings = list(b.sub_encodings) if isinstance(b, ConcatenatedEncoding) else [b]
         return ConcatenatedEncoding(a_encodings + b_encodings)
