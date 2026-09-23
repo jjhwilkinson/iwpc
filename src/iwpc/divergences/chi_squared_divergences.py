@@ -12,8 +12,8 @@ class PearsonChiSquaredDivergence(DifferentiableFDivergence):
     Implementation of the Pearson $\chi^2$-divergence, $D_f(p, q) = \int (p - q)^2 / q$, with generating function
     $f(x) = (x - 1)^2$ in the convention of https://arxiv.org/abs/2405.06397 ($D_f(p, q) = E_q[f(p/q)]$).
 
-    The derivative $f^'(x) = 2(x - 1)$ grows linearly in $p/q$, so a single region where $q$ under-populates $p$ can
-    dominate a gradient built from $f^'$.
+    The score-function weight of the f-divergence-minimising kernel trainer, $-f^*(f^'(p/q)) = 1 - (p/q)^2$, grows
+    quadratically in $p/q$, so a single region where $q$ under-populates $p$ can dominate the kernel gradient.
     """
 
     def __init__(self) -> None:
@@ -103,8 +103,8 @@ class NeymanChiSquaredDivergence(DifferentiableFDivergence):
     Implementation of the Neyman $\chi^2$-divergence, $D_f(p, q) = \int (p - q)^2 / p$, with generating function
     $f(x) = (x - 1)^2 / x$ in the convention of https://arxiv.org/abs/2405.06397 ($D_f(p, q) = E_q[f(p/q)]$).
 
-    The derivative $f^'(x) = 1 - x^{-2}$ is bounded above by 1 but diverges as $p/q \to 0$, i.e. where $q$
-    over-populates $p$.
+    The score-function weight of the f-divergence-minimising kernel trainer, $-f^*(f^'(p/q)) = 2 q/p - 2$, diverges as
+    $p/q \to 0$, i.e. where $q$ over-populates $p$.
     """
 
     def __init__(self) -> None:

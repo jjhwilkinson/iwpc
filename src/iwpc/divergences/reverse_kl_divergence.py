@@ -12,7 +12,8 @@ class ReverseKLDivergence(DifferentiableFDivergence):
     Implementation of the reverse Kullback-Leibler divergence, $D_f(p, q) = \mathrm{KL}(q \| p)$, with generating
     function $f(x) = -\log x$ in the convention of https://arxiv.org/abs/2405.06397 ($D_f(p, q) = E_q[f(p/q)]$).
 
-    The derivative $f^'(x) = -1/x$ diverges as $p/q \to 0$.
+    The score-function weight of the f-divergence-minimising kernel trainer is $-f^*(f^'(p/q)) = 1 - \log(p/q)$, so
+    it grows only logarithmically where $q$ over-populates $p$.
     """
 
     def __init__(self) -> None:
