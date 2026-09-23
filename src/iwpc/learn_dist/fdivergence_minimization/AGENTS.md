@@ -39,8 +39,9 @@ d/dθ Df(p || q) = E_q[ (f(r) - r f'(r)) * d/dθ log q_θ(x) ] = - E_q[ f*(f'(r)
 ```
 
 The weight `-f*(f'(p/q))` is `calculate_score_function_weights`, i.e. the negated
-q-side naive summand `calculate_naive_q_summands_given_log(log_p_over_q)` with
-`log_p_over_q` clipped to `[-14, 14]`. (Before this was fixed the trainer used
+q-side naive summand `calculate_naive_q_summands_given_log(log_p_over_q)`. It is
+not clipped: clipping `log(p/q)` would bias the kernel gradient wherever the
+ratio model is extreme, which is exactly where the gradient matters. (Before this was fixed the trainer used
 `f'(q/p)`, which is the gradient of `E_p[f(q/p)] = Df(q || p)`: the arguments
 swapped, so `KLDivergence` trained towards `KL(q || p)`. Symmetric divergences
 such as JSD were unaffected.)

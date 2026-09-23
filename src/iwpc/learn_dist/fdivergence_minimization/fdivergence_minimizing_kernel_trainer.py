@@ -305,8 +305,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
 
         so the weight is -f*(f'(p/q)), the negated q-side summand of the naive variational representation, evaluated
         through the divergence's stable `calculate_naive_q_summands_given_log`. For the KL divergence this gives
-        -E_p[d/dθ log q], the maximum-likelihood gradient. `log_p_over_q` is clipped to [-14, 14] before use, as
-        in the divergence estimators, because the weight exponentiates it for most divergences
+        -E_p[d/dθ log q], the maximum-likelihood gradient
 
         Parameters
         ----------
@@ -318,7 +317,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         Tensor
             The score-function weights -f*(f'(p/q)), shape (N,)
         """
-        return -self.divergence.calculate_naive_q_summands_given_log(log_p_over_q.clamp(-14., 14.))
+        return -self.divergence.calculate_naive_q_summands_given_log(log_p_over_q)
 
     def calculate_kernel_loss(self, batch: Tuple[Tensor, Tensor, Tensor, Tensor], stage: str) -> Tensor:
         """

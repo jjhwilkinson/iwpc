@@ -44,4 +44,4 @@ class FDivergenceGradientSurrogateLoss:
         Tensor
             Per-sample surrogate loss, shape (N,). Take its mean before backpropagating
         """
-        return -q_weights * self.divergence.calculate_naive_q_summands_given_log(log_p_over_q.clamp(-14., 14.)) * log_q_given_base
+        return -q_weights * self.divergence.calculate_naive_q_summands_given_log(log_p_over_q) * log_q_given_base
