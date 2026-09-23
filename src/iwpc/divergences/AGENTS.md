@@ -4,7 +4,7 @@ The end-to-end divergence-estimation flow. Math + estimator hierarchy + training
 
 ## Public re-exports (`__init__.py`)
 
-`DifferentiableFDivergence`, `KLDivergence`, `JensenShannonDivergence`, `FDivergenceEstimator`, `NaiveVariationalFDivergenceEstimator`, `GenericNaiveVariationalFDivergenceEstimator`, `AsymmetryEstimator`, `calculate_divergence`, `DivergenceResult`, `run_reweight_loop`.
+`DifferentiableFDivergence`, `KLDivergence`, `JensenShannonDivergence`, `ReverseKLDivergence`, `PearsonChiSquaredDivergence`, `NeymanChiSquaredDivergence`, `FDivergenceEstimator`, `NaiveVariationalFDivergenceEstimator`, `GenericNaiveVariationalFDivergenceEstimator`, `AsymmetryEstimator`, `calculate_divergence`, `DivergenceResult`, `run_reweight_loop`.
 
 ## Math layer
 
@@ -26,6 +26,7 @@ Torch and numpy implementations must be numerically equivalent — accumulators 
 `f_dash` is taken at `p/q = exp(log_p_over_q)` and easily overflows. The interface exposes `f_dash_given_log(log_x)` so subclasses rewrite the derivative in log-space.
 - KL: `1 + log_x` (`kl_divergence.py:27-31`).
 - JSD: uses `logaddexp` (`jensen_shannon_divergence.py:27-31`).
+- Reverse KL: `-exp(-log_x)`; Pearson χ²: `2 expm1(log_x)`; Neyman χ²: `-expm1(-2 log_x)`. The three override `calculate_naive_q_summands_given_log` with closed forms (`log_x - 1`, `expm1(2 log_x)`, `-2 expm1(-log_x)`).
 
 Callers clip `log(p/q)` to `[-14, 14]` before passing it in (`naive.py:47,63`); new divergences should remain finite on that interval.
 
