@@ -18,8 +18,15 @@ class AntiSymmetricMatrixEncoding(Encoding):
             The dimension of the output square matrix
         """
         super().__init__(dimension * dimension, [dimension, dimension])
-        self.register_buffer('dimension', torch.as_tensor(dimension))
-        self.matrix_dimension = int(dimension)
+        # A Python int: reshaping with a tensor buffer reads it back from the device on every call
+        self.dimension = int(dimension)
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        """
+        Loads as usual, dropping the `dimension` entry that state dicts saved when it was a buffer carry
+        """
+        state_dict.pop(f'{prefix}dimension', None)
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
 
     def _encode(self, x: Tensor) -> Tensor:
         """
@@ -33,5 +40,5 @@ class AntiSymmetricMatrixEncoding(Encoding):
         Tensor
             A antisymmetrised square tensor of shape (..., dimension, dimension)
         """
-        mat = x.reshape((*x.shape[:-1], self.matrix_dimension, self.matrix_dimension))
+        mat = x.reshape((*x.shape[:-1], self.dimension, self.dimension))
         return 0.5 * (mat - mat.transpose(-1, -2))

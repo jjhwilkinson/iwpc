@@ -151,7 +151,6 @@ class ConcatenatedEncoding(Encoding):
             sum(encoding.output_shape[0] for encoding in sub_encodings),
         )
         input_bounds = np.cumsum([0] + [int(encoding.input_shape[0]) for encoding in sub_encodings])
-        self.register_buffer('cum_input_shapes', torch.tensor(input_bounds).int())
         self.input_bounds = [int(bound) for bound in input_bounds]
 
         self.sub_encodings = nn.ModuleList(sub_encodings)
@@ -163,6 +162,7 @@ class ConcatenatedEncoding(Encoding):
         `strict=True`. Entries that are present are loaded as usual. Called by `nn.Module.load_state_dict` before
         it descends into the sub-encodings, which then find their entries in `state_dict`
         """
+        state_dict.pop(f'{prefix}cum_input_shapes', None)  # a buffer in state dicts saved before the bounds were Python ints
         sub_encodings_prefix = f"{prefix}sub_encodings."
         if not any(key.startswith(sub_encodings_prefix) for key in state_dict):
             for key, value in self.sub_encodings.state_dict(prefix=sub_encodings_prefix).items():
@@ -171,8 +171,8 @@ class ConcatenatedEncoding(Encoding):
 
     def _encode(self, x: Tensor) -> Tensor:
         """
-        Applies the j'th sub-encoding to the subset of the feature vector between cum_input_shapes[j] and
-        cum_input_shapes[j+1]. The resulting encoded features are concatenated
+        Applies the j'th sub-encoding to the subset of the feature vector between input_bounds[j] and
+        input_bounds[j+1]. The resulting encoded features are concatenated
 
         Parameters
         ----------
