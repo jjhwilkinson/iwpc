@@ -19,6 +19,7 @@ class AntiSymmetricMatrixEncoding(Encoding):
         """
         super().__init__(dimension * dimension, [dimension, dimension])
         self.register_buffer('dimension', torch.as_tensor(dimension))
+        self.matrix_dimension = int(dimension)
 
     def _encode(self, x: Tensor) -> Tensor:
         """
@@ -32,5 +33,5 @@ class AntiSymmetricMatrixEncoding(Encoding):
         Tensor
             A antisymmetrised square tensor of shape (..., dimension, dimension)
         """
-        mat = x.reshape((*x.shape[:-1], self.dimension, self.dimension))
+        mat = x.reshape((*x.shape[:-1], self.matrix_dimension, self.matrix_dimension))
         return 0.5 * (mat - mat.transpose(-1, -2))

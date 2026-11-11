@@ -453,10 +453,10 @@ class MultivariateGaussianKernel(TrainableKernelBase):
         """
         cond, targets, _ = batch
         log_prob, chi_sqs = self.log_prob(targets, cond, return_chi_sqs=True)
+        keep = log_prob.isfinite()
         if self.max_chi is not None:
-            mask = chi_sqs < self.max_chi ** 2
-            log_prob = log_prob[mask]
-        return - log_prob[log_prob.isfinite()].mean()
+            keep = keep & (chi_sqs < self.max_chi ** 2)
+        return - torch.where(keep, log_prob, torch.zeros_like(log_prob)).sum() / keep.sum()
 
     def draw_from_gaussian_parameters(
         self,

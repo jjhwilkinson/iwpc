@@ -247,6 +247,23 @@ class ConstantScaleLayer(Module):
         super().__init__()
         self.register_buffer('shift', ConstantScaleLayer.standardize(shift))
         self.register_buffer('scale', ConstantScaleLayer.standardize(scale))
+        self._update_active_flags()
+
+    def _update_active_flags(self) -> None:
+        """
+        Decides once, from the buffers, whether the layer scales and whether it shifts, as Python bools. `forward` branches
+        on them instead of on `self.scale.isnan().all()`, which reads a tensor value back to the host on every call (a wait
+        for all queued GPU work, and a graph break under torch.compile)
+        """
+        self.has_scale = not bool(self.scale.isnan().all())
+        self.has_shift = not bool(self.shift.isnan().all())
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        """
+        Loads the buffers as usual and recomputes `has_scale` and `has_shift` from the loaded values
+        """
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+        self._update_active_flags()
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -262,8 +279,8 @@ class ConstantScaleLayer(Module):
         Tensor
             The input tensor with each component scaled and shifted by self.scale and self.shift
         """
-        if not self.scale.isnan().all():
+        if self.has_scale:
             x = x * self.scale
-        if not self.shift.isnan().all():
+        if self.has_shift:
             x = x + self.shift
         return x

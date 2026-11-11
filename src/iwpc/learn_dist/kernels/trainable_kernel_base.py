@@ -178,7 +178,8 @@ class TrainableKernelBase(LightningModule, ABC):
         """
         cond, targets, _ = batch
         log_prob = self.log_prob(targets, cond)
-        return - log_prob[log_prob.isfinite()].mean()
+        finite = log_prob.isfinite()
+        return - torch.where(finite, log_prob, torch.zeros_like(log_prob)).sum() / finite.sum()
 
     def training_step(self, batch: tuple) -> Tensor:
         """
