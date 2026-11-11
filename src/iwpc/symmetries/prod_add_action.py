@@ -63,6 +63,16 @@ class ProdAddAction(GroupActionElement):
 
         affects = bool(((self.input_prod != 1).any() | (self.input_add != 0).any()).item())
         self.register_buffer('affects_input_space', torch.as_tensor(affects))
+        # The same flag as a Python bool, tested in input_space_action: testing the tensor buffer reads it back to the
+        # host on every call, which on a GPU waits for every queued operation to finish
+        self.affects_input_space_python = affects
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        """
+        Loads the buffers as usual, then refreshes the Python copy of `affects_input_space` from the loaded buffer
+        """
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+        self.affects_input_space_python = bool(self.affects_input_space)
 
     def input_space_action(self, x: Tensor) -> Tensor:
         """
@@ -72,7 +82,7 @@ class ProdAddAction(GroupActionElement):
             Performs the specified action on the input space. Raises an InputSpaceInvariantException if the input
             space action is the identity
         """
-        if not self.affects_input_space:
+        if not self.affects_input_space_python:
             raise InputSpaceInvariantException()
         return x * self.input_prod[None, :] + self.input_add[None, :]
 
