@@ -151,11 +151,11 @@ class ConcatenatedFiniteSampleSpace(FiniteSampleSpace):
             A list of FiniteSampleSpace instances
         """
         super().__init__(
-            np.prod([s.num_outcomes for s in sub_spaces]),
-            np.sum([s.dimension for s in sub_spaces]),
+            int(np.prod([s.num_outcomes for s in sub_spaces])),
+            int(np.sum([s.dimension for s in sub_spaces])),
         )
         self.sub_spaces = ModuleList(sub_spaces)
-        self.cum_num_outcomes = np.cumsum([0] + [s.dimension for s in sub_spaces])
+        self.cum_num_outcomes = [int(size) for size in np.cumsum([0] + [s.dimension for s in sub_spaces])]
         self.cond_edges = [slice(self.cum_num_outcomes[i], self.cum_num_outcomes[i + 1]) for i in range(len(sub_spaces))]
         self.register_buffer(
             'reversed_cumprod_num_variable_outcomes',

@@ -171,7 +171,7 @@ class ConcatenatedBaseModel(SamplableBaseModel):
         if x.shape[1] != self.dimension:
             raise ValueError(f"Sample dimension {x.shape[1]} does not match model dimension {self.dimension}")
 
-        cum_dims = np.cumsum([0] + self.model_dimensions)
+        cum_dims = [int(size) for size in np.cumsum([0] + self.model_dimensions)]
         return sum([model.log_prob(x[..., low:high]) for model, low, high in zip(self.models, cum_dims[:-1], cum_dims[1:])])
 
     def __and__(self, other: "SamplableBaseModel") -> "ConcatenatedBaseModel":

@@ -61,8 +61,25 @@ class ProdAddAction(GroupActionElement):
         self.register_buffer('output_prod', _materialise(output_prod, output_dim, fill=1.0))
         self.register_buffer('output_add', _materialise(output_add, output_dim, fill=0.0))
 
-        affects = bool(((self.input_prod != 1).any() | (self.input_add != 0).any()).item())
-        self.register_buffer('affects_input_space', torch.as_tensor(affects))
+        self.affects_input_space = self._affects_input_space()
+
+    def _affects_input_space(self) -> bool:
+        """
+        Returns
+        -------
+        bool
+            Whether the input space action differs from the identity
+        """
+        return bool(((self.input_prod != 1).any() | (self.input_add != 0).any()).item())
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        """
+        Loads the buffers as usual and recomputes `affects_input_space` from the loaded input_prod and input_add. State
+        dicts saved when `affects_input_space` was a buffer carry it as an entry, which is dropped
+        """
+        state_dict.pop(f'{prefix}affects_input_space', None)
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+        self.affects_input_space = self._affects_input_space()
 
     def input_space_action(self, x: Tensor) -> Tensor:
         """

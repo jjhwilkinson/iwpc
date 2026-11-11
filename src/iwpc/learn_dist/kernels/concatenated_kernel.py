@@ -38,10 +38,10 @@ class ConcatenatedKernel(TrainableKernelBase):
 
         self.sub_kernels = ModuleList(sub_kernels)
         self.concatenate_cond = concatenate_cond
-        cum_sample_sizes = np.cumsum([0] + [k.sample_dimension for k in sub_kernels])
+        cum_sample_sizes = [int(size) for size in np.cumsum([0] + [k.sample_dimension for k in sub_kernels])]
         self.sample_edges = [slice(cum_sample_sizes[i], cum_sample_sizes[i+1]) for i in range(len(sub_kernels))]
         if self.concatenate_cond:
-            cum_cond_sizes = np.cumsum([0] + [k.cond_dimension for k in sub_kernels])
+            cum_cond_sizes = [int(size) for size in np.cumsum([0] + [k.cond_dimension for k in sub_kernels])]
             self.cond_edges = [slice(cum_cond_sizes[i], cum_cond_sizes[i+1]) for i in range(len(sub_kernels))]
         else:
             self.cond_edges = [slice(0, self.cond_dimension) for _ in range(len(sub_kernels))]

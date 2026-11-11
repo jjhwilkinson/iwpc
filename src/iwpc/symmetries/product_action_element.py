@@ -41,6 +41,8 @@ class ProductActionElement(GroupActionElement):
             'cum_output_dims',
             torch.tensor(np.cumsum([0] + [e.output_dim for e in sub_elements])).int(),
         )
+        self.input_edges = [int(edge) for edge in np.cumsum([0] + [e.input_dim for e in sub_elements])]
+        self.output_edges = [int(edge) for edge in np.cumsum([0] + [e.output_dim for e in sub_elements])]
 
     def input_space_action(self, x: Tensor) -> Tensor:
         """
@@ -63,7 +65,7 @@ class ProductActionElement(GroupActionElement):
 
         slices = []
         any_acted = False
-        for element, low, high in zip(self.sub_elements, self.cum_input_dims[:-1], self.cum_input_dims[1:]):
+        for element, low, high in zip(self.sub_elements, self.input_edges[:-1], self.input_edges[1:]):
             sub_slice = x[..., low:high]
             try:
                 slices.append(element.input_space_action(sub_slice))
@@ -94,7 +96,7 @@ class ProductActionElement(GroupActionElement):
 
         return torch.concatenate([
             element.output_space_action(x[..., low:high])
-            for element, low, high in zip(self.sub_elements, self.cum_output_dims[:-1], self.cum_output_dims[1:])
+            for element, low, high in zip(self.sub_elements, self.output_edges[:-1], self.output_edges[1:])
         ], dim=-1)
 
     @classmethod
