@@ -52,11 +52,10 @@ class RunningNormLayer(Module):
         Returns
         -------
         Tensor
-            The running mean of each input component
+            The running mean of each input component (zero before any sample has been seen). Computed without reading
+            `N_` back to the host, so that it does not synchronise a GPU
         """
-        if self.N_ == 0:
-            return torch.zeros_like(self.sum_)
-        return self.sum_ / max(self.N_, 1.)
+        return self.sum_ / self.N_.clamp_min(1.)
 
     @property
     def scale(self):
@@ -64,12 +63,10 @@ class RunningNormLayer(Module):
         Returns
         -------
         Tensor
-            The running standard deviation of each input component
+            The running standard deviation of each input component (one before any sample has been seen, or wherever
+            the variance is not positive). Computed without reading `N_` back to the host
         """
-        if self.N_ == 0:
-            return torch.ones_like(self.sum_)
-
-        var = self.sq_sum_ / max(self.N_, 1.) - self.shift**2
+        var = self.sq_sum_ / self.N_.clamp_min(1.) - self.shift**2
         return torch.where(var > 0, torch.sqrt(var), torch.ones_like(self.sum_))
 
     def _update(self, x: torch.Tensor) -> None:
@@ -102,14 +99,30 @@ class RunningNormLayer(Module):
         Tensor
             The input tensor with each component normalised by the running mean and standard deviation
         """
-        if self.N_ < self.max_samples:
-            if self.training:
-                self._update(x)
-        elif not self.has_printed_frozen_values:
+        if self.training:
+            self._update_below_max_samples(x)
+        if not self.has_printed_frozen_values and bool(self.N_ >= self.max_samples):
             self.has_printed_frozen_values = True
             print(f"RunningNormLayer frozen values: {self.shift=} {self.scale=} {self.N_=}")
 
         return (x - self.shift) / self.scale
+
+    def _update_below_max_samples(self, x: torch.Tensor) -> None:
+        """
+        `_update` if fewer than `max_samples` samples have been seen, decided on the device: the comparison with `N_`
+        selects between the batch's sums and zeros instead of branching in Python, so a training step does not read
+        `N_` back to the host (each such read waits for every queued GPU operation to finish)
+
+        Parameters
+        ----------
+        x
+            A batch of values. The first dimension is assumed to be the batch dimension
+        """
+        below_max_samples = self.N_ < self.max_samples
+        zeros = torch.zeros_like(self.sum_)
+        self.sum_ += torch.where(below_max_samples, x.sum(dim=0).detach(), zeros)
+        self.sq_sum_ += torch.where(below_max_samples, (x**2).sum(dim=0).detach(), zeros)
+        self.N_ += torch.where(below_max_samples, float(x.shape[0]), 0.)
 
 
 class RunningDeNormLayer(Module):
@@ -138,7 +151,7 @@ class RunningDeNormLayer(Module):
         Tensor
             The running mean of each input component
         """
-        return self.sum_ / max(self.N_, 1)
+        return self.sum_ / self.N_.clamp_min(1)
 
     @property
     def scale(self):
@@ -148,7 +161,7 @@ class RunningDeNormLayer(Module):
         Tensor
             The running standard deviation of each input component
         """
-        return torch.sqrt(self.sq_sum_ / max(self.N_, 1) - self.shift**2)
+        return torch.sqrt(self.sq_sum_ / self.N_.clamp_min(1) - self.shift**2)
 
     def _update(self, x: torch.Tensor) -> None:
         """

@@ -150,10 +150,11 @@ class ConcatenatedEncoding(Encoding):
             sum(encoding.input_shape[0] for encoding in sub_encodings),
             sum(encoding.output_shape[0] for encoding in sub_encodings),
         )
-        self.register_buffer(
-            'cum_input_shapes',
-            torch.tensor(np.cumsum([0] + [encoding.input_shape[0] for encoding in sub_encodings])).int()
-        )
+        input_bounds = np.cumsum([0] + [int(encoding.input_shape[0]) for encoding in sub_encodings])
+        self.register_buffer('cum_input_shapes', torch.tensor(input_bounds).int())
+        # The same bounds as Python ints, used to slice in _encode: slicing with the tensor buffer reads each bound
+        # back to the host, which waits for every queued GPU operation to finish
+        self.input_bounds = [int(bound) for bound in input_bounds]
 
         self.sub_encodings = nn.ModuleList(sub_encodings)
 
@@ -185,12 +186,12 @@ class ConcatenatedEncoding(Encoding):
         Tensor
             of shape (..., *output_shape)
         """
-        if not x.shape[-1] == self.input_shape[-1]:
+        if x.shape[-1] != self.input_bounds[-1]:
             raise ValueError(f'Expected input shape of shape (..., *{self.input_shape}) got {x.shape}')
 
         return torch.concatenate([
             encoding(x[..., low:high]) for encoding, low, high in
-            zip(self.sub_encodings, self.cum_input_shapes[:-1], self.cum_input_shapes[1:])
+            zip(self.sub_encodings, self.input_bounds[:-1], self.input_bounds[1:])
         ], dim=-1)
 
     @classmethod
