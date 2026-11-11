@@ -152,8 +152,6 @@ class ConcatenatedEncoding(Encoding):
         )
         input_bounds = np.cumsum([0] + [int(encoding.input_shape[0]) for encoding in sub_encodings])
         self.register_buffer('cum_input_shapes', torch.tensor(input_bounds).int())
-        # The same bounds as Python ints, used to slice in _encode: slicing with the tensor buffer reads each bound
-        # back to the host, which waits for every queued GPU operation to finish
         self.input_bounds = [int(bound) for bound in input_bounds]
 
         self.sub_encodings = nn.ModuleList(sub_encodings)

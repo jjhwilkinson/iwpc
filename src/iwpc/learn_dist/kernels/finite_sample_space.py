@@ -155,8 +155,6 @@ class ConcatenatedFiniteSampleSpace(FiniteSampleSpace):
             int(np.sum([s.dimension for s in sub_spaces])),
         )
         self.sub_spaces = ModuleList(sub_spaces)
-        # Python ints, not numpy.int64: torch.compile turns numpy scalars into tensors, so slicing with them breaks the
-        # graph; eager behaviour is the same either way
         self.cum_num_outcomes = [int(size) for size in np.cumsum([0] + [s.dimension for s in sub_spaces])]
         self.cond_edges = [slice(self.cum_num_outcomes[i], self.cum_num_outcomes[i + 1]) for i in range(len(sub_spaces))]
         self.register_buffer(

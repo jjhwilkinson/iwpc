@@ -41,8 +41,6 @@ class ProductActionElement(GroupActionElement):
             'cum_output_dims',
             torch.tensor(np.cumsum([0] + [e.output_dim for e in sub_elements])).int(),
         )
-        # The same edges as Python ints, used to slice: slicing with the tensor buffers reads each edge back to the host,
-        # which on a GPU waits for every queued operation to finish
         self.input_edges = [int(edge) for edge in np.cumsum([0] + [e.input_dim for e in sub_elements])]
         self.output_edges = [int(edge) for edge in np.cumsum([0] + [e.output_dim for e in sub_elements])]
 

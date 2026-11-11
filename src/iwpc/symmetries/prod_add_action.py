@@ -61,18 +61,25 @@ class ProdAddAction(GroupActionElement):
         self.register_buffer('output_prod', _materialise(output_prod, output_dim, fill=1.0))
         self.register_buffer('output_add', _materialise(output_add, output_dim, fill=0.0))
 
-        affects = bool(((self.input_prod != 1).any() | (self.input_add != 0).any()).item())
-        self.register_buffer('affects_input_space', torch.as_tensor(affects))
-        # The same flag as a Python bool, tested in input_space_action: testing the tensor buffer reads it back to the
-        # host on every call, which on a GPU waits for every queued operation to finish
-        self.affects_input_space_python = affects
+        self.affects_input_space = self._affects_input_space()
+
+    def _affects_input_space(self) -> bool:
+        """
+        Returns
+        -------
+        bool
+            Whether the input space action differs from the identity
+        """
+        return bool(((self.input_prod != 1).any() | (self.input_add != 0).any()).item())
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
         """
-        Loads the buffers as usual, then refreshes the Python copy of `affects_input_space` from the loaded buffer
+        Loads the buffers as usual and recomputes `affects_input_space` from the loaded input_prod and input_add. State
+        dicts saved when `affects_input_space` was a buffer carry it as an entry, which is dropped
         """
+        state_dict.pop(f'{prefix}affects_input_space', None)
         super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
-        self.affects_input_space_python = bool(self.affects_input_space)
+        self.affects_input_space = self._affects_input_space()
 
     def input_space_action(self, x: Tensor) -> Tensor:
         """
@@ -82,7 +89,7 @@ class ProdAddAction(GroupActionElement):
             Performs the specified action on the input space. Raises an InputSpaceInvariantException if the input
             space action is the identity
         """
-        if not self.affects_input_space_python:
+        if not self.affects_input_space:
             raise InputSpaceInvariantException()
         return x * self.input_prod[None, :] + self.input_add[None, :]
 

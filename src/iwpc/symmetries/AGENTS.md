@@ -47,10 +47,10 @@ via `_build_finite_product` / `_build_finite_joint` and return a flat
 - `LambdaAction(input_fn=None, ...)` — `None` means input-trivial; pass `None`
   rather than `lambda x: x` so dedupe works.
 - `ProdAddAction` — buffers always materialised at full dim (`_materialise`
-  fills with `1.0` / `0.0`). `affects_input_space` is computed at construction
-  (a buffer, plus a Python-bool copy refreshed on `load_state_dict`) and the
-  Python copy short-circuits `input_space_action`, so no value is read back
-  from a GPU.
+  fills with `1.0` / `0.0`). `affects_input_space` is a Python bool computed
+  from `input_prod` / `input_add` at construction and again after
+  `load_state_dict` (which drops the entry older state dicts carry), and
+  short-circuits `input_space_action`.
 - `GroupActionElement.to_group()` — wraps a single element + identity into a
   `FiniteGroupAction`. Caller is responsible for checking the element is an
   involution; nothing enforces it.
