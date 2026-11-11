@@ -56,6 +56,9 @@ sub-model's `output` to `output.input_shape`, and wraps them in an
   and `N_ < max_samples`; once frozen prints the final shift/scale once.
   Always applies `(x - shift) / scale` in forward (train and eval). Avoids
   divide-by-zero by falling back to `scale=1` when variance is non-positive.
+  Neither the update nor `shift`/`scale` read `N_` back to the host (the
+  update is selected on the device with `torch.where`), so on a GPU the layer
+  does not synchronise once its frozen values have been printed.
   This is what makes the factory's models robust to un-pre-processed inputs.
 - `RunningDeNormLayer(input_shape, one_epoch_only=False)` — inverse of the
   above: `x * scale + shift`, with running stats accumulated on the *post*
