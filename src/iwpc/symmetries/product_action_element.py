@@ -33,16 +33,16 @@ class ProductActionElement(GroupActionElement):
             output_dim=sum(e.output_dim for e in sub_elements),
         )
         self.sub_elements = ModuleList(sub_elements)
-        self.register_buffer(
-            'cum_input_dims',
-            torch.tensor(np.cumsum([0] + [e.input_dim for e in sub_elements])).int(),
-        )
-        self.register_buffer(
-            'cum_output_dims',
-            torch.tensor(np.cumsum([0] + [e.output_dim for e in sub_elements])).int(),
-        )
         self.input_edges = [int(edge) for edge in np.cumsum([0] + [e.input_dim for e in sub_elements])]
         self.output_edges = [int(edge) for edge in np.cumsum([0] + [e.output_dim for e in sub_elements])]
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        """
+        Loads as usual, dropping the `cum_input_dims` and `cum_output_dims` entries that state dicts saved when they were buffers carry
+        """
+        for name in ('cum_input_dims', 'cum_output_dims'):
+            state_dict.pop(f'{prefix}{name}', None)
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
 
     def input_space_action(self, x: Tensor) -> Tensor:
         """

@@ -67,8 +67,15 @@ class IndexedInterface(ABC):
         """
         super().__init__(*args, **kwargs)
         self.index_sample_space = sample_space
-        self.index_cond_indices = torch.tensor(index_cond_indices)
-        self.standard_cond_indices = torch.tensor([i for i in range(self.cond_dimension) if i not in index_cond_indices])
+        # Buffers (not in the state dict), so they follow the module to its device: indexing a GPU tensor with a CPU index
+        # tensor copies it to the device on every call, which waits for all queued GPU work
+        self.register_buffer('index_cond_indices', torch.tensor(index_cond_indices), persistent=False)
+        self.index_cond_indices_list = [int(i) for i in index_cond_indices]
+        self.register_buffer(
+            'standard_cond_indices',
+            torch.tensor([i for i in range(self.cond_dimension) if i not in index_cond_indices], dtype=torch.long),
+            persistent=False,
+        )
 
     @abstractmethod
     def construct_log_prob_table(self, cond: Tensor) -> Tensor:
@@ -112,7 +119,7 @@ class IndexedInterface(ABC):
         """
         dim_B2 = conditioning_kernel.sample_dimension
         if isinstance(conditioning_kernel, IndexedInterface):
-            return list(range(dim_B2)) + [dim_B2 + int(i) for i in conditioning_kernel.index_cond_indices]
+            return list(range(dim_B2)) + [dim_B2 + i for i in conditioning_kernel.index_cond_indices_list]
         return list(range(dim_B2))
 
     @staticmethod
@@ -136,7 +143,7 @@ class IndexedInterface(ABC):
         if not isinstance(sample_kernel, IndexedInterface):
             return False
         return (
-            list(int(i) for i in sample_kernel.index_cond_indices)
+            sample_kernel.index_cond_indices_list
             == IndexedInterface.expected_sample_index_cond_indices(conditioning_kernel)
         )
 

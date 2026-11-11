@@ -35,7 +35,7 @@ class FiniteConditionedKernel(IndexedInterface, FiniteKernelInterface, Condition
 
         if isinstance(conditioning_kernel, IndexedInterface):
             index_sample_space = conditioning_kernel.index_sample_space
-            index_cond_indices = list(int(i) for i in conditioning_kernel.index_cond_indices)
+            index_cond_indices = list(conditioning_kernel.index_cond_indices_list)
         else:
             index_sample_space = trivial_index_sample_space()
             index_cond_indices = []

@@ -106,7 +106,7 @@ class ConcatenatedKernel(TrainableKernelBase):
         samples, log_probs = zip(*[k.draw_with_log_prob(cond[:, c]) for k, c in zip(self.sub_kernels, self.cond_edges)])
         return (
             torch.cat(samples, dim=-1),
-            sum(log_probs, torch.tensor(0.)),
+            sum(log_probs),
         )
 
     def draw_with_separate_log_prob(self, cond: Tensor) -> Tuple[Tensor, Tuple[Tensor, ...]]:

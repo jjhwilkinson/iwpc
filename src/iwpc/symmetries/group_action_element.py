@@ -11,8 +11,10 @@ class InputSpaceInvariantException(Exception):
     input tensor as various implementations can use this fact to speed up execution and prevent re-evaluating models
     on duplicate inputs
     """
-    def __init__(self):
-        super().__init__("Input space is invariant under group element action")
+    def __str__(self) -> str:
+        # No __init__ override: torch.compile cannot trace `super().__init__(message)` of an exception, which skipped the
+        # whole frame of every loop that raises and catches this
+        return "Input space is invariant under group element action"
 
 
 class GroupActionElement(Module, ABC):

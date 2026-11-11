@@ -24,8 +24,8 @@ cannot participate in `&` / `ConcatenatedEncoding`.
   `a & (b & c)` produce the same flat list of sub-encodings.
 - `ConcatenatedEncoding` requires every sub-encoding to be vector-in /
   vector-out; the constructor raises `ValueError` otherwise.
-- It stores `cum_input_shapes` (a buffer) and the same bounds as Python ints
-  (`input_bounds`). At forward time it slices the last axis of `x` with the
+- It stores the cumulative input bounds as Python ints (`input_bounds`; state
+  dicts saved when they were also a `cum_input_shapes` buffer still load). At forward time it slices the last axis of `x` with the
   ints (so no value is read back from a GPU) into adjacent chunks
   `x[..., low:high]` per sub-encoding, then concatenates the outputs along
   `dim=-1`. Input feature ordering matters and
