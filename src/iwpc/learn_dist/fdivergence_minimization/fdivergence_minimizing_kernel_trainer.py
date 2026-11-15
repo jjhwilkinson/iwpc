@@ -133,6 +133,7 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         self.divergence = divergence
         self.exact_kernel = exact_kernel
         self._exact_sample_dim = 0 if exact_kernel is None else exact_kernel.sample_dimension
+        assert exact_kernel is None or sampled_kernel.cond_dimension == (exact_kernel.cond_dimension + exact_kernel.sample_dimension)
         self.log_p_over_q_model_opt_lr = log_p_over_q_model_opt_lr
         self.kernel_opt_lr = kernel_opt_lr
         self.start_kernel_train_epoch = start_kernel_train_epoch
@@ -246,6 +247,8 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
                 )
 
             return full_sample_iter(), cut_pass_log_prob
+
+        assert q_init_samples.shape[-1] == (self.sampled_kernel.sample_dimension + self.exact_kernel.sample_dimension)
 
         if isinstance(self.exact_kernel, FiniteCutKernel):
             exact_outcome_log_prob_iter, cut_pass_log_prob = self.exact_kernel.outcome_with_log_prob_iter_and_cut_pass_log_prob(q_base_samples)
