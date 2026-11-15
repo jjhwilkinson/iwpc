@@ -106,7 +106,11 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
             are derived from it
         exact_kernel
             Optional FiniteKernelInterface representing a discrete component of q whose outcomes can be enumerated
-            exactly rather than sampled. If provided, expectations over its outcomes are taken via summation
+            exactly rather than sampled. If provided, expectations over its outcomes are taken via summation. Each
+            enumerated outcome is prepended to the sampled kernel's conditioning information, so the sampled kernel
+            must satisfy `sampled_kernel.cond_dimension == exact_kernel.cond_dimension +
+            exact_kernel.sample_dimension` with the outcome occupying the leading conditioning columns; this is
+            checked here
         log_p_over_q_model_opt_lr
             Learning rate for the `log_p_over_q_model` Adam optimizer
         kernel_opt_lr
@@ -133,6 +137,8 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         self.divergence = divergence
         self.exact_kernel = exact_kernel
         self._exact_sample_dim = 0 if exact_kernel is None else exact_kernel.sample_dimension
+        if exact_kernel is not None:
+            self._validate_exact_kernel_conditioning_dimensions(sampled_kernel, exact_kernel)
         self.log_p_over_q_model_opt_lr = log_p_over_q_model_opt_lr
         self.kernel_opt_lr = kernel_opt_lr
         self.start_kernel_train_epoch = start_kernel_train_epoch
@@ -145,6 +151,58 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
         self.automatic_optimization = False
         self.register_buffer('log_two', torch.log(torch.tensor(2.)))
         self.train_divergence = MeanMetric()
+
+    @staticmethod
+    def _validate_exact_kernel_conditioning_dimensions(
+        sampled_kernel: TrainableKernelBase,
+        exact_kernel: FiniteKernelInterface,
+    ) -> None:
+        """
+        Checks that the sampled kernel has been constructed to accept the exact kernel's outcome as extra leading
+        conditioning columns.
+
+        When an exact kernel is configured, `full_sample_iter_and_cut_pass_log_prob` prepends the enumerated discrete
+        outcome to the base samples before handing them to the sampled kernel, exactly as `ConditionedKernel` does.
+        The sampled kernel's conditioning space must therefore be `exact_kernel.sample_dimension` columns wider than
+        the exact kernel's own, with the discrete outcome occupying the leading columns. Without this check a sampled
+        kernel built for the base samples alone is silently fed a wider conditioning tensor: `torch.concat` widens it,
+        the kernel's encodings and conditioning slices consume only the columns they were built for, and every genuine
+        conditioning variable is read one or more columns out of place. No shape error is raised, and because the
+        kernel's networks carry a running input normalisation the shifted inputs also corrupt the running statistics,
+        so a later call on correct inputs can return nonsense long after the offending call returned a plausible
+        number
+
+        Parameters
+        ----------
+        sampled_kernel
+            The trainable kernel that is conditioned on the exact kernel's outcome followed by the base samples
+        exact_kernel
+            The finite kernel whose outcomes are enumerated exactly
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError
+            If `sampled_kernel.cond_dimension` does not equal
+            `exact_kernel.cond_dimension + exact_kernel.sample_dimension`
+        """
+        expected_sampled_kernel_cond_dimension = exact_kernel.cond_dimension + exact_kernel.sample_dimension
+        if sampled_kernel.cond_dimension != expected_sampled_kernel_cond_dimension:
+            raise ValueError(
+                f"The exact kernel's outcome is prepended to the sampled kernel's conditioning information, so the "
+                f"sampled kernel must be constructed to accept exact_kernel.sample_dimension = "
+                f"{exact_kernel.sample_dimension} extra leading conditioning columns. That requires "
+                f"sampled_kernel.cond_dimension == exact_kernel.cond_dimension + exact_kernel.sample_dimension = "
+                f"{exact_kernel.cond_dimension} + {exact_kernel.sample_dimension} = "
+                f"{expected_sampled_kernel_cond_dimension}, but sampled_kernel.cond_dimension is "
+                f"{sampled_kernel.cond_dimension}. Rebuild the sampled kernel over a conditioning space of width "
+                f"{expected_sampled_kernel_cond_dimension}, with the exact kernel's outcome in the leading columns; "
+                f"a sampled kernel built for the base samples alone would silently read shifted conditioning "
+                f"columns rather than fail."
+            )
 
     def is_kernel_training(self) -> bool:
         """
@@ -228,6 +286,13 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
             2. cut_pass_log_prob: the per-row log-probability that a sample from the exact kernel's base distribution
                 would pass the cut, of shape (N,). Identically zero when no exact kernel is configured or when the
                 exact kernel does not implement a cut
+
+        Raises
+        ------
+        ValueError
+            If an exact kernel is configured and q_init_samples does not have
+            `sampled_kernel.sample_dimension + exact_kernel.sample_dimension` columns, which is the width of the
+            full q sample the kernel output is added to
         """
         if self.zero_out_init_q_samples:
             q_init_samples = torch.zeros_like(q_init_samples)
@@ -246,6 +311,18 @@ class FDivergenceMinimizingKernelTrainer(LightningModule):
                 )
 
             return full_sample_iter(), cut_pass_log_prob
+
+        expected_q_init_sample_dimension = self.sampled_kernel.sample_dimension + self.exact_kernel.sample_dimension
+        if q_init_samples.shape[-1] != expected_q_init_sample_dimension:
+            raise ValueError(
+                f"With an exact kernel configured, each q sample is the sampled kernel's draw followed by the exact "
+                f"kernel's outcome, so the initial q samples must have "
+                f"sampled_kernel.sample_dimension + exact_kernel.sample_dimension = "
+                f"{self.sampled_kernel.sample_dimension} + {self.exact_kernel.sample_dimension} = "
+                f"{expected_q_init_sample_dimension} columns, but the ones supplied have "
+                f"{q_init_samples.shape[-1]}. The exact kernel's outcome occupies the trailing "
+                f"{self.exact_kernel.sample_dimension} columns of the sample vector."
+            )
 
         if isinstance(self.exact_kernel, FiniteCutKernel):
             exact_outcome_log_prob_iter, cut_pass_log_prob = self.exact_kernel.outcome_with_log_prob_iter_and_cut_pass_log_prob(q_base_samples)

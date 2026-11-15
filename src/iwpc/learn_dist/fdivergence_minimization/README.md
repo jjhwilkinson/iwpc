@@ -79,6 +79,22 @@ module = FDivergenceMinimizingKernelTrainer(
 )
 ```
 
+Each enumerated outcome is **prepended** to the sampled kernel's conditioning
+information (the same convention as `ConditionedKernel`) and **appended** to the
+sample vector, so the sampled kernel must be built over the wider conditioning
+space:
+
+```
+sampled_kernel.cond_dimension == exact_kernel.cond_dimension + exact_kernel.sample_dimension
+```
+
+`__init__` raises a `ValueError` when this does not hold — reusing a kernel that
+worked without an `exact_kernel` otherwise lets `torch.concat` widen the
+conditioning tensor so that the kernel reads shifted columns without any shape
+error. The initial q samples must likewise be
+`sampled_kernel.sample_dimension + exact_kernel.sample_dimension` columns wide,
+which `full_sample_iter_and_cut_pass_log_prob` checks per call.
+
 If the `exact_kernel` is a `FiniteCutKernel` (i.e. its sample space has been
 restricted by a cut on an underlying base kernel), the trainer reweights the
 per-outcome terms by the per-row cut-pass probability and normalises by the

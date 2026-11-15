@@ -30,6 +30,20 @@ from the `log_p_over_q_model`, regardless of `self.divergence`.
 `target_cut_pass_prob` is only active when `exact_kernel` is a
 `FiniteCutKernel` — see the Poisson penalty section below.
 
+When `exact_kernel` is not `None`, `__init__` enforces
+`sampled_kernel.cond_dimension == exact_kernel.cond_dimension +
+exact_kernel.sample_dimension` (the `ConditionedKernel` /
+`FiniteConditionedKernel` invariant), because
+`full_sample_iter_and_cut_pass_log_prob` prepends the enumerated outcome to the
+sampled kernel's cond. Without the check a too-narrow sampled kernel silently
+consumes the widened cond tensor — its encodings and cond slices read shifted
+columns, no shape error is raised, and the `RunningNormLayer` statistics in its
+networks are poisoned by the shifted inputs, so a later call on correct inputs
+can return `NaN`. `full_sample_iter_and_cut_pass_log_prob` additionally checks
+once per call that `q_init_samples` has `sampled_kernel.sample_dimension +
+exact_kernel.sample_dimension` columns, replacing the bare broadcast error from
+`q_init_samples + concat(...)`.
+
 ## Surrogate gradient identity
 
 Score-function / REINFORCE identity for `Df(p || q) = E_q[ f(p/q) ]`:
